@@ -1,0 +1,51 @@
+# Node modules
+node_modules/
+FRONTEND/node_modules/
+bACKEND/node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+FRONTEND/build/
+FRONTEND/dist/
+bACKEND/build/
+bACKEND/dist/
+
+# Runtime files
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage/
+
+# Environment files
+.env
+.env.local
+FRONTEND/.env
+bACKEND/.env
+
+# VSCode settings
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Optional: ignore idea config if using IntelliJ/WebStorm
+.idea/
+
+# Optional: Ignore test snapshots
+__snapshots__/
+
+# Optional: Ignore specific editor settings
+*.sublime-workspace
+*.sublime-project
+# Upload folders — ignore all uploads in backend
+BACKEND/uploads/
+

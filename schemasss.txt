@@ -1,0 +1,146 @@
+CREATE TABLE DocumentUpload (
+  DocumentId INT AUTO_INCREMENT PRIMARY KEY,
+  DocumentName VARCHAR(255) NOT NULL,
+  DocumentDescription TEXT,
+  MetaTags VARCHAR(255),
+  FilePath VARCHAR(500) NOT NULL,
+  UploadedByUser_Id INT NOT NULL,                  -- FK to User.User_Id
+  Section_Id INT,                                  -- FK to Section.Section_Id (if applicable)
+  Status_Id INT DEFAULT 1,                         -- FK to DocumentStatusMaster.Status_Id
+  IsCommon BOOLEAN DEFAULT FALSE,                  -- TRUE = visible to all roles
+  CreatedOn DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+
+
+
+
+CREATE TABLE DocumentRoleMapping (
+  Mapping_Id INT AUTO_INCREMENT PRIMARY KEY,
+  DocumentId INT NOT NULL,                         -- FK to DocumentUpload.DocumentId
+  Role_Id INT NOT NULL,                            -- FK to Roles.Role_Id
+  IsVisible BOOLEAN DEFAULT TRUE,
+  CreatedOn DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (DocumentId) REFERENCES DocumentUpload(DocumentId),
+  FOREIGN KEY (Role_Id) REFERENCES Roles(Role_Id)
+);
+
+
+CREATE TABLE DocumentWorkflowHistory (
+  Workflow_Id INT AUTO_INCREMENT PRIMARY KEY,
+  DocumentId INT NOT NULL,                         -- FK to DocumentUpload.DocumentId
+  ActionTaken VARCHAR(50) NOT NULL,                -- 'Pending', 'Approved', 'Rejected'
+  Comment TEXT,
+  ActionByUser_Id INT NOT NULL,                    -- FK to User.User_Id
+  ActionByRole_Id INT NOT NULL,                    -- e.g., 3 for QC
+  ActionOn DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (DocumentId) REFERENCES DocumentUpload(DocumentId)
+);
+
+
+SELECT DISTINCT du.*
+FROM DocumentUpload du
+LEFT JOIN DocumentRoleMapping drm ON du.DocumentId = drm.DocumentId
+WHERE 
+  du.Status_Id = (SELECT Status_Id FROM DocumentStatusMaster WHERE StatusName = 'Approved') AND
+  (
+    du.IsCommon = TRUE
+    OR (du.IsCommon = FALSE AND drm.Role_Id = 2)
+  );
+
+
+
+this is the uploading the documents ok 
+
+
+formData.append("aadhaar", file1);
+formData.append("pan", file2);
+formData.append("otherDocuments", file3); // optional
+formData.append("otherDocuments", file4); // optional multiple
+
+
+
+
+export const upload = multer({ storage });
+
+export const documentUploadMulter = upload.fields([
+  { name: 'aadhaar', maxCount: 1 },
+  { name: 'pan', maxCount: 1 },
+  { name: 'voter', maxCount: 1 },
+  { name: 'passport', maxCount: 1 },
+  { name: 'rationcard', maxCount: 1 },
+  { name: 'otherDocuments', maxCount: 10 } // optional multiple
+]);
+
+
+router.post("/", documentUploadMulter, DocumentUpload);
+
+
+
+export const DocumentUpload = async (req, res) => {
+  try {
+    const {
+      CreatedByUser_Id,
+      Account_Id,
+      CreatedByUserName,
+      Category_Id,
+      Status_Id,
+      MetaTags,
+      DocumentDescription
+    } = req.body;
+
+    const files = req.files;
+
+    const documentTypes = ['aadhaar', 'pan', 'voter', 'passport', 'rationcard'];
+    const uploadedDocs = [];
+
+    // Upload fixed document types
+    for (let docType of documentTypes) {
+      const file = files[docType]?.[0];
+      if (file) {
+        const [result] = await pool.query(
+          `INSERT INTO documentupload 
+          (DocumentName, DocumentDescription, MetaTags, FilePath, CreatedByUser_Id, Account_Id, CreatedByUserName, Category_Id, Status_Id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [docType, DocumentDescription, MetaTags, file.path, CreatedByUser_Id, Account_Id, CreatedByUserName, Category_Id, Status_Id]
+        );
+        uploadedDocs.push({ docType, fileName: file.originalname });
+      }
+    }
+
+    // Upload optional files (other documents)
+    if (files.otherDocuments) {
+      for (let file of files.otherDocuments) {
+        const [result] = await pool.query(
+          `INSERT INTO documentupload 
+          (DocumentName, DocumentDescription, MetaTags, FilePath, CreatedByUser_Id, Account_Id, CreatedByUserName, Category_Id, Status_Id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [file.originalname, DocumentDescription, MetaTags, file.path, CreatedByUser_Id, Account_Id, CreatedByUserName, Category_Id, Status_Id]
+        );
+        uploadedDocs.push({ docType: 'other', fileName: file.originalname });
+      }
+    }
+
+    res.status(200).json({ success: true, message: 'Files uploaded', uploadedDocs });
+  } catch (err) {
+    console.error("Upload error:", err);
+    res.status(500).json({ success: false, message: 'Upload failed', error: err.message });
+  }
+};
+
+
+
+CREATE TABLE documentupload (
+  DocumentId INT AUTO_INCREMENT PRIMARY KEY,
+  DocumentName VARCHAR(255),
+  DocumentDescription TEXT,
+  MetaTags VARCHAR(255),
+  FilePath VARCHAR(500),
+  CreatedByUser_Id INT,
+  Account_Id VARCHAR(50),
+  CreatedByUserName VARCHAR(100),
+  CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  Category_Id INT,
+  Status_Id INT,
+  UpdatedOn DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);

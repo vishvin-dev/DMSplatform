@@ -1,0 +1,25 @@
+/* Remove yellow highlights from dropdowns */
+.dropdown-toggle {
+    background-color: white !important;
+    color: #495057 !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+.dropdown-toggle:focus {
+    border-color: #ced4da !important;
+}
+
+.dropdown-item {
+    background-color: white !important;
+    color: #212529 !important;
+}
+
+.dropdown-item:hover {
+    background-color: #f8f9fa !important;
+}
+
+/* Disabled state */
+.dropdown-toggle[disabled] {
+    opacity: 0.7 !important;
+}

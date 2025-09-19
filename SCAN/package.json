@@ -1,0 +1,27 @@
+{
+  "name": "scan",
+  "version": "1.0.0",
+  "main": "scanner.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon scanner.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "jimp": "^1.6.0",
+    "nodemon": "^3.1.10",
+    "pdf-lib": "^1.17.1",
+    "pdf-poppler": "^0.2.1",
+    "sharp": "^0.34.3",
+    "socket.io": "^4.8.1",
+    "tesseract.js": "^6.0.1",
+    "ws": "^8.18.3"
+  }
+}

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OCR Highlighter</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        html, body, #root {
+            height: 100%;
+            width: 100%;
+            overflow: hidden; 
+        }
+        body { margin: 0; font-family: sans-serif; background-color: #e9ecef; }
+        .wrapper {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            padding: 1rem;
+        }
+        .render-canvas {
+            margin: auto;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            background-color: white;
+            user-select: none;
+        }
+        .status-text {
+            color: #6c757d;
+            font-size: 1.2rem;
+            margin: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        const getRotatedImageBlob = (blob, rotation) => {
+            return new Promise((resolve, reject) => {
+                const imageUrl = URL.createObjectURL(blob);
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const angle = (rotation % 360) * Math.PI / 180;
+                    const isSideways = (Math.abs(rotation) % 180) === 90;
+                    canvas.width = isSideways ? img.height : img.width;
+                    canvas.height = isSideways ? img.width : img.height;
+                    ctx.translate(canvas.width / 2, canvas.height / 2);
+                    ctx.rotate(angle);
+                    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+                    canvas.toBlob((rotatedBlob) => {
+                        URL.revokeObjectURL(imageUrl);
+                        if (rotatedBlob) {
+                            resolve(rotatedBlob);
+                        } else {
+                            reject(new Error('Canvas to Blob conversion failed.'));
+                        }
+                    }, 'image/jpeg', 0.95);
+                };
+                img.onerror = (err) => {
+                    URL.revokeObjectURL(imageUrl);
+                    reject(err);
+                };
+                img.src = imageUrl;
+            });
+        };
+
+        const App = () => {
+            const [image, setImage] = useState(null);
+            const [status, setStatus] = useState("Waiting for document...");
+            const [ocrData, setOcrData] = useState(null);
+            const [transform, setTransform] = useState({ zoom: 1, rotation: 0 });
+            // --- NEW --- State to track window size changes to trigger re-renders for responsive fitting
+            const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+            
+            const canvasRef = useRef(null);
+            const imageBlobRef = useRef(null);
+            const transformRef = useRef(transform);
+            const wrapperRef = useRef(null);
+
+            // --- NEW --- This effect listens for window resizing and triggers a re-render.
+            // This makes the "fit-to-screen" logic responsive.
+            useEffect(() => {
+                const handleResize = () => {
+                    setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+                };
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
+            }, []);
+
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas || !image || !wrapperRef.current) {
+                    if (canvas) {
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    }
+                    return;
+                }
+
+                // This is the "fit-to-screen" calculation. It's now done here, inside the iframe.
+                let baseZoom = 1;
+                const { width: wrapperWidth, height: wrapperHeight } = wrapperRef.current.getBoundingClientRect();
+                if (wrapperWidth > 0 && wrapperHeight > 0) {
+                    const padding = 32; // Corresponds to 1rem padding on each side
+                    const availableWidth = wrapperWidth - padding;
+                    const availableHeight = wrapperHeight - padding;
+
+                    const isSideways = (transform.rotation % 180) !== 0;
+                    const imgWidth = isSideways ? image.naturalHeight : image.naturalWidth;
+                    const imgHeight = isSideways ? image.naturalWidth : image.naturalHeight;
+
+                    const scaleX = availableWidth / imgWidth;
+                    const scaleY = availableHeight / imgHeight;
+                    baseZoom = Math.min(scaleX, scaleY);
+                }
+
+                const ctx = canvas.getContext('2d');
+                const { zoom, rotation } = transform;
+                // The final zoom is the "fit" zoom multiplied by the relative zoom from the parent.
+                const totalZoom = baseZoom * zoom;
+
+                const angle = (rotation % 360) * Math.PI / 180;
+                const sin = Math.abs(Math.sin(angle));
+                const cos = Math.abs(Math.cos(angle));
+                const rotatedWidth = image.naturalWidth * cos + image.naturalHeight * sin;
+                const rotatedHeight = image.naturalWidth * sin + image.naturalHeight * cos;
+
+                canvas.width = rotatedWidth * totalZoom;
+                canvas.height = rotatedHeight * totalZoom;
+
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.rotate(angle);
+                ctx.scale(totalZoom, totalZoom);
+                ctx.drawImage(image, -image.naturalWidth / 2, -image.naturalHeight / 2);
+
+                if (ocrData?.words) {
+                    ctx.fillStyle = 'rgba(64, 81, 137, 0.3)';
+                    ocrData.words.forEach(word => {
+                        const { x0, y0, x1, y1 } = word.bbox;
+                        ctx.fillRect(x0 - image.naturalWidth / 2, y0 - image.naturalHeight / 2, x1 - x0, y1 - y0);
+                    });
+                }
+            }, [image, ocrData, transform, windowSize]); // --- MODIFIED --- Now depends on windowSize to be responsive
+
+            useEffect(() => {
+                const transformBbox = (bbox, imageDims, rotation) => {
+                    const { width, height } = imageDims;
+                    const angle = (rotation % 360 + 360) % 360;
+                    let { x0, y0, x1, y1 } = bbox;
+                    if (angle === 90) { return { x0: y0, y0: width - x1, x1: y1, y1: width - x0 }; }
+                    else if (angle === 180) { return { x0: width - x1, y0: height - y1, x1: width - x0, y1: height - y0 }; }
+                    else if (angle === 270) { return { x0: height - y1, y0: x0, x1: height - y0, y1: x1 }; }
+                    return bbox;
+                };
+                
+                const processImageForOcr = async (blob, rotation) => {
+                    if (!blob || !image) return;
+                    try {
+                        setStatus('Initializing OCR engine...');
+                        const worker = await Tesseract.createWorker('eng+kan', 1, {
+                            logger: m => {
+                                if (m.status === 'recognizing text') {
+                                    setStatus(`Recognizing... ${Math.round(m.progress * 100)}%`);
+                                }
+                            }
+                        });
+                        
+                        const needsRotation = rotation % 360 !== 0;
+                        const blobForOcr = needsRotation ? await getRotatedImageBlob(blob, rotation) : blob;
+                        const { data } = await worker.recognize(blobForOcr);
+                        
+                        if (needsRotation) {
+                            const imageDims = { width: image.naturalWidth, height: image.naturalHeight };
+                            data.words.forEach(word => {
+                                word.bbox = transformBbox(word.bbox, imageDims, rotation);
+                            });
+                        }
+                        
+                        window.parent.postMessage({ type: 'OCR_RESULT', text: data.text }, '*');
+                        setOcrData(data);
+                        await worker.terminate();
+                    } catch (error) {
+                        console.error("OCR Error:", error);
+                        setStatus('OCR Failed.');
+                        setOcrData(null);
+                        window.parent.postMessage({ type: 'OCR_ERROR', error: error.message || "An unknown error occurred" }, '*');
+                    }
+                };
+
+                const handleMessage = (event) => {
+                    const { type, blob, transform: newTransform } = event.data;
+                    switch (type) {
+                        case 'LOAD_IMAGE':
+                            if (blob) {
+                                setStatus('Image loaded. Ready to run OCR.');
+                                setOcrData(null);
+                                setTransform({ zoom: 1, rotation: 0 }); // Reset transform on new image
+                                const newImage = new Image();
+                                const imageUrl = URL.createObjectURL(blob);
+                                newImage.onload = () => {
+                                    setImage(newImage); 
+                                    URL.revokeObjectURL(imageUrl);
+                                };
+                                newImage.onerror = () => {
+                                    setStatus("Failed to load image from blob.");
+                                    setImage(null);
+                                };
+                                newImage.src = imageUrl;
+                                imageBlobRef.current = blob;
+                            }
+                            break;
+                        case 'RUN_OCR':
+                            if (imageBlobRef.current) {
+                                processImageForOcr(imageBlobRef.current, transformRef.current.rotation);
+                            }
+                            break;
+                        case 'APPLY_TRANSFORM':
+                            if (newTransform) {
+                                setTransform(newTransform);
+                                transformRef.current = newTransform;
+                            }
+                            break;
+                    }
+                };
+                window.addEventListener('message', handleMessage);
+                window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
+                return () => window.removeEventListener('message', handleMessage);
+            }, [image]);
+
+            const handleCanvasClick = (event) => {
+                if (!ocrData?.words || !image || !canvasRef.current || !wrapperRef.current) return;
+
+                let baseZoom = 1;
+                const { width: wrapperWidth, height: wrapperHeight } = wrapperRef.current.getBoundingClientRect();
+                 if (wrapperWidth > 0 && wrapperHeight > 0) {
+                    const padding = 32;
+                    const availableWidth = wrapperWidth - padding;
+                    const availableHeight = wrapperHeight - padding;
+                    const isSideways = (transform.rotation % 180) !== 0;
+                    const imgWidth = isSideways ? image.naturalHeight : image.naturalWidth;
+                    const imgHeight = isSideways ? image.naturalWidth : image.naturalHeight;
+                    const scaleX = availableWidth / imgWidth;
+                    const scaleY = availableHeight / imgHeight;
+                    baseZoom = Math.min(scaleX, scaleY);
+                }
+
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left;
+                const mouseY = event.clientY - rect.top;
+
+                const { zoom, rotation } = transform;
+                const totalZoom = baseZoom * zoom;
+                const angle = (rotation % 360) * Math.PI / 180;
+
+                // Transform mouse coordinates back to original image space
+                let x = mouseX - canvas.width / 2;
+                let y = mouseY - canvas.height / 2;
+                const tempX = x * Math.cos(-angle) - y * Math.sin(-angle);
+                const tempY = x * Math.sin(-angle) + y * Math.cos(-angle);
+
+                x = tempX / totalZoom;
+                y = tempY / totalZoom;
+
+                const finalX = x + image.naturalWidth / 2;
+                const finalY = y + image.naturalHeight / 2;
+                const clickedWord = ocrData.words.find(word => {
+                    const { x0, y0, x1, y1 } = word.bbox;
+                    return finalX >= x0 && finalX <= x1 && finalY >= y0 && finalY <= y1;
+                });
+                if (clickedWord) {
+                    window.parent.postMessage({ type: 'TEXT_SELECTED', text: clickedWord.text }, '*');
+                }
+            };
+
+            return (
+                <div 
+                    ref={wrapperRef} 
+                    className="wrapper" 
+                    // This logic allows scrolling only when user has zoomed in manually
+                    style={{ overflow: transform.zoom > 1 ? 'auto' : 'hidden' }}
+                >
+                    {image ? (
+                        <canvas
+                            ref={canvasRef}
+                            className="render-canvas"
+                            onClick={handleCanvasClick}
+                            onDragStart={(e) => e.preventDefault()}
+                            style={{ cursor: ocrData ? 'pointer' : 'default' }}
+                        />
+                    ) : (
+                        <p className="status-text">{status}</p>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

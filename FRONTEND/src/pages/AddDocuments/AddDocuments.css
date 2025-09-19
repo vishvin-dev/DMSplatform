@@ -1,0 +1,285 @@
+/* src/styles/DocumentManagement.css */
+
+/* Suggestion list styles */
+.suggestion-list {
+    border: 1px solid #dee2e6;
+    margin-top: 5px;
+    padding: 5px;
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    position: absolute;
+    z-index: 1000;
+    background-color: white;
+    width: calc(100% - 30px);
+    border-radius: 0.25rem;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.suggestion-item {
+    cursor: pointer;
+    padding: 8px 12px;
+    border-bottom: 1px solid #eee;
+    transition: background-color 0.2s;
+}
+
+.suggestion-item:hover {
+    background-color: #f8f9fa;
+}
+
+.consumer-details p {
+    margin-bottom: 0;
+    padding: 4px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+/* Main page content styling */
+.page-content {
+    min-height: 100vh;
+    padding-bottom: 60px; /* Space for footer */
+}
+
+/* Results container with proper height */
+.results-container {
+    height: calc(100vh - 320px);
+    min-height: 500px;
+    margin-bottom: 50px; /* Distance from footer */
+}
+
+/* Fixed height cards */
+.fixed-height-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.fixed-height-card .card-body {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* Enhanced Scrollbar Styling */
+.uploaded-documents-scrollable,
+.preview-scrollable,
+.custom-scrollbar {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+}
+
+.uploaded-documents-scrollable::-webkit-scrollbar,
+.preview-scrollable::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+/* Uploaded Documents Container */
+.uploaded-documents-container {
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.uploaded-documents-scrollable {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 5px; /* Compensate for scrollbar space */
+    margin-right: -5px; /* Pull content back */
+}
+
+/* Document Preview Container */
+.preview-container {
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.preview-scrollable {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 5px;
+    margin-right: -5px;
+}
+
+/* Preview specific styling */
+.preview-body {
+    overflow: hidden !important;
+    height: calc(100% - 60px);
+}
+
+.preview-content {
+    overflow: hidden;
+    position: relative;
+}
+
+.pdf-viewer-container {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.pdf-viewer-container embed {
+    width: 100%;
+    height: 100%;
+}
+
+.document-details {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Animation Classes */
+.slide-in-left {
+    animation: slideInLeft 0.5s ease-out forwards;
+    opacity: 0;
+    transform: translateX(-20px);
+}
+
+.slide-in-right {
+    animation: slideInRight 0.5s ease-out forwards;
+    opacity: 0;
+    transform: translateX(20px);
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+    opacity: 0;
+}
+
+.fade-in-list-item {
+    animation: fadeIn 0.5s ease-out forwards;
+    opacity: 0;
+}
+
+.delay-1 {
+    animation-delay: 0.2s;
+}
+
+.delay-2 {
+    animation-delay: 0.4s;
+}
+
+.delay-3 {
+    animation-delay: 0.6s;
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 991px) {
+    .results-container {
+        height: auto;
+        min-height: auto;
+    }
+    
+    .fixed-height-card {
+        height: 400px;
+        margin-bottom: 20px;
+    }
+    
+    .results-container .col-lg-3:first-child .fixed-height-card:first-child,
+    .results-container .col-lg-3:first-child .fixed-height-card:last-child {
+        height: 350px;
+    }
+}
+
+/* Scanning animation styles */
+.scanning-container {
+    padding: 20px;
+    background-color: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.scanned-document-container {
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes scan {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.scanner-light {
+    position: relative;
+    overflow: hidden;
+    height: 4px;
+    background: linear-gradient(to right, 
+        rgba(13,110,253,0.1), 
+        rgba(13,110,253,0.8), 
+        rgba(13,110,253,0.1));
+    border-radius: 4px;
+}
+
+.scanner-beam {
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(to right, 
+        transparent, 
+        rgba(13,110,253,0.5), 
+        transparent);
+    animation: scan 2s linear infinite;
+}
+
+.x-small {
+    font-size: 0.75rem;
+}
+
+/* Styles for the new document card layout */
+.document-card {
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    border: 1px solid #e9ecef;
+}
+
+.shadow-sm--hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+
+.document-card.active {
+    background-color: #f0f3ff;
+    border-color: #405189;
+}
+
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
