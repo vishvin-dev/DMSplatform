@@ -991,6 +991,14 @@ const DocumentReview = () => {
         formData.append('CreatedByUser_Id', user.User_Id);
         formData.append('Account_Id', consumerData.account_id);
         formData.append('CreatedByUserName', user.Email);
+        
+        // ############ MODIFICATION START ############
+        // Appending Division, SubDivision, and Section codes received from the Preview page.
+        formData.append('div_code', consumerData.div_code || '');
+        formData.append('sd_code', consumerData.sd_code || '');
+        formData.append('so_code', consumerData.so_code || '');
+        // ############ MODIFICATION END ############
+        
         formData.append('Category_Id', '1'); // Hardcoded as requested
         formData.append('Role_Id', ''); // Hardcoded as requested
         formData.append('DraftFile', finalDoc.fileObject);
@@ -1177,34 +1185,34 @@ const DocumentReview = () => {
                     </ModalBody>
                 </Modal>
                 <style>{`
-                    .thumbnail-pane { overflow-y: auto; }
-                    .info-pane { display: flex; flex-direction: column; height: 100%; }
-                    .zoom-controls { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.8); border-radius: 8px; padding: 5px; display: flex; gap: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 10; }
-                    .thumbnail-card { cursor: pointer; transition: all 0.2s ease-in-out; border: 1px solid #e9ecef; background-color: #f8f9fa; }
-                    .thumbnail-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-                    .thumbnail-card.active { background-color: #e0e7ff; border-color: #405189; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-                    .thumbnail-name { font-size: 11px; line-height: 1.2; }
-                    .tag-badge { background-color: #f3f3f9; color: #495057; border: 1px solid #e9ecef; display: inline-flex; align-items: center; }
-                    .btn-close-xs { background-size: 0.5em; opacity: 0.8; }
-                    .tag-container {
-                        max-height: 5.5rem;
-                        overflow-y: auto;
-                    }
-                    .scanning-overlay {
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: rgba(255, 255, 255, 0.9);
-                        z-index: 1056;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                        align-items: center;
-                        border-radius: 0 0 .3rem .3rem;
-                    }
-                `}</style>
+                      .thumbnail-pane { overflow-y: auto; }
+                      .info-pane { display: flex; flex-direction: column; height: 100%; }
+                      .zoom-controls { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.8); border-radius: 8px; padding: 5px; display: flex; gap: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 10; }
+                      .thumbnail-card { cursor: pointer; transition: all 0.2s ease-in-out; border: 1px solid #e9ecef; background-color: #f8f9fa; }
+                      .thumbnail-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+                      .thumbnail-card.active { background-color: #e0e7ff; border-color: #405189; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+                      .thumbnail-name { font-size: 11px; line-height: 1.2; }
+                      .tag-badge { background-color: #f3f3f9; color: #495057; border: 1px solid #e9ecef; display: inline-flex; align-items: center; }
+                      .btn-close-xs { background-size: 0.5em; opacity: 0.8; }
+                      .tag-container {
+                          max-height: 5.5rem;
+                          overflow-y: auto;
+                      }
+                      .scanning-overlay {
+                          position: absolute;
+                          top: 0;
+                          left: 0;
+                          right: 0;
+                          bottom: 0;
+                          background-color: rgba(255, 255, 255, 0.9);
+                          z-index: 1056;
+                          display: flex;
+                          flex-direction: column;
+                          justify-content: center;
+                          align-items: center;
+                          border-radius: 0 0 .3rem .3rem;
+                      }
+                  `}</style>
             </Container>
         </div>
     );

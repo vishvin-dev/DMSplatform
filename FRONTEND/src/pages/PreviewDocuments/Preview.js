@@ -11,7 +11,7 @@ import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
 
 const Preview = () => {
-    document.title = ` Consumer search  | DMS`;
+    document.title = ` Consumer search   | DMS`;
     const navigate = useNavigate();
     const location = useLocation();
     const debounceRef = useRef();
@@ -573,21 +573,32 @@ const Preview = () => {
         loadDropdownDataFromSession();
     };
 
-    // FINAL UPDATED FUNCTION
+    // ############ CORRECTED FUNCTION ############
     const handleVerifyAndProceed = async (consumerData) => {
         setVerifyingAccountId(consumerData.account_id);
+    
+        // Enhance consumer data with selected location CODES for the next screen's API call
+        // and also include NAMES for display purposes.
+        const consumerDataWithLocation = {
+            ...consumerData,
+            div_code: division,
+            sd_code: subDivision,
+            so_code: section,
+            DivisionName: divisionName.find(d => d.div_code === division)?.division || '',
+            SubDivisionName: subDivisions.find(sd => sd.sd_code === subDivision)?.sub_division || '',
+            SectionName: sectionOptions.find(s => s.so_code === section)?.section_office || '',
+        };
+    
         try {
-            // UPDATED: Using flagId: 13 as a number
+            // Payload to check for existing drafts for the consumer
             const payload = {
                 flagId: 13,
                 account_id: consumerData.account_id,
-                // ADDED: Including division, subDivision, and section to prevent 'undefined' error
-                
             };
-
-            // UPDATED: Using the new postDocumentUploadview helper as specified
+    
             const response = await postDocumentUploadview(payload);
-
+    
+            // If drafts are found, transform them and pass to the next screen
             if (response?.status === "success" && response?.data?.length > 0) {
                 const transformedDrafts = response.data.map(draft => ({
                     id: draft.Draft_Id,
@@ -600,24 +611,28 @@ const Preview = () => {
                     filePath: draft.FilePath,
                     needsFetching: true
                 }));
-
+    
                 navigate('/DocumentReview', {
                     state: {
-                        consumerData: consumerData,
+                        consumerData: consumerDataWithLocation,
                         draftDocuments: transformedDrafts
                     }
                 });
             } else {
-                navigate('/DocumentReview', { state: { consumerData: consumerData } });
+                // If no drafts, navigate with only the consumer data
+                navigate('/DocumentReview', { state: { consumerData: consumerDataWithLocation } });
             }
         } catch (error) {
             console.error("Error fetching drafts:", error);
-            setResponse("Failed to check for existing documents. Please try again.");
+            setResponse("Failed to check for existing documents. Navigating directly.");
             setErrorModal(true);
+            // Fallback: Navigate even if the draft check fails
+            navigate('/DocumentReview', { state: { consumerData: consumerDataWithLocation } });
         } finally {
             setVerifyingAccountId(null);
         }
     };
+    // ############ END OF CORRECTION ############
 
     const renderSearchTableRows = () => {
         if (!hasSearched) return <tr><td colSpan={6} className="text-center p-4">Please use the filters above and search for an Account ID.</td></tr>;
@@ -954,28 +969,28 @@ const Preview = () => {
 
                 <style>
                     {`
-                     .results-container {
-                         height: calc(100vh - 250px);
-                         min-height: 500px;
-                     }
-                     .scrollable-content {
-                         position: absolute;
-                         top: 0;
-                         left: 0;
-                         right: 0;
-                         bottom: 0;
-                         overflow-y: auto;
-                         overflow-x: hidden;
-                     }
-                      .drop-zone {
-                         border: 2px dashed #e9ecef;
-                         transition: all 0.2s ease-in-out;
-                     }
-                     .drop-zone-active {
-                         border-color: #405189;
-                         background-color: #f0f3ff;
-                     }
-                     `}
+                                .results-container {
+                                    height: calc(100vh - 250px);
+                                    min-height: 500px;
+                                }
+                                .scrollable-content {
+                                    position: absolute;
+                                    top: 0;
+                                    left: 0;
+                                    right: 0;
+                                    bottom: 0;
+                                    overflow-y: auto;
+                                    overflow-x: hidden;
+                                }
+                                 .drop-zone {
+                                    border: 2px dashed #e9ecef;
+                                    transition: all 0.2s ease-in-out;
+                                }
+                                .drop-zone-active {
+                                    border-color: #405189;
+                                    background-color: #f0f3ff;
+                                }
+                                `}
                 </style>
             </Container>
         </div>
