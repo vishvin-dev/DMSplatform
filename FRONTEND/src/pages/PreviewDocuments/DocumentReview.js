@@ -8,7 +8,8 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
-import { getDocumentDropdowns, postDocumentUpload } from '../../helpers/fakebackend_helper';
+// UPDATED: Added postDocumentUploadview for fetching draft content
+import { getDocumentDropdowns, postDocumentUpload, postDocumentUploadview } from '../../helpers/fakebackend_helper';
 import { io } from "socket.io-client";
 import axios from 'axios';
 import { jsPDF } from "jspdf";
@@ -130,7 +131,8 @@ const DocumentPreview = ({ file, loading, error }) => {
         }
     };
 
-    const isImage = file && !file.type.includes('pdf');
+    const isImage = file && file.previewUrl && !file.previewUrl.includes('pdf') && file.type !== 'application/pdf';
+    const isPdf = file && file.previewUrl && (file.previewUrl.includes('pdf') || file.type === 'application/pdf');
     const cursorStyle = isDragging ? 'grabbing' : (zoom > 1 ? 'grab' : 'default');
 
     return (
@@ -150,7 +152,7 @@ const DocumentPreview = ({ file, loading, error }) => {
             >
                 {loading ? <Spinner>Loading...</Spinner> :
                     error ? <Alert color="danger" className="m-3">{error}</Alert> :
-                        file ? (
+                        file && file.previewUrl ? (
                             <div style={{
                                 width: '100%',
                                 height: '100%',
@@ -171,12 +173,14 @@ const DocumentPreview = ({ file, loading, error }) => {
                                         }}
                                         draggable="false"
                                     />
-                                ) : (
+                                ) : isPdf ? (
                                     <embed
                                         src={`${file.previewUrl}#toolbar=0`}
                                         type="application/pdf"
                                         style={{ width: '100%', height: '100%' }}
                                     />
+                                ) : (
+                                     <div className="text-center text-muted"><h4>Preview Not Supported</h4><p>Cannot display this file type.</p></div>
                                 )}
                             </div>
                         ) : (
@@ -524,7 +528,8 @@ const DocumentReview = () => {
     const [errorModal, setErrorModal] = useState(false);
     const [response, setResponse] = useState('');
     const [loading, setLoading] = useState(false);
-    const [documentsForReview, setDocumentsForReview] = useState([]);
+    // UPDATED: Initialize state with draft documents from location state, if available
+    const [documentsForReview, setDocumentsForReview] = useState(location.state?.draftDocuments || []);
     const [selectedFile, setSelectedFile] = useState(null);
     const [fileTypeFilter, setFileTypeFilter] = useState('all');
     const [documentTypes, setDocumentTypes] = useState([]);
@@ -664,20 +669,73 @@ const DocumentReview = () => {
         fetchDocumentTypes();
     }, []);
 
-    const handleFileSelect = useCallback((file) => {
+    // ############ NEW AND REFACTORED FUNCTION ############
+    const handleFileSelect = useCallback(async (file) => {
         if (selectedFile?.id === file.id) return;
-        if (selectedFile) {
-            setDocumentsForReview(prev => prev.map(doc => doc.id === selectedFile.id ? { ...doc, comment: responseText, tags: metaTags } : doc));
-        }
-        setPreviewLoading(true); setSelectedFile(file); setPreviewError(null);
-        setResponseText(file.comment || '');
-        setMetaTags(file.tags || [file.category.toLowerCase().replace(/\s+/g, ''), 'scanned']);
-        setScannedHighlights([{ type: 'Header', text: 'BESCOM Bill' }, { type: 'Footer', text: file.createdAt }, { type: 'Word', text: file.consumer_name }]);
-        setTimeout(() => {
-            if (!file.previewUrl) setPreviewError("Preview not available.");
+
+        // Save changes from the previously selected file back to the main list
+        const updatedDocs = documentsForReview.map(doc =>
+            (doc.id === selectedFile?.id) ? { ...doc, comment: responseText, tags: metaTags } : doc
+        );
+
+        const newSelectedFile = updatedDocs.find(doc => doc.id === file.id);
+        if (!newSelectedFile) return;
+
+        setDocumentsForReview(updatedDocs); // Update list with saved changes
+        setSelectedFile(newSelectedFile);
+        setResponseText(newSelectedFile.comment || '');
+        setMetaTags(newSelectedFile.tags || []);
+        setScannedHighlights([{ type: 'Header', text: 'BESCOM Bill' }, { type: 'Footer', text: newSelectedFile.createdAt }, { type: 'Word', text: newSelectedFile.consumer_name }]);
+        setPreviewLoading(true);
+        setPreviewError(null);
+
+        // If the file content needs to be fetched (i.e., it's a pre-existing draft)
+        if (newSelectedFile.needsFetching && newSelectedFile.draftId) {
+            try {
+                // API Call to fetch the document blob. Assuming flagId 14 is for fetching drafts.
+                const blobResponse = await postDocumentUploadview({ flagId: 14, Draft_Id: newSelectedFile.draftId }, { responseType: "blob" });
+                
+                const blob = blobResponse;
+                const previewUrl = URL.createObjectURL(blob);
+                const fileObject = new File([blob], newSelectedFile.name, { type: blob.type || 'application/octet-stream' });
+
+                const hydratedFile = { ...newSelectedFile, previewUrl, fileObject, needsFetching: false };
+
+                setDocumentsForReview(prev => prev.map(doc => doc.id === hydratedFile.id ? hydratedFile : doc));
+                setSelectedFile(hydratedFile);
+            } catch (err) {
+                console.error("Error fetching draft document preview:", err);
+                setPreviewError("Failed to load document preview.");
+            } finally {
+                setPreviewLoading(false);
+            }
+        } else if (!newSelectedFile.previewUrl) {
+            setPreviewError("Preview is not available for this document.");
             setPreviewLoading(false);
-        }, 300);
-    }, [selectedFile, responseText, metaTags]);
+        } else {
+            setPreviewLoading(false);
+        }
+    }, [selectedFile, documentsForReview, responseText, metaTags]);
+    // ############ END OF NEW FUNCTION ############
+
+    // UPDATED: Automatically select the first document on initial load
+    useEffect(() => {
+        if (documentsForReview.length > 0 && !selectedFile) {
+            handleFileSelect(documentsForReview[0]);
+        }
+    }, [documentsForReview, selectedFile, handleFileSelect]);
+    
+    // UPDATED: Cleanup blob URLs to prevent memory leaks
+    useEffect(() => {
+        return () => {
+            documentsForReview.forEach(doc => {
+                if (doc.previewUrl && doc.previewUrl.startsWith('blob:')) {
+                    URL.revokeObjectURL(doc.previewUrl);
+                }
+            });
+        };
+    }, [documentsForReview]);
+
 
     const handleSubmitReview = async () => {
         setLoading(true);
@@ -991,14 +1049,14 @@ const DocumentReview = () => {
         formData.append('CreatedByUser_Id', user.User_Id);
         formData.append('Account_Id', consumerData.account_id);
         formData.append('CreatedByUserName', user.Email);
-        
+
         // ############ MODIFICATION START ############
         // Appending Division, SubDivision, and Section codes received from the Preview page.
         formData.append('div_code', consumerData.div_code || '');
         formData.append('sd_code', consumerData.sd_code || '');
         formData.append('so_code', consumerData.so_code || '');
         // ############ MODIFICATION END ############
-        
+
         formData.append('Category_Id', '1'); // Hardcoded as requested
         formData.append('Role_Id', ''); // Hardcoded as requested
         formData.append('DraftFile', finalDoc.fileObject);
@@ -1185,34 +1243,34 @@ const DocumentReview = () => {
                     </ModalBody>
                 </Modal>
                 <style>{`
-                      .thumbnail-pane { overflow-y: auto; }
-                      .info-pane { display: flex; flex-direction: column; height: 100%; }
-                      .zoom-controls { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.8); border-radius: 8px; padding: 5px; display: flex; gap: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 10; }
-                      .thumbnail-card { cursor: pointer; transition: all 0.2s ease-in-out; border: 1px solid #e9ecef; background-color: #f8f9fa; }
-                      .thumbnail-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-                      .thumbnail-card.active { background-color: #e0e7ff; border-color: #405189; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-                      .thumbnail-name { font-size: 11px; line-height: 1.2; }
-                      .tag-badge { background-color: #f3f3f9; color: #495057; border: 1px solid #e9ecef; display: inline-flex; align-items: center; }
-                      .btn-close-xs { background-size: 0.5em; opacity: 0.8; }
-                      .tag-container {
-                          max-height: 5.5rem;
-                          overflow-y: auto;
-                      }
-                      .scanning-overlay {
-                          position: absolute;
-                          top: 0;
-                          left: 0;
-                          right: 0;
-                          bottom: 0;
-                          background-color: rgba(255, 255, 255, 0.9);
-                          z-index: 1056;
-                          display: flex;
-                          flex-direction: column;
-                          justify-content: center;
-                          align-items: center;
-                          border-radius: 0 0 .3rem .3rem;
-                      }
-                  `}</style>
+                          .thumbnail-pane { overflow-y: auto; }
+                          .info-pane { display: flex; flex-direction: column; height: 100%; }
+                          .zoom-controls { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.8); border-radius: 8px; padding: 5px; display: flex; gap: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 10; }
+                          .thumbnail-card { cursor: pointer; transition: all 0.2s ease-in-out; border: 1px solid #e9ecef; background-color: #f8f9fa; }
+                          .thumbnail-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+                          .thumbnail-card.active { background-color: #e0e7ff; border-color: #405189; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+                          .thumbnail-name { font-size: 11px; line-height: 1.2; }
+                          .tag-badge { background-color: #f3f3f9; color: #495057; border: 1px solid #e9ecef; display: inline-flex; align-items: center; }
+                          .btn-close-xs { background-size: 0.5em; opacity: 0.8; }
+                          .tag-container {
+                              max-height: 5.5rem;
+                              overflow-y: auto;
+                          }
+                          .scanning-overlay {
+                              position: absolute;
+                              top: 0;
+                              left: 0;
+                              right: 0;
+                              bottom: 0;
+                              background-color: rgba(255, 255, 255, 0.9);
+                              z-index: 1056;
+                              display: flex;
+                              flex-direction: column;
+                              justify-content: center;
+                              align-items: center;
+                              border-radius: 0 0 .3rem .3rem;
+                          }
+                      `}</style>
             </Container>
         </div>
     );
