@@ -692,30 +692,33 @@ const QCViewDocuments = () => {
         window.URL.revokeObjectURL(url);
     };
 
+    // Updated handleStatusUpdate function with the new API structure
     const handleStatusUpdate = async (docId, status, reason = '') => {
         setActionLoading(true);
         try {
             const payload = {
-                flagId: status === 'Approved' ? 6 : 7, // 6 for approve, 7 for reject
-                roleId: userInfo.roleId,
+                flagId: 5, // Using flagId 5 for approval as specified
                 User_Id: userInfo.userId,
-                requestUserName: userInfo.email,
                 DocumentId: docId,
+                Role_Id: userInfo.roleId,
                 ...(status === 'Rejected' && { RejectionComment: reason })
             };
 
+            console.log('API Payload:', payload); // For debugging
+
             const response = await qcApproveReject(payload);
+            
             if (response.status === "success") {
                 setPreviewModal(false);
                 closeRejectionModal(); // Use the new handler to close and clear
 
-                setResponse(status === 'Approved'
-                    ? 'Document approved successfully'
-                    : 'Document rejected successfully');
+                setResponse(response.message || (status === 'Approved' 
+                    ? 'Document approved successfully' 
+                    : 'Document rejected successfully'));
                 setSuccessModal(true);
 
                 // Refresh the view to get updated lists and counts
-                handleRefresh();
+                await handleRefresh();
             } else {
                 setResponse(response.message || 'Failed to update document status');
                 setErrorModal(true);
@@ -723,6 +726,48 @@ const QCViewDocuments = () => {
         } catch (error) {
             console.error('Update error:', error);
             setResponse(error.message || 'Failed to update document status');
+            setErrorModal(true);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    // Handle approve action - using the new API structure
+    const handleApprove = async (docId) => {
+        await handleStatusUpdate(docId, 'Approved');
+    };
+
+    // Handle reject action - using the new API structure
+    const handleReject = async (docId, reason) => {
+        setActionLoading(true);
+        try {
+            const payload = {
+                flagId: 6, // Using flagId 6 for rejection as specified
+                User_Id: userInfo.userId,
+                DocumentId: docId,
+                comment: reason
+            };
+
+            console.log('Reject API Payload:', payload); // For debugging
+
+            const response = await qcApproveReject(payload);
+            
+            if (response.status === "success") {
+                setPreviewModal(false);
+                closeRejectionModal(); // Close and clear rejection modal
+
+                setResponse(response.message || 'Document rejected successfully');
+                setSuccessModal(true);
+
+                // Refresh the view to get updated lists and counts
+                await handleRefresh();
+            } else {
+                setResponse(response.message || 'Failed to reject document');
+                setErrorModal(true);
+            }
+        } catch (error) {
+            console.error('Reject error:', error);
+            setResponse(error.message || 'Failed to reject document');
             setErrorModal(true);
         } finally {
             setActionLoading(false);
@@ -1529,10 +1574,20 @@ const QCViewDocuments = () => {
                                 <>
                                     <Button
                                         color="success"
-                                        onClick={() => handleStatusUpdate(currentDoc.DocumentId, 'Approved')}
+                                        onClick={() => handleApprove(currentDoc.DocumentId)}
                                         disabled={actionLoading}
                                     >
-                                        {actionLoading ? ( <> <Spinner size="sm" className="me-2" /> Approving... </> ) : ( <> <i className="ri-check-line me-1"></i> Approve </> )}
+                                        {actionLoading ? (
+                                            <>
+                                                <Spinner size="sm" className="me-2" />
+                                                Approving...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <i className="ri-check-line me-1"></i>
+                                                Approve
+                                            </>
+                                        )}
                                     </Button>
                                     <Button
                                         color="danger"
@@ -1581,12 +1636,22 @@ const QCViewDocuments = () => {
                                 color="danger"
                                 onClick={() => {
                                     if (rejectionReason.trim()) {
-                                        handleStatusUpdate(currentDoc.DocumentId, 'Rejected', rejectionReason.trim());
+                                        handleReject(currentDoc.DocumentId, rejectionReason.trim());
                                     }
                                 }}
                                 disabled={!rejectionReason.trim() || actionLoading}
                             >
-                                {actionLoading ? ( <> <Spinner size="sm" className="me-2" /> Rejecting... </> ) : ( <> <i className="ri-close-line me-1"></i> Confirm Rejection </> )}
+                                {actionLoading ? (
+                                    <>
+                                        <Spinner size="sm" className="me-2" />
+                                        Rejecting...
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="ri-close-line me-1"></i>
+                                        Confirm Rejection
+                                    </>
+                                )}
                             </Button>
                         </ModalFooter>
                     </Modal>
@@ -1643,4 +1708,3 @@ const QCViewDocuments = () => {
 };
 
 export default QCViewDocuments;
-                                 
