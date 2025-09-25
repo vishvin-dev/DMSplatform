@@ -70,13 +70,16 @@ export const postFileMetaOnly = async (
   CreatedByUserName,
   Category_Id,
   Status_Id,
-  Role_Id
+  Role_Id,
+  div_code,   
+  sd_code,
+  so_code
 ) => {
   const [result] = await pool.query(
     `INSERT INTO documentupload 
-     (DocumentName, DocumentDescription, MetaTags, CreatedByUser_Id, Account_Id, CreatedByUserName, Category_Id, Status_Id, Role_Id) 
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [DocumentName, DocumentDescription, MetaTags, CreatedByUser_Id, account_id, CreatedByUserName, Category_Id, Status_Id, Role_Id]
+     (DocumentName, DocumentDescription, MetaTags, CreatedByUser_Id, Account_Id, CreatedByUserName, Category_Id, Status_Id, Role_Id, div_code, sd_code, so_code) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [DocumentName, DocumentDescription, MetaTags, CreatedByUser_Id, account_id, CreatedByUserName, Category_Id, Status_Id, Role_Id, div_code, sd_code, so_code]
   );
   return result.insertId; // This is DocumentId
 };
@@ -323,12 +326,15 @@ export const saveDraft = async (
   CreatedByUser_Id,
   CreatedByUserName,
   Role_Id,
-  Category_Id
+  Category_Id,
+  div_code,
+  sd_code,
+  so_code
 ) => {
   const [result] = await pool.execute(
     `INSERT INTO documentdraft 
-      (DraftName, DraftDescription, MetaTags, Account_Id, FilePath, CreatedByUser_Id, CreatedByUserName, Role_Id, Category_Id) 
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (DraftName, DraftDescription, MetaTags, Account_Id, FilePath, CreatedByUser_Id, CreatedByUserName, Role_Id, Category_Id, div_code, sd_code, so_code) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       DraftName,
       DraftDescription,
@@ -339,6 +345,9 @@ export const saveDraft = async (
       CreatedByUserName,
       Role_Id || null,
       Category_Id,
+      div_code,
+      sd_code,
+      so_code
     ]
   );
 

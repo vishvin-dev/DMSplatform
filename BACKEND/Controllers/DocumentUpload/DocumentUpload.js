@@ -1,5 +1,4 @@
 import path from "path";
-import { pool } from "../../Config/db.js";
 import fs from "fs";
 import mime from "mime-types"
 import { getDivisions, getSubDivisions, getSections, getRoles, getDocumentLists, getCircle } from "../../models/userModel.js"
@@ -269,20 +268,25 @@ export const DocumentUpload = async (req, res) => {
         //         data: uploadResults
         //     });
         // }
+
+        //This is The final uploading the documents ok 
         else if (parseInt(flagId) === 10) {
-    const {
-        DocumentName,
-        DocumentDescription,
-        MetaTags,
-        CreatedByUser_Id,
-        account_id,
-        CreatedByUserName,
-        Category_Id,
-        Status_Id,
-        Role_Id,
-        ReUploadDocumentId, // optional re-upload
-        ChangeReason // optional
-    } = req.body;
+            const {
+                DocumentName,
+                DocumentDescription,
+                MetaTags,
+                CreatedByUser_Id,
+                account_id,
+                CreatedByUserName,
+                Category_Id,
+                Status_Id,
+                Role_Id,
+                ReUploadDocumentId, // optional re-upload
+                ChangeReason, // optional
+                div_code,   
+                sd_code,
+                so_code
+            } = req.body;
 
     const uploadResults = [];
 
@@ -300,7 +304,10 @@ export const DocumentUpload = async (req, res) => {
                 draft.CreatedByUserName || CreatedByUserName,
                 Category_Id,
                 Status_Id,
-                Role_Id
+                Role_Id,
+                div_code,   
+                sd_code,
+                so_code
             );
 
             // Insert into documentversion
@@ -354,7 +361,10 @@ export const DocumentUpload = async (req, res) => {
                     CreatedByUserName,
                     Category_Id,
                     Status_Id,
-                    Role_Id
+                    Role_Id,
+                    div_code,   
+                    sd_code,
+                    so_code
                 );
                 await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id);
             }
@@ -388,7 +398,10 @@ export const DocumentUpload = async (req, res) => {
                     CreatedByUserName,
                     Category_Id,
                     Status_Id,
-                    Role_Id
+                    Role_Id,
+                    div_code,   
+                    sd_code,
+                    so_code
                 );
                 await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id);
             }
@@ -418,18 +431,21 @@ export const DocumentUpload = async (req, res) => {
                 data: uploadResults
             })
         }
-
+        // This is the draft docunments upload ok 
         else if (parseInt(flagId) === 12) {
-                    const { 
-                        DraftName,
-                        DraftDescription,
-                        MetaTags,
-                        CreatedByUser_Id,
-                        Account_Id,
-                        CreatedByUserName,
-                        Category_Id,
-                        Role_Id,
-                    } = req.body;
+            const { 
+                DraftName,
+                DraftDescription,
+                MetaTags,
+                CreatedByUser_Id,
+                Account_Id,
+                CreatedByUserName,
+                Category_Id,
+                Role_Id,
+                div_code,
+                sd_code,
+                so_code
+            } = req.body;
 
             // check file
             if (!req.files || !req.files.DraftFile) {
@@ -449,16 +465,18 @@ export const DocumentUpload = async (req, res) => {
                 CreatedByUser_Id,
                 CreatedByUserName,
                 Role_Id,
-                Category_Id
+                Category_Id,
+                div_code,
+                sd_code,
+                so_code
             );
-
             return res.json({
                 status: "success",
                 message: "Draft saved successfully",
                 draftId,
             });
             }
-            else if (flagId === 13) {
+        else if (flagId === 13) {
             const draftDocs = await fetchDraftDocumentByAccountId(account_id);
 
             if (draftDocs && draftDocs.length > 0) {
@@ -541,220 +559,3 @@ export const DocumentView = async (req, res) => {
 
 
 
-// export const DocumentUpload = async (req, res) => {
-//   const {
-//     flagId,
-//     circle_code,
-//     div_code,
-//     sd_code,
-//     section,
-//     account_id,
-//   } = req.body;
-
-//   try {
-//     let results;
-
-//     if (flagId === 1) {
-//       results = await getDivisions(circle_code);
-//     } else if (flagId === 11) {
-//       results = await getCircle();
-//     } else if (flagId === 2) {
-//       if (!div_code) return res.status(400).json({ error: "div_code is required" });
-//       results = await getSubDivisions(div_code);
-//     } else if (flagId === 3) {
-//       if (!sd_code) return res.status(400).json({ error: "sd_code is required" });
-//       results = await getSections(sd_code);
-//     } else if (flagId === 4) {
-//       results = await getAccountId(section, account_id);
-//       return res.json({
-//         status: "success",
-//         message: "DropDown Data is fetched successfully",
-//         length: results.length,
-//         data: results,
-//       });
-//     } else if (flagId === 5) {
-//       if (!account_id) return res.status(400).json({ error: "account_id is required" });
-//       results = await getConsumerDetails(account_id);
-//       return res.status(201).json({ status: "success", message: "Account Details Fetched successfully.", data: results })
-//     } else if (flagId === 6) {
-//       results = await getRoles();
-//     } else if (flagId === 7) {
-//       results = await getDocumentCategory();
-//     }
-
-//     // ===============================
-//     // PARTIAL SAVE TO DRAFTS
-//     // ===============================
-//     else if (parseInt(flagId) === 12) {
-//       const {
-//         DraftName,
-//         DraftDescription,
-//         MetaTags,
-//         CreatedByUser_Id,
-//         Category_Id,
-//         CreatedByUserName,
-//       } = req.body;
-
-//       const draftResults = [];
-
-//       if (!req.files || Object.keys(req.files).length === 0) {
-//         return res.status(400).json({ error: "No files uploaded for draft." });
-//       }
-
-//       for (let field in req.files) {
-//         for (let file of req.files[field]) {
-//           const FilePath = file.path;
-
-//           const draftId = await insertDocumentDraft(
-//             DraftName,
-//             DraftDescription,
-//             MetaTags,
-//             FilePath,
-//             CreatedByUser_Id,
-//             Category_Id,
-//             CreatedByUserName
-//           );
-
-//           draftResults.push({ field, DraftId: draftId, FilePath });
-//         }
-//       }
-
-//       return res.json({
-//         status: "success",
-//         message: "Files saved in draft successfully",
-//         uploadedFiles: draftResults.length,
-//         data: draftResults
-//       });
-//     }
-
-//     // ===============================
-//     // VIEW DRAFTS
-//     // ===============================
-//     else if (parseInt(flagId) === 13) {
-//       const { CreatedByUser_Id } = req.body;
-//       results = await getDraftsByUser(CreatedByUser_Id);
-
-//       return res.json({
-//         status: "success",
-//         message: "Drafts fetched successfully",
-//         count: results.length,
-//         data: results
-//       });
-//     }
-
-//     // ===============================
-//     // FINAL UPLOAD (FROM DRAFTS)
-//     // ===============================
-//     else if (parseInt(flagId) === 10) {
-//       const {
-//         CreatedByUser_Id,
-//         account_id,
-//         CreatedByUserName,
-//         Category_Id,
-//         Status_Id,
-//         Role_Id,
-//       } = req.body;
-
-//       const drafts = await getDraftsByUser(CreatedByUser_Id);
-//       if (!drafts || drafts.length === 0) {
-//         return res.status(400).json({ error: "No drafts found to finalize." });
-//       }
-
-//       const finalResults = [];
-
-//       for (let draft of drafts) {
-//         // Insert into DocumentUpload
-//         const docId = await postFileMetaOnly(
-//           draft.DraftName,
-//           draft.DraftDescription,
-//           draft.MetaTags,
-//           CreatedByUser_Id,
-//           account_id,
-//           CreatedByUserName,
-//           Category_Id,
-//           Status_Id,
-//           Role_Id
-//         );
-
-//         // Insert first version
-//         await insertDocumentVersion(docId, "v1", draft.FilePath, CreatedByUser_Id);
-
-//         // Mark draft completed
-//         await markDraftCompleted(draft.DraftId);
-
-//         finalResults.push({ DraftId: draft.DraftId, DocumentId: docId });
-//       }
-
-//       return res.json({
-//         status: "success",
-//         message: "Drafts finalized and moved to DocumentUpload",
-//         finalizedDocs: finalResults.length,
-//         data: finalResults
-//       });
-//     }
-
-//     else if (flagId === 9) {
-//       results = await getDocumentLists();
-//     }
-
-//     else {
-//       return res.status(400).json({ error: "Invalid flagId" });
-//     }
-
-//     return res.json({ status: "success", message: "Data fetched successfully", data: results });
-//   } catch (error) {
-//     console.log(error);
-//     return res.status(500).json({ error: error.message });
-//   }
-// };
-
-// export const insertDocumentDraft = async (
-//   DraftName,
-//   DraftDescription,
-//   MetaTags,
-//   FilePath,
-//   CreatedByUser_Id,
-//   Category_Id,
-//   CreatedByUserName
-// ) => {
-//   const [result] = await pool.query(
-//     `INSERT INTO DocumentDraft 
-//      (DraftName, DraftDescription, MetaTags, FilePath, CreatedByUser_Id, Category_Id, requestUserName) 
-//      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-//     [DraftName, DraftDescription, MetaTags, FilePath, CreatedByUser_Id, Category_Id, CreatedByUserName]
-//   );
-//   return result.insertId;
-// };
-
-// export const getDraftsByUser = async (CreatedByUser_Id) => {
-//   const [rows] = await pool.query(
-//     `SELECT * FROM DocumentDraft WHERE CreatedByUser_Id = ? AND IsCompleted = 0`,
-//     [CreatedByUser_Id]
-//   );
-//   return rows;
-// };
-
-// export const markDraftCompleted = async (DraftId) => {
-//   await pool.query(
-//     `UPDATE DocumentDraft SET IsCompleted = 1, UpdatedOn = NOW() WHERE DraftId = ?`,
-//     [DraftId]
-//   );
-// };
-
-
-// CREATE TABLE DocumentDraft (
-//   DraftId INT PRIMARY KEY AUTO_INCREMENT,
-//   DraftName VARCHAR(255),
-//   DraftDescription TEXT,
-//   FilePath VARCHAR(1000),
-//   MetaTags VARCHAR(255),
-//   CreatedByUser_Id INT,
-//   Category_Id INT,
-//   CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-//   IsCompleted BOOLEAN DEFAULT 0, -- 0 = Draft, 1 = Moved to Upload
-//   UpdatedOn DATETIME,
-//   requestUserName VARCHAR(50),
-  
-//   FOREIGN KEY (CreatedByUser_Id) REFERENCES User(User_Id),
-//   FOREIGN KEY (Category_Id) REFERENCES DocumentCategoryMaster(Category_Id)
-// );
