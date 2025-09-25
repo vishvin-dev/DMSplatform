@@ -56,7 +56,7 @@ const QCViewDocuments = () => {
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewContent, setPreviewContent] = useState(null);
     const [previewError, setPreviewError] = useState(null);
-    const [activeTab, setActiveTab] = useState('pending');
+    const [activeTab, setActiveTab] = useState('');
     const [userInfo, setUserInfo] = useState({
         email: '',
         roleId: null,
@@ -92,6 +92,7 @@ const QCViewDocuments = () => {
     const [shouldShowDropdowns, setShouldShowDropdowns] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
     const [searchLoading, setSearchLoading] = useState(false);
+    const [showTable, setShowTable] = useState(false);
     
     // Store original sections for proper filtering
     const [originalSectionOptions, setOriginalSectionOptions] = useState([]);
@@ -125,8 +126,8 @@ const QCViewDocuments = () => {
             },
             {
                 header: 'Uploaded By',
-                accessorKey: 'UploadedBy',
-                key: 'UploadedBy',
+                accessorKey: 'CreatedByUserName',
+                key: 'CreatedByUserName',
                 sortable: true,
             },
             {
@@ -354,13 +355,14 @@ const QCViewDocuments = () => {
         setSectionOptions([]);
         setOriginalSectionOptions([]);
         setHasSearched(false);
+        setShowTable(false);
         setDocuments([]);
         setFilteredDocuments([]);
         setDataBk([]);
         setSearchValue('');
         setSortConfig({ key: null, direction: null });
         setPage(0);
-        setActiveTab('pending');
+        setActiveTab('');
         setStatusCounts({ pending: 0, approved: 0, rejected: 0 });
         
         // Reload dropdown data from session
@@ -389,7 +391,7 @@ const QCViewDocuments = () => {
         }
     }, [userName, loadDropdownDataFromSession]);
 
-    // Handle search button click
+    // Handle search button click - Get counts only
     const handleSearchClick = async () => {
         if (subDivisions.length > 1 && !subDivision) {
             setResponse('Please select a subdivision before searching.');
@@ -406,106 +408,87 @@ const QCViewDocuments = () => {
         setHasSearched(false);
         
         try {
-            await fetchInitialData(userInfo);
+            await fetchDocumentCounts();
             setHasSearched(true);
+            setShowTable(false); // Don't show table initially
         } catch (error) {
             console.error('Search error:', error);
-            setResponse('Failed to load documents');
+            setResponse('Failed to load document counts');
             setErrorModal(true);
         } finally {
             setSearchLoading(false);
         }
     };
 
-    // Fetch initial data (pending documents and all counts)
-    const fetchInitialData = async (userData) => {
-        setLoading(true);
+    // Fetch document counts using qcApproveReject API
+    const fetchDocumentCounts = async () => {
         try {
-            // Fetch pending documents (flagId: 1)
-            const response = await qcView({
-                flagId: 1, // Using flagId: 1 for actual pending documents
-                roleId: userData.roleId,
-                requestUserName: userData.email
-            });
-            if (response.status === "success") {
-                const pendingDocs = response.results || [];
-                setDocuments(pendingDocs);
-                setFilteredDocuments(pendingDocs);
-                setDataBk(pendingDocs); // Store in databk for pending tab
+            const payload = {
+                flagId: 1,
+                so_code: section
+            };
+
+            const response = await qcApproveReject(payload);
+            
+            if (response.status === "success" && response.results && response.results.length > 0) {
+                const counts = response.results[0];
+                setStatusCounts({
+                    pending: parseInt(counts.PendingCount) || 0,
+                    approved: parseInt(counts.ApprovedCount) || 0,
+                    rejected: parseInt(counts.RejectedCount) || 0
+                });
             } else {
-                setResponse(response.message || "Failed to fetch initial data");
+                setResponse(response.message || "Failed to fetch document counts");
                 setErrorModal(true);
+                setStatusCounts({ pending: 0, approved: 0, rejected: 0 });
             }
-            // Fetch counts for all tabs
-            await fetchAllDocumentCounts(userData);
-        } catch (error) {
-            console.error('Error fetching initial data:', error);
-            setResponse(error.message || 'Failed to fetch initial data');
-            setErrorModal(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // Fetch all document counts
-    const fetchAllDocumentCounts = async (userData) => {
-        try {
-            // Fetch pending count (flagId: 3)
-            const pendingResponse = await qcView({
-                flagId: 3,
-                roleId: userData.roleId,
-                User_Id: userData.userId,
-                requestUserName: userData.email
-            });
-            // Fetch approved count (flagId: 4)
-            const approvedResponse = await qcView({
-                flagId: 4,
-                roleId: userData.roleId,
-                User_Id: userData.userId,
-                requestUserName: userData.email
-            });
-            // Fetch rejected count (flagId: 5)
-            const rejectedResponse = await qcView({
-                flagId: 5,
-                roleId: userData.roleId,
-                User_Id: userData.userId,
-                requestUserName: userData.email
-            });
-
-            setStatusCounts({
-                pending: pendingResponse.status === "success" ? pendingResponse.count || 0 : 0,
-                approved: approvedResponse.status === "success" ? approvedResponse.count || 0 : 0,
-                rejected: rejectedResponse.status === "success" ? rejectedResponse.count || 0 : 0
-            });
         } catch (error) {
             console.error('Error fetching document counts:', error);
+            setResponse(error.message || 'Failed to fetch document counts');
+            setErrorModal(true);
+            setStatusCounts({ pending: 0, approved: 0, rejected: 0 });
         }
     };
 
     // Fetch documents for a specific tab
     const fetchDocuments = async (tab, userData) => {
         let flagId;
+        let apiFunction;
+        let payload;
+
         switch (tab) {
             case 'approved':
-                flagId = 4;
+                flagId = 3;
+                apiFunction = qcApproveReject;
+                payload = {
+                    flagId: flagId,
+                    User_Id: userData.userId,
+                    so_code: section
+                };
                 break;
             case 'rejected':
-                flagId = 5;
+                flagId = 4;
+                apiFunction = qcApproveReject;
+                payload = {
+                    flagId: flagId,
+                    User_Id: userData.userId,
+                    so_code: section
+                };
                 break;
             case 'pending':
-                flagId = 1;
+                flagId = 2;
+                apiFunction = qcApproveReject;
+                payload = {
+                    flagId: flagId,
+                    so_code: section
+                };
                 break;
             default:
                 return;
         }
 
         try {
-            const response = await qcView({
-                flagId: flagId,
-                roleId: userData.roleId,
-                User_Id: userData.userId,
-                requestUserName: userData.email
-            });
+            const response = await apiFunction(payload);
 
             if (response.status === "success") {
                 const docs = response.results || [];
@@ -536,6 +519,7 @@ const QCViewDocuments = () => {
         setSearchValue('');
         setSortConfig({ key: null, direction: null });
         setLoading(true);
+        setShowTable(true); // Show table when tab is clicked
 
         try {
             await fetchDocuments(tab, userInfo);
@@ -546,20 +530,30 @@ const QCViewDocuments = () => {
     
     // Refresh handler to reload current tab data and all counts
     const handleRefresh = async () => {
-        setLoading(true);
-        setSearchValue('');
-        setRejectionReason(''); // Clear any stale rejection reason
-        try {
-            await Promise.all([
-                fetchDocuments(activeTab, userInfo),
-                fetchAllDocumentCounts(userInfo)
-            ]);
-        } catch (error) {
-            console.error("Error during refresh:", error);
-            setResponse("Failed to refresh data.");
-            setErrorModal(true);
-        } finally {
-            setLoading(false);
+        if (activeTab) {
+            setLoading(true);
+            setSearchValue('');
+            setRejectionReason(''); // Clear any stale rejection reason
+            try {
+                await Promise.all([
+                    fetchDocuments(activeTab, userInfo),
+                    fetchDocumentCounts()
+                ]);
+            } catch (error) {
+                console.error("Error during refresh:", error);
+                setResponse("Failed to refresh data.");
+                setErrorModal(true);
+            } finally {
+                setLoading(false);
+            }
+        } else {
+            // If no active tab, just refresh counts
+            setSearchLoading(true);
+            try {
+                await fetchDocumentCounts();
+            } finally {
+                setSearchLoading(false);
+            }
         }
     };
 
@@ -600,7 +594,7 @@ const QCViewDocuments = () => {
         const filtered = sourceData.filter(doc => {
             const fieldsToSearch = [
                 'DocumentName', 'Account_Id', 'rr_no', 'consumer_name',
-                'UploadedBy', 'division', 'sub_division', 'section',
+                'CreatedByUserName', 'division', 'sub_division', 'section',
                 'MetaTags', 'CreatedAt', 'Status', 'RejectionReason',
                 'consumer_address'
             ];
@@ -868,7 +862,7 @@ const QCViewDocuments = () => {
                 <td>{doc.Account_Id || 'N/A'}</td>
                 <td>{doc.rr_no || 'N/A'}</td>
                 <td>{doc.consumer_name || 'N/A'}</td>
-                <td>{doc.UploadedBy || 'N/A'}</td>
+                <td>{doc.CreatedByUserName || 'N/A'}</td>
                 <td>{formatDate(doc.CreatedAt)}</td>
                 <td>
                     <Button
@@ -1167,7 +1161,7 @@ const QCViewDocuments = () => {
                                         </div>
                                         <div className="mb-2">
                                             <Label className="fw-semibold">Uploaded By:</Label>
-                                            <p className="mb-1">{doc.UploadedBy}</p>
+                                            <p className="mb-1">{doc.CreatedByUserName || 'N/A'}</p>
                                         </div>
                                         <div className="mb-2">
                                             <Label className="fw-semibold">Upload Date:</Label>
@@ -1333,105 +1327,127 @@ const QCViewDocuments = () => {
                                 </Card>
                             )}
 
-                            {/* Only show document interface after search is performed */}
+                            {/* Show status buttons after search */}
                             {dropdownsInitialized && hasSearched && (
                                 <>
-                                    <Row className="mb-3 align-items-center">
-                                        <Col md={6}>
-                                            <div className="d-flex flex-wrap gap-2">
-                                                {/* Tabs */}
+                                    <Row className="mb-4">
+                                        <Col md={12}>
+                                            <div className="d-flex flex-wrap justify-content-center gap-3">
+                                                {/* Status Buttons */}
                                                 <Button
                                                     color={activeTab === 'pending' ? 'primary' : 'outline-primary'}
                                                     onClick={() => handleTabChange('pending')}
-                                                    className="position-relative px-4"
+                                                    className="position-relative px-4 py-3"
+                                                    style={{ minWidth: '150px' }}
                                                 >
-                                                    <i className="ri-time-line me-1"></i> Pending
+                                                    <i className="ri-time-line me-2"></i> 
+                                                    Pending Documents
                                                     <Badge
                                                         color="danger" pill
                                                         className="position-absolute top-0 start-100 translate-middle"
-                                                        style={{ fontSize: '0.65rem', minWidth: '18px' }}
+                                                        style={{ fontSize: '0.7rem', minWidth: '20px' }}
                                                     >
                                                         {statusCounts.pending}
                                                     </Badge>
                                                 </Button>
+                                                
                                                 <Button
                                                     color={activeTab === 'approved' ? 'success' : 'outline-success'}
                                                     onClick={() => handleTabChange('approved')}
-                                                    className="position-relative px-4"
+                                                    className="position-relative px-4 py-3"
+                                                    style={{ minWidth: '150px' }}
                                                 >
-                                                    <i className="ri-checkbox-circle-line me-1"></i> Approved
+                                                    <i className="ri-checkbox-circle-line me-2"></i> 
+                                                    Approved Documents
                                                     <Badge
                                                         color="success" pill
                                                         className="position-absolute top-0 start-100 translate-middle"
-                                                        style={{ fontSize: '0.65rem', minWidth: '18px' }}
+                                                        style={{ fontSize: '0.7rem', minWidth: '20px' }}
                                                     >
                                                         {statusCounts.approved}
                                                     </Badge>
                                                 </Button>
+                                                
                                                 <Button
                                                     color={activeTab === 'rejected' ? 'danger' : 'outline-danger'}
                                                     onClick={() => handleTabChange('rejected')}
-                                                    className="position-relative px-4"
+                                                    className="position-relative px-4 py-3"
+                                                    style={{ minWidth: '150px' }}
                                                 >
-                                                    <i className="ri-close-circle-line me-1"></i> Rejected
+                                                    <i className="ri-close-circle-line me-2"></i> 
+                                                    Rejected Documents
                                                     <Badge
                                                         color="warning" pill
                                                         className="position-absolute top-0 start-100 translate-middle"
-                                                        style={{ fontSize: '0.65rem', minWidth: '18px' }}
+                                                        style={{ fontSize: '0.7rem', minWidth: '20px' }}
                                                     >
                                                         {statusCounts.rejected}
                                                     </Badge>
                                                 </Button>
                                             </div>
                                         </Col>
-                                        <Col md={6}>
-                                            <div className="d-flex flex-wrap justify-content-end gap-2">
-                                                <div className="search-box">
-                                                    <Input
-                                                        type="text"
-                                                        className="form-control"
-                                                        placeholder="Search across all fields..."
-                                                        value={searchValue}
-                                                        onChange={handleSearch}
-                                                    />
-                                                    <i className="ri-search-line search-icon"></i>
-                                                </div>
-                                                <Button color="success" onClick={handleRefresh} disabled={loading}>
-                                                    {loading ? (
-                                                        <>
-                                                            <Spinner size="sm" className="me-2" />
-                                                            Refreshing...
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <i className="ri-refresh-line me-1"></i> Refresh
-                                                        </>
-                                                    )}
-                                                </Button>
-                                            </div>
-                                        </Col>
                                     </Row>
 
-                                    <div className="table-responsive" style={{
-                                        maxHeight: 'calc(100vh - 300px)',
-                                        overflowY: 'auto'
-                                    }}>
-                                        <table className="grid-table mb-0" style={{ minWidth: 1020, width: '100%', backgroundColor: 'transparent' }}>
-                                            <thead className="table-light" style={{
-                                                position: 'sticky',
-                                                top: 0,
-                                                zIndex: 1,
-                                                background: 'white'
-                                            }}>
-                                                {renderTableHeader()}
-                                            </thead>
-                                            <tbody>
-                                                {renderTableRows()}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                    {/* Table interface - Only show when a tab is selected */}
+                                    {showTable && activeTab && (
+                                        <>
+                                            <Row className="mb-3 align-items-center">
+                                                <Col md={6}>
+                                                    <h5 className="mb-0">
+                                                        <i className="ri-file-list-3-line me-2"></i>
+                                                        {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Documents
+                                                    </h5>
+                                                </Col>
+                                                <Col md={6}>
+                                                    <div className="d-flex flex-wrap justify-content-end gap-2">
+                                                        <div className="search-box">
+                                                            <Input
+                                                                type="text"
+                                                                className="form-control"
+                                                                placeholder="Search across all fields..."
+                                                                value={searchValue}
+                                                                onChange={handleSearch}
+                                                            />
+                                                            <i className="ri-search-line search-icon"></i>
+                                                        </div>
+                                                        <Button color="success" onClick={handleRefresh} disabled={loading}>
+                                                            {loading ? (
+                                                                <>
+                                                                    <Spinner size="sm" className="me-2" />
+                                                                    Refreshing...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <i className="ri-refresh-line me-1"></i> Refresh
+                                                                </>
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                </Col>
+                                            </Row>
 
-                                    {!loading && !dropdownsLoading && renderPagination()}
+                                            <div className="table-responsive" style={{
+                                                maxHeight: 'calc(100vh - 350px)',
+                                                overflowY: 'auto'
+                                            }}>
+                                                <table className="grid-table mb-0" style={{ minWidth: 1020, width: '100%', backgroundColor: 'transparent' }}>
+                                                    <thead className="table-light" style={{
+                                                        position: 'sticky',
+                                                        top: 0,
+                                                        zIndex: 1,
+                                                        background: 'white'
+                                                    }}>
+                                                        {renderTableHeader()}
+                                                    </thead>
+                                                    <tbody>
+                                                        {renderTableRows()}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {!loading && !dropdownsLoading && renderPagination()}
+                                        </>
+                                    )}
                                 </>
                             )}
 
@@ -1627,3 +1643,4 @@ const QCViewDocuments = () => {
 };
 
 export default QCViewDocuments;
+                                 
