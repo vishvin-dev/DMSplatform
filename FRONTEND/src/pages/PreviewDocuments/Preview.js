@@ -11,7 +11,7 @@ import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
 
 const Preview = () => {
-    document.title = ` Consumer search  | DMS`;
+    document.title = ` Consumer search   | DMS`;
     const navigate = useNavigate();
     const location = useLocation();
     const debounceRef = useRef();
@@ -98,7 +98,7 @@ const Preview = () => {
     const loadDropdownDataFromSession = useCallback(async () => {
         const authUser = JSON.parse(sessionStorage.getItem("authUser"));
         const zones = authUser?.user?.zones || [];
-        
+
         if (zones.length === 0) return;
 
         const userZone = zones[0];
@@ -113,17 +113,17 @@ const Preview = () => {
             setDivisionName(divisionData);
             setSubDivisions(subDivisionData);
             setSectionOptions(sectionData);
-            
+
             setDivision(userZone.div_code);
             setSubDivision(userZone.sd_code);
             setIsFieldsDisabled({ division: true, subDivision: true, section: sectionData.length === 1 });
-            
+
             if (sectionData.length === 1) {
                 setSection(sectionData[0].so_code);
             }
         } else if (level === 'subdivision') {
             const divisionData = [{ div_code: userZone.div_code, division: userZone.division }];
-            
+
             const uniqueSubDivisions = [];
             const seenSubDivisions = new Set();
             zones.forEach(zone => {
@@ -135,17 +135,17 @@ const Preview = () => {
 
             setDivisionName(divisionData);
             setSubDivisions(uniqueSubDivisions);
-            
+
             setDivision(userZone.div_code);
             setIsFieldsDisabled({ division: true, subDivision: uniqueSubDivisions.length === 1, section: false });
-            
+
             if (uniqueSubDivisions.length === 1) {
                 const selectedSdCode = uniqueSubDivisions[0].sd_code;
                 setSubDivision(selectedSdCode);
-                
+
                 const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: selectedSdCode });
                 setSectionOptions(sections);
-                
+
                 if (sections.length === 1) {
                     setSection(sections[0].so_code);
                     setIsFieldsDisabled(prev => ({ ...prev, section: true }));
@@ -163,21 +163,21 @@ const Preview = () => {
 
             setDivisionName(uniqueDivisions);
             setIsFieldsDisabled({ division: uniqueDivisions.length === 1, subDivision: false, section: false });
-            
+
             if (uniqueDivisions.length === 1) {
                 const selectedDivCode = uniqueDivisions[0].div_code;
                 setDivision(selectedDivCode);
-                
+
                 const subdivisions = await flagIdFunction({ flagId: 2, requestUserName: userName, div_code: selectedDivCode });
                 setSubDivisions(subdivisions);
-                
+
                 if (subdivisions.length === 1) {
                     setSubDivision(subdivisions[0].sd_code);
                     setIsFieldsDisabled(prev => ({ ...prev, subDivision: true }));
-                    
+
                     const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: subdivisions[0].sd_code });
                     setSectionOptions(sections);
-                    
+
                     if (sections.length === 1) {
                         setSection(sections[0].so_code);
                         setIsFieldsDisabled(prev => ({ ...prev, section: true }));
@@ -468,10 +468,10 @@ const Preview = () => {
             if (subdivisions.length === 1) {
                 setSubDivision(subdivisions[0].sd_code);
                 setIsFieldsDisabled(prev => ({ ...prev, subDivision: true }));
-                
+
                 const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: subdivisions[0].sd_code });
                 setSectionOptions(sections);
-                
+
                 if (sections.length === 1) {
                     setSection(sections[0].so_code);
                     setIsFieldsDisabled(prev => ({ ...prev, section: true }));
@@ -500,7 +500,7 @@ const Preview = () => {
         if (selectedSdCode && (userLevel === 'section' || userLevel === 'subdivision' || userLevel === 'division')) {
             const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: selectedSdCode });
             setSectionOptions(sections);
-            
+
             if (sections.length === 1) {
                 setSection(sections[0].so_code);
                 setIsFieldsDisabled(prev => ({ ...prev, section: true }));
@@ -573,22 +573,33 @@ const Preview = () => {
         loadDropdownDataFromSession();
     };
 
-    // FINAL UPDATED FUNCTION
+    // ############ UPDATED AND VERIFIED FUNCTION ############
     const handleVerifyAndProceed = async (consumerData) => {
         setVerifyingAccountId(consumerData.account_id);
+
+        // Enhance consumer data with selected location CODES for the next screen's API call
+        // and also include NAMES for display purposes.
+        const consumerDataWithLocation = {
+            ...consumerData,
+            div_code: division,
+            sd_code: subDivision,
+            so_code: section,
+            DivisionName: divisionName.find(d => d.div_code === division)?.division || '',
+            SubDivisionName: subDivisions.find(sd => sd.sd_code === subDivision)?.sub_division || '',
+            SectionName: sectionOptions.find(s => s.so_code === section)?.section_office || '',
+        };
+
         try {
-            // UPDATED: Using flagId: 13 as a number
+            // Payload to check for existing drafts for the consumer
             const payload = {
                 flagId: 13,
                 account_id: consumerData.account_id,
-                // ADDED: Including division, subDivision, and section to prevent 'undefined' error
-                
             };
 
-            // UPDATED: Using the new postDocumentUploadview helper as specified
             const response = await postDocumentUploadview(payload);
 
-            if (response?.status === "success" && response?.data?.length > 0) {
+            // If drafts are found (and data is a non-empty array), transform and pass them to the next screen
+            if (response?.status === "success" && Array.isArray(response?.data) && response.data.length > 0) {
                 const transformedDrafts = response.data.map(draft => ({
                     id: draft.Draft_Id,
                     draftId: draft.Draft_Id,
@@ -596,28 +607,32 @@ const Preview = () => {
                     description: draft.DraftDescription,
                     tags: draft.MetaTags ? draft.MetaTags.split(',').map(tag => tag.trim()) : [],
                     category: draft.MetaTags ? draft.MetaTags.split(',')[0].trim() : 'Draft Document',
-                    createdAt: draft.UploadedOn,
+                    createdAt: draft.UploadedAt, // Corrected from UploadedOn to match API response
                     filePath: draft.FilePath,
-                    needsFetching: true
+                    needsFetching: true // Flag to tell the next screen to fetch the blob
                 }));
 
                 navigate('/DocumentReview', {
                     state: {
-                        consumerData: consumerData,
+                        consumerData: consumerDataWithLocation,
                         draftDocuments: transformedDrafts
                     }
                 });
             } else {
-                navigate('/DocumentReview', { state: { consumerData: consumerData } });
+                // If no drafts, or data is not a valid array, navigate with only the consumer data
+                navigate('/DocumentReview', { state: { consumerData: consumerDataWithLocation } });
             }
         } catch (error) {
             console.error("Error fetching drafts:", error);
-            setResponse("Failed to check for existing documents. Please try again.");
+            setResponse("Failed to check for existing documents. Navigating directly.");
             setErrorModal(true);
+            // Fallback: Navigate even if the draft check fails
+            navigate('/DocumentReview', { state: { consumerData: consumerDataWithLocation } });
         } finally {
             setVerifyingAccountId(null);
         }
     };
+    // ############ END OF UPDATE ############
 
     const renderSearchTableRows = () => {
         if (!hasSearched) return <tr><td colSpan={6} className="text-center p-4">Please use the filters above and search for an Account ID.</td></tr>;
@@ -742,10 +757,10 @@ const Preview = () => {
                                             <Input type="text" value={accountSearchInput} onChange={handleAccountSearchChange} placeholder="Enter Account ID" disabled={!section} />
                                             {showSuggestions && (
                                                 <ListGroup className="position-absolute w-100" style={{ zIndex: 1000, maxHeight: "200px", overflowY: "auto" }}>
-                                                    {loading ? ( <ListGroupItem>Loading...</ListGroupItem> ) : 
+                                                    {loading ? ( <ListGroupItem>Loading...</ListGroupItem> ) :
                                                      accountSuggestions.length > 0 ? ( accountSuggestions.map((acc) => (
                                                         <ListGroupItem key={acc.account_id} action onClick={() => handleAccountSuggestionClick(acc.account_id)}>{acc.account_id}</ListGroupItem>
-                                                     ))) : ( <ListGroupItem>No data found</ListGroupItem> )}
+                                                    ))) : ( <ListGroupItem>No data found</ListGroupItem> )}
                                                 </ListGroup>
                                             )}
                                         </div>
@@ -800,7 +815,7 @@ const Preview = () => {
                     <ModalBody><p>A list of documents pending review would be displayed here.</p><p className='text-center'>Total Pending: {documentCounts.pending}</p></ModalBody>
                     <ModalFooter><Button color="secondary" onClick={() => setStatusModalOpen(false)}>Close</Button></ModalFooter>
                 </Modal>
-                
+
                 <Modal isOpen={approvedModalOpen} toggle={() => setApprovedModalOpen(false)} size="xl">
                     <ModalHeader className="bg-primary text-white" toggle={() => setApprovedModalOpen(false)}>Approved Documents <Badge color="light" pill className="ms-2 text-primary">{documentCounts.approved} Approved</Badge></ModalHeader>
                     <ModalBody className="p-3">
@@ -811,7 +826,7 @@ const Preview = () => {
                                         <CardHeader className="bg-light"><h5 className="mb-0">Approved Files</h5></CardHeader>
                                         <CardBody className="p-0 flex-grow-1 position-relative">
                                             <div className="scrollable-content">
-                                                {loading ? (<div className="text-center p-4"><Spinner /></div>) : 
+                                                {loading ? (<div className="text-center p-4"><Spinner /></div>) :
                                                  approvedDocuments.length > 0 ? (
                                                     <ListGroup flush>
                                                         {approvedDocuments.map((doc) => (
@@ -824,7 +839,7 @@ const Preview = () => {
                                                             </ListGroupItem>
                                                         ))}
                                                     </ListGroup>
-                                                 ) : ( <div className="text-center text-muted p-4">No approved documents found.</div> )}
+                                                ) : ( <div className="text-center text-muted p-4">No approved documents found.</div> )}
                                             </div>
                                         </CardBody>
                                     </Card>
@@ -834,8 +849,8 @@ const Preview = () => {
                                         <CardHeader className="bg-light"><h5 className="mb-0">Document Preview</h5></CardHeader>
                                         <CardBody className="p-0 flex-grow-1 position-relative">
                                             <div className={`scrollable-content ${!previewContent ? 'd-flex justify-content-center align-items-center' : ''}`}>
-                                                {previewLoading ? (<div className="text-center p-5"><Spinner /><p>Loading preview...</p></div>) : 
-                                                 previewError ? (<Alert color="danger" className="m-3">{previewError}</Alert>) : 
+                                                {previewLoading ? (<div className="text-center p-5"><Spinner /><p>Loading preview...</p></div>) :
+                                                 previewError ? (<Alert color="danger" className="m-3">{previewError}</Alert>) :
                                                  selectedFile && previewContent ? (
                                                     <div className="d-flex flex-column h-100">
                                                         <div className="flex-grow-1 text-center p-3" style={{ overflow: 'auto' }}>
@@ -852,12 +867,12 @@ const Preview = () => {
                                                             <Button color="light" size="sm" onClick={handleZoomReset} className="ms-3">Reset</Button>
                                                         </div>
                                                     </div>
-                                                 ) : (
+                                                ) : (
                                                     <div className="text-center text-muted p-5">
                                                         <i className="ri-file-line display-4"></i>
                                                         <h5 className="mt-3">No document selected</h5>
                                                     </div>
-                                                 )}
+                                                )}
                                             </div>
                                         </CardBody>
                                     </Card>
@@ -879,7 +894,7 @@ const Preview = () => {
                                         <CardHeader className="bg-light"><h5 className="mb-0">Rejected Files</h5></CardHeader>
                                         <CardBody className="p-0 flex-grow-1 position-relative">
                                             <div className="scrollable-content">
-                                                {loading ? (<div className="text-center p-4"><Spinner /></div>) : 
+                                                {loading ? (<div className="text-center p-4"><Spinner /></div>) :
                                                  rejectedDocuments.length > 0 ? (
                                                     <ListGroup flush>
                                                         {rejectedDocuments.map((doc) => (
@@ -895,7 +910,7 @@ const Preview = () => {
                                                             </ListGroupItem>
                                                         ))}
                                                     </ListGroup>
-                                                 ) : ( <div className="text-center text-muted p-4">No rejected documents found.</div> )}
+                                                ) : ( <div className="text-center text-muted p-4">No rejected documents found.</div> )}
                                             </div>
                                         </CardBody>
                                     </Card>
@@ -905,8 +920,8 @@ const Preview = () => {
                                         <CardHeader className="bg-light"><h5 className="mb-0">Document Preview</h5></CardHeader>
                                         <CardBody className="p-0 flex-grow-1 position-relative">
                                             <div className={`scrollable-content ${!previewContent ? 'd-flex justify-content-center align-items-center' : ''}`}>
-                                                {previewLoading ? (<div className="text-center p-5"><Spinner /><p>Loading preview...</p></div>) : 
-                                                 previewError ? (<Alert color="danger" className="m-3">{previewError}</Alert>) : 
+                                                {previewLoading ? (<div className="text-center p-5"><Spinner /><p>Loading preview...</p></div>) :
+                                                 previewError ? (<Alert color="danger" className="m-3">{previewError}</Alert>) :
                                                  selectedRejectedFile && previewContent ? (
                                                     <div className="d-flex flex-column h-100">
                                                         <div className="flex-grow-1 text-center p-3" style={{ overflow: 'auto' }}>
@@ -923,9 +938,9 @@ const Preview = () => {
                                                             <Button color="light" size="sm" onClick={handleZoomReset} className="ms-3">Reset</Button>
                                                         </div>
                                                     </div>
-                                                 ) : (
+                                                ) : (
                                                     <div className="text-center text-muted p-5"><i className="ri-file-line display-4"></i><h5 className="mt-3">No document selected</h5></div>
-                                                 )}
+                                                )}
                                             </div>
                                         </CardBody>
                                     </Card>
@@ -938,44 +953,44 @@ const Preview = () => {
                 <Modal isOpen={showReuploadModal} toggle={() => setShowReuploadModal(false)} size="lg" centered backdrop="static">
                     <ModalHeader toggle={() => setShowReuploadModal(false)} className="bg-primary text-white">Re-upload Document</ModalHeader>
                     <ModalBody>{reuploadDocument && (<Row className="g-3"><Col md={6}><h5>Previous Version</h5><div className="d-flex align-items-center mb-2">{getFileIcon(reuploadDocument.name)}<p className="ms-2 mb-1">{reuploadDocument.name}</p></div><Card style={{ height: '300px' }}><CardBody className="p-0 d-flex align-items-center justify-content-center">{reuploadFileLoading ?
-                        <Spinner /> : reuploadOldDocPreview ? (['jpeg', 'jpg', 'png', 'gif'].includes(reuploadOldDocPreview.type) ? <img src={reuploadOldDocPreview.url} alt="Old preview" className="img-fluid" style={{ maxHeight: '100%' }} /> : <div className="text-center"><i className="ri-file-line display-4 text-muted"></i><p>No preview</p></div>) : <div className="text-center"><i className="ri-file-line display-4 text-muted"></i><p>No preview available</p></div>}</CardBody></Card></Col><Col md={6}><h5>Upload New Version</h5><FormGroup><Label for="documentReupload">Select new file</Label><Input type="file" id="documentReupload" onChange={(e) => {
-                            const file = e.target.files[0];
-                            if (file) {
-                                setNewDocumentFile(file); if (file.type.startsWith('image/')) { setNewDocumentPreview({ type: file.type.split('/')[1], url: URL.createObjectURL(file) }); } else {
-                                    setNewDocumentPreview(null);
-                                }
+                    <Spinner /> : reuploadOldDocPreview ? (['jpeg', 'jpg', 'png', 'gif'].includes(reuploadOldDocPreview.type) ? <img src={reuploadOldDocPreview.url} alt="Old preview" className="img-fluid" style={{ maxHeight: '100%' }} /> : <div className="text-center"><i className="ri-file-line display-4 text-muted"></i><p>No preview</p></div>) : <div className="text-center"><i className="ri-file-line display-4 text-muted"></i><p>No preview available</p></div>}</CardBody></Card></Col><Col md={6}><h5>Upload New Version</h5><FormGroup><Label for="documentReupload">Select new file</Label><Input type="file" id="documentReupload" onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                            setNewDocumentFile(file); if (file.type.startsWith('image/')) { setNewDocumentPreview({ type: file.type.split('/')[1], url: URL.createObjectURL(file) }); } else {
+                                setNewDocumentPreview(null);
                             }
-                        }} /></FormGroup><div className={`mt-2 text-center p-3 border rounded drop-zone ${isDragging ?
-                            'drop-zone-active' : ''}`} style={{ height: '300px' }} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleReuploadDrop}>{newDocumentPreview ?
-                                (<img src={newDocumentPreview.url} alt="New preview" className="img-fluid" style={{ maxHeight: '100%' }} />) : (<div className="d-flex flex-column justify-content-center h-100"><i className="ri-file-upload-line display-4 text-muted"></i><p className="mt-2 text-muted">Drag & Drop file here</p></div>)}</div></Col></Row>)}</ModalBody>
+                        }
+                    }} /></FormGroup><div className={`mt-2 text-center p-3 border rounded drop-zone ${isDragging ?
+                        'drop-zone-active' : ''}`} style={{ height: '300px' }} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleReuploadDrop}>{newDocumentPreview ?
+                            (<img src={newDocumentPreview.url} alt="New preview" className="img-fluid" style={{ maxHeight: '100%' }} />) : (<div className="d-flex flex-column justify-content-center h-100"><i className="ri-file-upload-line display-4 text-muted"></i><p className="mt-2 text-muted">Drag & Drop file here</p></div>)}</div></Col></Row>)}</ModalBody>
                     <ModalFooter><Button color="light" onClick={() => setShowReuploadModal(false)}>Cancel</Button><Button color="primary" onClick={handleReuploadSubmit} disabled={!newDocumentFile ||
                         uploadLoading}>{uploadLoading ? <><Spinner size="sm" /> Re-uploading...</> : 'Submit Re-upload'}</Button></ModalFooter>
                 </Modal>
 
                 <style>
                     {`
-                     .results-container {
-                         height: calc(100vh - 250px);
-                         min-height: 500px;
-                     }
-                     .scrollable-content {
-                         position: absolute;
-                         top: 0;
-                         left: 0;
-                         right: 0;
-                         bottom: 0;
-                         overflow-y: auto;
-                         overflow-x: hidden;
-                     }
-                      .drop-zone {
-                         border: 2px dashed #e9ecef;
-                         transition: all 0.2s ease-in-out;
-                     }
-                     .drop-zone-active {
-                         border-color: #405189;
-                         background-color: #f0f3ff;
-                     }
-                     `}
+                                .results-container {
+                                    height: calc(100vh - 250px);
+                                    min-height: 500px;
+                                }
+                                .scrollable-content {
+                                    position: absolute;
+                                    top: 0;
+                                    left: 0;
+                                    right: 0;
+                                    bottom: 0;
+                                    overflow-y: auto;
+                                    overflow-x: hidden;
+                                }
+                                 .drop-zone {
+                                    border: 2px dashed #e9ecef;
+                                    transition: all 0.2s ease-in-out;
+                                }
+                                .drop-zone-active {
+                                    border-color: #405189;
+                                    background-color: #f0f3ff;
+                                }
+                                `}
                 </style>
             </Container>
         </div>
