@@ -3,7 +3,7 @@ import fs from "fs";
 import mime from "mime-types"
 import { getDivisions, getSubDivisions, getSections, getRoles, getDocumentLists, getCircle } from "../../models/userModel.js"
 import {
-    getAccountId, getConsumerDetails, postFileUpload, getDocumentCategory, getDocumentsView, getSingleDocumentById, postFileMetaOnly, insertDocumentVersion
+    getAccountId, getConsumerDetails, postFileUpload, getDocumentCategory, getDocumentsView, getSingleDocumentById, getSingleDocumentByIdByDraft, postFileMetaOnly, insertDocumentVersion
     , getLatestVersion, getNextVersionLabel, markOldVersionNotLatest, updateDocumentStatus, resolveRejection, saveDraft, fetchDraftDocumentByAccountId, finalizeDrafts
 } from "../../models/DocumentUpload.js"
 
@@ -516,6 +516,33 @@ export const DocumentView = async (req, res) => {
                 return res.status(400).json({ status: "error", message: "DocumentId is required" });
             }
             const documentData = await getSingleDocumentById(DocumentId);
+            if (!documentData || documentData.length === 0) {
+                return res.status(404).json({ status: "error", message: "Document not found" });
+            }
+            const rawFilePath = path.resolve(documentData[0].FilePath);
+            const fileName = path.basename(rawFilePath);
+
+            if (!fs.existsSync(rawFilePath)) {
+                return res.status(404).json({ status: "error", message: "File not found on server" });
+            }
+            const mimeType = mime.lookup(rawFilePath) || "application/octet-stream";
+            const stream = fs.createReadStream(rawFilePath);
+
+            res.setHeader("Content-Type", mimeType);
+            res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+            res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+
+            stream.on("error", (err) => {
+                console.error("Stream Error:", err);
+                return res.status(500).json({ status: "error", message: "Error streaming file" });
+            });
+            stream.pipe(res);
+        }
+         else if (parseInt(flagId) === 3) {
+            if (!DocumentId) {
+                return res.status(400).json({ status: "error", message: "DocumentId is required" });
+            }
+            const documentData = await getSingleDocumentByIdByDraft(DocumentId);
             if (!documentData || documentData.length === 0) {
                 return res.status(404).json({ status: "error", message: "Document not found" });
             }

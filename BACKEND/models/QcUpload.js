@@ -568,7 +568,7 @@ export const clickGetPendingDocs = async (so_code) => {
 };
 
 //THIS IS THE CLCIKING Approved DOCS
-export const clickGetApprovedDocs = async (User_Id,so_code) => {
+export const clickGetApprovedDocs = async (User_Id, so_code) => {
     try {
         const [result] = await pool.execute(
             `
@@ -598,7 +598,7 @@ export const clickGetApprovedDocs = async (User_Id,so_code) => {
                 AND du.so_code = ?
                 ORDER BY dwh.ActionTime DESC;
             `,
-            [User_Id,so_code]
+            [User_Id, so_code]
         );
         return result;
     } catch (error) {
@@ -608,7 +608,7 @@ export const clickGetApprovedDocs = async (User_Id,so_code) => {
 };
 
 //THIS IS THE CLCIKING Approved DOCS
-export const clickGetRejectedDocs = async (User_Id,so_code) => {
+export const clickGetRejectedDocs = async (User_Id, so_code) => {
     try {
         const [result] = await pool.execute(
             `
@@ -637,9 +637,8 @@ export const clickGetRejectedDocs = async (User_Id,so_code) => {
                 AND drq.RejectedByUser_Id = ?
                 AND du.so_code = ?
                 ORDER BY drq.RejectedOn DESC;
-
             `,
-            [User_Id,so_code]
+            [User_Id, so_code]
         );
         return result;
     } catch (error) {
@@ -647,6 +646,84 @@ export const clickGetRejectedDocs = async (User_Id,so_code) => {
         throw error;
     }
 };
+
+
+//==========================THIS WHEN WE CLICK TO THE APPROVED BUTTONS THEN IT TO BE APPROVED OK============================
+export const clickToApproved = async (User_Id, DocumentId, Role_Id) => {
+    try {
+        // 1️ Update DocumentUpload status
+        await pool.execute(
+            `
+            UPDATE DocumentUpload
+            SET Status_Id = 2,
+                UpdatedOn = NOW()
+            WHERE DocumentId = ?
+            `,
+            [DocumentId]
+        );
+
+        // 2️ Mark old workflow entries as not latest
+        await pool.execute(
+            `
+            UPDATE DocumentWorkflowHistory
+            SET IsLatest = 0
+            WHERE DocumentId = ?
+            `,
+            [DocumentId]
+        );
+
+        // 3️ Insert new workflow history row
+        const [result] = await pool.execute(
+            `
+            INSERT INTO DocumentWorkflowHistory
+                (DocumentId, Status_Id, Comment, ActionByUser_Id, ActionByRole_Id, ActionTime, IsLatest)
+            VALUES
+                (?, 2, 'Approved by QC', ?, ?, NOW(), 1)
+            `,
+            [DocumentId, User_Id, Role_Id]
+        );
+
+        return { success: true, workflowId: result.insertId };
+    } catch (error) {
+        console.error("Error approving document:", error);
+        throw error;
+    }
+};
+
+//==========================THIS WHEN WE CLICK TO THE REJECTED BUTTONS THEN IT TO BE REJECTED OK============================
+export const clickToReject = async (User_Id, DocumentId, comment) => {
+    try {
+        // 1️ Update document as Rejected
+        await pool.execute(
+            `
+      UPDATE DocumentUpload
+      SET Status_Id = 3,
+          UpdatedOn = NOW()
+      WHERE DocumentId = ?
+      `,
+            [DocumentId]
+        );
+
+        // 2️ Insert into rejection queue
+        const [result] = await pool.execute(
+            `
+      INSERT INTO DocumentRejectionQueue
+        (DocumentId, Status_Id, RejectedByUser_Id, UploaderUser_Id, RejectedOn, RejectionComment, IsResolved)
+      SELECT ?, 3, ?, du.CreatedByUser_Id, NOW(), ?, 0
+      FROM DocumentUpload du
+      WHERE du.DocumentId = ?
+      `,
+            [DocumentId, User_Id, comment, DocumentId]
+        );
+
+        return { success: true, rejectionId: result.insertId };
+    } catch (error) {
+        console.error("Error rejecting document:", error);
+        throw error;
+    }
+};
+
+
 
 
 
