@@ -333,6 +333,8 @@ import ManageRole from "../pages/Roles/ManageRole-creation";
 import WelcomePage from "../pages/welcomepage/welcomepage";
 import CreateIndent from "../pages/Indent/createindent";
 import ViewIndent from "../pages/Indent/viewindent";
+import ManagerApprovalView from "../pages/Indent/ManagerApprovalView";
+
 
 // import AddDocuments from "../pages/AddDocuments/AddDocuments";
 
@@ -353,6 +355,7 @@ const authProtectedRoutes = [
 
 { path: "/Preview", component: <Preview/> },
 
+{ path: "/ManagerApprovalView", component: <ManagerApprovalView/> },
 { path: "/DocumentReview", component: <DocumentReview/> },
   //************************************************ */
 
