@@ -25,7 +25,7 @@ export const DocumentUpload = async (req, res) => {
         if (flagId === 1) {
             results = await getDivisions(circle_code);
         }
-          else if (flagId === 11) {
+        else if (flagId === 11) {
             results = await getCircle();
         } else if (flagId === 2) {
             if (!div_code) return res.status(400).json({ error: "div_code is required" });
@@ -281,159 +281,154 @@ export const DocumentUpload = async (req, res) => {
                 Category_Id,
                 Status_Id,
                 Role_Id,
-                ReUploadDocumentId, // optional re-upload
-                ChangeReason, // optional
-                div_code,   
+                ReUploadDocumentId,
+                ChangeReason,
+                div_code,
                 sd_code,
                 so_code
             } = req.body;
 
-    const uploadResults = [];
+            const uploadResults = [];
 
-    // 1. Check for drafts for this account
-    const drafts = await fetchDraftDocumentByAccountId(account_id);
+            // 1. Check for drafts for this account
+            const drafts = await fetchDraftDocumentByAccountId(account_id);
+            const draftFilesMap = {}; // To track draft files
 
-    if (drafts.length > 0) {
-        for (const draft of drafts) {
-            let docId = await postFileMetaOnly(
-                draft.DraftName,
-                draft.DraftDescription,
-                draft.MetaTags || MetaTags,
-                CreatedByUser_Id,
-                account_id,
-                draft.CreatedByUserName || CreatedByUserName,
-                Category_Id,
-                Status_Id,
-                Role_Id,
-                div_code,   
-                sd_code,
-                so_code
-            );
+            if (drafts.length > 0) {
+                for (const draft of drafts) {
+                    let docId = await postFileMetaOnly(
+                        draft.DraftName,
+                        draft.DraftDescription,
+                        draft.MetaTags || MetaTags,
+                        CreatedByUser_Id,
+                        account_id,
+                        draft.CreatedByUserName || CreatedByUserName,
+                        Category_Id,
+                        Status_Id,
+                        Role_Id,
+                        div_code,
+                        sd_code,
+                        so_code
+                    );
 
-            // Insert into documentversion
-            await insertDocumentVersion(docId, 'v1', draft.FilePath, CreatedByUser_Id);
+                    await insertDocumentVersion(docId, 'v1', draft.FilePath, CreatedByUser_Id);
 
-            uploadResults.push({ field: 'DraftFile', DocumentId: docId, versionLabel: 'v1' });
-        }
+                    uploadResults.push({ field: 'DraftFile', DocumentId: docId, versionLabel: 'v1' });
+                    draftFilesMap[draft.FilePath] = docId; // mark as uploaded
+                }
 
-        // Mark drafts as finalized
-            const draftIds = drafts.map(d => d.Draft_Id);
-            await finalizeDrafts(draftIds);
-    }
-
-    // 2. Handle new uploads (mandatory + other documents)
-    const mandatoryDocs = [
-        "AadharCard",
-        "EPICVoterIDCard",
-        "DrivingLicense",
-        "Passport",
-        "PANCard",
-        "TANCard",
-        "OwnerShipProof",
-        "KhataCertificate",
-        "PowerAgreement",
-        "SiteSketch"
-    ];
-
-    // Mandatory files
-    for (let field of mandatoryDocs) {
-        if (req.files[field] && req.files[field].length > 0) {
-            const file = req.files[field][0];
-            const FilePath = file.path;
-
-            let docId = ReUploadDocumentId;
-            let versionLabel = "v1";
-
-            if (docId) {
-                const latest = await getLatestVersion(docId);
-                versionLabel = getNextVersionLabel(latest.VersionLabel);
-                await markOldVersionNotLatest(docId);
-                await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id, ChangeReason);
-                await updateDocumentStatus(docId, Status_Id);
-                await resolveRejection(docId);
-            } else {
-                docId = await postFileMetaOnly(
-                    `${DocumentName} - ${field}`,
-                    DocumentDescription,
-                    MetaTags,
-                    CreatedByUser_Id,
-                    account_id,
-                    CreatedByUserName,
-                    Category_Id,
-                    Status_Id,
-                    Role_Id,
-                    div_code,   
-                    sd_code,
-                    so_code
-                );
-                await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id);
+                // Mark drafts as finalized
+                const draftIds = drafts.map(d => d.Draft_Id);
+                await finalizeDrafts(draftIds);
             }
 
-            uploadResults.push({ field, DocumentId: docId, versionLabel });
-        }
-    }
+            // 2. Handle new uploads (mandatory + other documents)
+            const mandatoryDocs = [
+                "AadharCard", "EPICVoterIDCard", "DrivingLicense",
+                "Passport", "PANCard", "TANCard", "OwnerShipProof",
+                "KhataCertificate", "PowerAgreement", "SiteSketch"
+            ];
 
-    // Optional files
-    if (req.files.OtherDocuments && req.files.OtherDocuments.length > 0) {
-        for (let file of req.files.OtherDocuments) {
-            const FilePath = file.path;
+            // Mandatory files
+            for (let field of mandatoryDocs) {
+                if (req.files[field] && req.files[field].length > 0) {
+                    const file = req.files[field][0];
+                    const FilePath = file.path;
 
-            let docId = ReUploadDocumentId;
-            let versionLabel = "v1";
+                    // Skip if this file came from draft
+                    if (draftFilesMap[FilePath]) continue;
 
-            if (docId) {
-                const latest = await getLatestVersion(docId);
-                versionLabel = getNextVersionLabel(latest.VersionLabel);
-                await markOldVersionNotLatest(docId);
-                await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id, ChangeReason);
-                await updateDocumentStatus(docId, Status_Id);
-                await resolveRejection(docId);
-            } else {
-                docId = await postFileMetaOnly(
-                    `${DocumentName} - Additional`,
-                    DocumentDescription,
-                    MetaTags,
-                    CreatedByUser_Id,
-                    account_id,
-                    CreatedByUserName,
-                    Category_Id,
-                    Status_Id,
-                    Role_Id,
-                    div_code,   
-                    sd_code,
-                    so_code
-                );
-                await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id);
+                    let docId = ReUploadDocumentId;
+                    let versionLabel = "v1";
+
+                    if (docId) {
+                        const latest = await getLatestVersion(docId);
+                        versionLabel = getNextVersionLabel(latest.VersionLabel);
+                        await markOldVersionNotLatest(docId);
+                        await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id, ChangeReason);
+                        await updateDocumentStatus(docId, Status_Id);
+                        await resolveRejection(docId);
+                    } else {
+                        docId = await postFileMetaOnly(
+                            `${DocumentName} - ${field}`,
+                            DocumentDescription,
+                            MetaTags,
+                            CreatedByUser_Id,
+                            account_id,
+                            CreatedByUserName,
+                            Category_Id,
+                            Status_Id,
+                            Role_Id,
+                            div_code,
+                            sd_code,
+                            so_code
+                        );
+                        await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id);
+                    }
+
+                    uploadResults.push({ field, DocumentId: docId, versionLabel });
+                }
             }
 
-            uploadResults.push({ field: "OtherDocuments", DocumentId: docId, versionLabel });
-        }
-    }
+            // Optional files
+            if (req.files.OtherDocuments && req.files.OtherDocuments.length > 0) {
+                for (let file of req.files.OtherDocuments) {
+                    const FilePath = file.path;
 
-    if (uploadResults.length === 0) {
-        return res.status(400).json({ error: "No files uploaded." });
-    }
+                    // Skip if this file came from draft
+                    if (draftFilesMap[FilePath]) continue;
 
-            let message = "";
+                    let docId = ReUploadDocumentId;
+                    let versionLabel = "v1";
 
-            if (drafts.length > 0 && uploadResults.some(u => u.field === "DraftFile")) {
-                message = "Draft files finalized and uploaded successfully along with new files.";
-            } else if (uploadResults.length > 0) {
-                message = "Files uploaded successfully (no drafts to finalize).";
-            } else {
+                    if (docId) {
+                        const latest = await getLatestVersion(docId);
+                        versionLabel = getNextVersionLabel(latest.VersionLabel);
+                        await markOldVersionNotLatest(docId);
+                        await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id, ChangeReason);
+                        await updateDocumentStatus(docId, Status_Id);
+                        await resolveRejection(docId);
+                    } else {
+                        docId = await postFileMetaOnly(
+                            `${DocumentName} - Additional`,
+                            DocumentDescription,
+                            MetaTags,
+                            CreatedByUser_Id,
+                            account_id,
+                            CreatedByUserName,
+                            Category_Id,
+                            Status_Id,
+                            Role_Id,
+                            div_code,
+                            sd_code,
+                            so_code
+                        );
+                        await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id);
+                    }
+
+                    uploadResults.push({ field: "OtherDocuments", DocumentId: docId, versionLabel });
+                }
+            }
+
+            if (uploadResults.length === 0) {
                 return res.status(400).json({ error: "No files uploaded." });
             }
+
+            let message = drafts.length > 0
+                ? "Draft files finalized and uploaded successfully along with new files."
+                : "Files uploaded successfully (no drafts to finalize).";
 
             return res.json({
                 status: "success",
                 message,
                 uploadedFiles: uploadResults.length,
                 data: uploadResults
-            })
+            });
         }
+
         // This is the draft docunments upload ok 
         else if (parseInt(flagId) === 12) {
-            const { 
+            const {
                 DraftName,
                 DraftDescription,
                 MetaTags,
@@ -475,7 +470,7 @@ export const DocumentUpload = async (req, res) => {
                 message: "Draft saved successfully",
                 draftId,
             });
-            }
+        }
         else if (flagId === 13) {
             const draftDocs = await fetchDraftDocumentByAccountId(account_id);
 
@@ -538,7 +533,7 @@ export const DocumentView = async (req, res) => {
             });
             stream.pipe(res);
         }
-         else if (parseInt(flagId) === 3) {
+        else if (parseInt(flagId) === 3) {
             if (!DocumentId) {
                 return res.status(400).json({ status: "error", message: "DocumentId is required" });
             }
