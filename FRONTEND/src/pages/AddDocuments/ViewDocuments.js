@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     Card, CardBody, CardHeader, Col, Container, Row,
     Button, Badge, Input, Label, FormGroup, ListGroup, ListGroupItem,
@@ -9,6 +9,7 @@ import { ToastContainer } from 'react-toastify';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
+
 const ViewDocuments = () => {
     // State management
     const [documents, setDocuments] = useState([]);
@@ -41,54 +42,289 @@ const ViewDocuments = () => {
     const [subDivisions, setSubDivisions] = useState([]);
     const [sectionOptions, setSectionOptions] = useState([]);
 
+    // User access level states
+    const [userLevel, setUserLevel] = useState('');
+    const [isFieldsDisabled, setIsFieldsDisabled] = useState({
+        division: false,
+        subDivision: false,
+        section: false
+    });
+
     document.title = `View Documents | DMS`;
 
     const debounceRef = useRef();
 
-    useEffect(() => {
-        const obj = JSON.parse(sessionStorage.getItem("authUser"));
-        const usernm = obj.user.Email;
+    const flagIdFunction = useCallback(async (params) => {
+        try {
+            const res = await getDocumentDropdowns(params);
+            return res?.data || [];
+        } catch (error) {
+            console.error(`Error fetching data for flag ${params.flagId}:`, error.message);
+            return [];
+        }
+    }, []);
 
-        setUserName(usernm);
-        flagIdFunction(1, setDivisionName, usernm);
+    // Function to load dropdown data based on user level
+    const loadDropdownDataFromSession = useCallback(async () => {
+        const authUser = JSON.parse(sessionStorage.getItem("authUser"));
+        const zones = authUser?.user?.zones || [];
+        
+        if (zones.length === 0) return;
+
+        // Get the user's level from the first zone entry
+        const userZone = zones[0];
+        const level = userZone.level;
+        setUserLevel(level);
+
+        if (level === 'section') {
+            // For section level: load division, subdivision (disabled), and section options
+            const divisionData = [{ 
+                div_code: userZone.div_code, 
+                division: userZone.division 
+            }];
+            const subDivisionData = [{ 
+                sd_code: userZone.sd_code, 
+                sub_division: userZone.sub_division 
+            }];
+            
+            // Get all section offices from zones (in case there are multiple)
+            const sectionData = zones.map(zone => ({
+                so_code: zone.so_code,
+                section_office: zone.section_office
+            }));
+
+            setDivisionName(divisionData);
+            setSubDivisions(subDivisionData);
+            setSectionOptions(sectionData);
+            
+            // Set default values and disable fields
+            setDivision(userZone.div_code);
+            setSubDivision(userZone.sd_code);
+            setIsFieldsDisabled({
+                division: true,
+                subDivision: true,
+                section: sectionData.length === 1
+            });
+            
+            // If only one section, auto-select it
+            if (sectionData.length === 1) {
+                setSection(sectionData[0].so_code);
+            }
+        }
+        else if (level === 'subdivision') {
+            // For subdivision level: load division (disabled) and subdivision options
+            const divisionData = [{ 
+                div_code: userZone.div_code, 
+                division: userZone.division 
+            }];
+            
+            // Get unique subdivisions from zones (in case there are multiple)
+            const uniqueSubDivisions = [];
+            const seenSubDivisions = new Set();
+            zones.forEach(zone => {
+                if (!seenSubDivisions.has(zone.sd_code)) {
+                    seenSubDivisions.add(zone.sd_code);
+                    uniqueSubDivisions.push({
+                        sd_code: zone.sd_code,
+                        sub_division: zone.sub_division
+                    });
+                }
+            });
+
+            setDivisionName(divisionData);
+            setSubDivisions(uniqueSubDivisions);
+            
+            // Set default values and disable fields
+            setDivision(userZone.div_code);
+            setIsFieldsDisabled({
+                division: true,
+                subDivision: uniqueSubDivisions.length === 1,
+                section: false
+            });
+            
+            // If only one subdivision, auto-select it and load sections
+            if (uniqueSubDivisions.length === 1) {
+                const selectedSdCode = uniqueSubDivisions[0].sd_code;
+                setSubDivision(selectedSdCode);
+                
+                // Load sections for the auto-selected subdivision
+                const sections = await flagIdFunction({
+                    flagId: 3,
+                    requestUserName: userName,
+                    sd_code: selectedSdCode
+                });
+                setSectionOptions(sections);
+                
+                // If only one section, auto-select it too
+                if (sections.length === 1) {
+                    setSection(sections[0].so_code);
+                    setIsFieldsDisabled(prev => ({
+                        ...prev,
+                        section: true
+                    }));
+                }
+            }
+        }
+        else if (level === 'division') {
+            // For division level: load division options
+            // Get unique divisions from zones (in case there are multiple)
+            const uniqueDivisions = [];
+            const seenDivisions = new Set();
+            zones.forEach(zone => {
+                if (!seenDivisions.has(zone.div_code)) {
+                    seenDivisions.add(zone.div_code);
+                    uniqueDivisions.push({
+                        div_code: zone.div_code,
+                        division: zone.division
+                    });
+                }
+            });
+
+            setDivisionName(uniqueDivisions);
+            setIsFieldsDisabled({
+                division: uniqueDivisions.length === 1,
+                subDivision: false,
+                section: false
+            });
+            
+            // If only one division, auto-select it and load subdivisions
+            if (uniqueDivisions.length === 1) {
+                const selectedDivCode = uniqueDivisions[0].div_code;
+                setDivision(selectedDivCode);
+                
+                // Load subdivisions for the auto-selected division
+                const subdivisions = await flagIdFunction({
+                    flagId: 2,
+                    requestUserName: userName,
+                    div_code: selectedDivCode
+                });
+                setSubDivisions(subdivisions);
+                
+                // If only one subdivision, auto-select it too
+                if (subdivisions.length === 1) {
+                    setSubDivision(subdivisions[0].sd_code);
+                    setIsFieldsDisabled(prev => ({
+                        ...prev,
+                        subDivision: true
+                    }));
+                    
+                    // Load sections for the auto-selected subdivision
+                    const sections = await flagIdFunction({
+                        flagId: 3,
+                        requestUserName: userName,
+                        sd_code: subdivisions[0].sd_code
+                    });
+                    setSectionOptions(sections);
+                    
+                    // If only one section, auto-select it too
+                    if (sections.length === 1) {
+                        setSection(sections[0].so_code);
+                        setIsFieldsDisabled(prev => ({
+                            ...prev,
+                            section: true
+                        }));
+                    }
+                }
+            }
+        }
+    }, [flagIdFunction, userName]);
+
+    useEffect(() => {
+        const loadInitialData = async () => {
+            const authUser = JSON.parse(sessionStorage.getItem("authUser"));
+            const userEmail = authUser?.user?.Email;
+            if (userEmail) {
+                setUserName(userEmail);
+                
+                // Load dropdown data based on user's access level
+                await loadDropdownDataFromSession();
+            }
+        };
+
+        loadInitialData();
 
         return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current);
             if (previewContent?.url) URL.revokeObjectURL(previewContent.url);
         };
-    }, []);
+    }, [loadDropdownDataFromSession]);
 
-    const flagIdFunction = async (flagId, setState, requestUserName, div_code, sd_code, account_id) => {
-        try {
-            const params = { flagId, requestUserName, div_code, sd_code, account_id }
-            const response = await getDocumentDropdowns(params);
-            const options = response?.data || [];
-            setState(options);
-        } catch (error) {
-            console.error(`Error fetching options for flag ${flagId}:`, error.message);
+    const resetSubsequentFilters = () => {
+        // Only reset fields that are not disabled
+        if (!isFieldsDisabled.subDivision) {
+            setSubDivision('');
+            setSubDivisions([]);
         }
+        if (!isFieldsDisabled.section) {
+            setSection('');
+            setSectionOptions([]);
+        }
+        setAccountSearchInput(''); 
+        setaccount_id('');
+        setHasSearched(false); 
+        setDocuments([]);
+        setConsumerInfo(null);
+        setShowResults(false);
     };
 
     const handleDivisionChange = async (e) => {
         const selectedDivCode = e.target.value;
         setDivision(selectedDivCode);
-        setSubDivision('');
-        setSection('');
-        setSubDivisions([]);
-
-        if (selectedDivCode) {
-            await flagIdFunction(2, setSubDivisions, userName, selectedDivCode);
+        resetSubsequentFilters();
+        
+        // Only fetch subdivisions if division level or if not disabled
+        if (selectedDivCode && (userLevel === 'division' || !isFieldsDisabled.subDivision)) {
+            const subdivisions = await flagIdFunction({ 
+                flagId: 2, 
+                requestUserName: userName, 
+                div_code: selectedDivCode 
+            });
+            setSubDivisions(subdivisions);
         }
     };
 
     const handleSubDivisionChange = async (e) => {
         const selectedSdCode = e.target.value;
         setSubDivision(selectedSdCode);
-        setSection('');
-        setSectionOptions([]);
-
+        
+        // Reset only section if not disabled
+        if (!isFieldsDisabled.section) {
+            setSection('');
+            setSectionOptions([]);
+        }
+        setAccountSearchInput(''); 
+        setaccount_id('');
+        setHasSearched(false); 
+        setDocuments([]);
+        setConsumerInfo(null);
+        setShowResults(false);
+        
+        // Fetch sections based on user level and selected subdivision
         if (selectedSdCode) {
-            await flagIdFunction(3, setSectionOptions, userName, null, selectedSdCode);
+            // For all levels that have subdivision access, fetch sections
+            if (userLevel === 'section' || userLevel === 'subdivision' || userLevel === 'division') {
+                const sections = await flagIdFunction({ 
+                    flagId: 3, 
+                    requestUserName: userName, 
+                    sd_code: selectedSdCode 
+                });
+                setSectionOptions(sections);
+                
+                // If only one section, auto-select it and disable the dropdown
+                if (sections.length === 1) {
+                    setSection(sections[0].so_code);
+                    setIsFieldsDisabled(prev => ({
+                        ...prev,
+                        section: true
+                    }));
+                } else {
+                    // Multiple sections available, enable dropdown
+                    setIsFieldsDisabled(prev => ({
+                        ...prev,
+                        section: false
+                    }));
+                }
+            }
         }
     };
 
@@ -241,22 +477,15 @@ const ViewDocuments = () => {
     };
 
     const handleResetFilters = () => {
-        setDivision('');
-        setSubDivision('');
-        setSection('');
-        setAccountSearchInput('');
-        setaccount_id('');
-        setDocuments([]);
-        setConsumerInfo(null);
-        setShowResults(false);
-        setHasSearched(false);
-        setSubDivisions([]);
-        setSectionOptions([]);
-        setSelectedFile(null);
-        setPreviewContent(null);
-        setPreviewError(null);
-        setAccountSuggestions([]);
-        setShowSuggestions(false);
+        // Reset only non-disabled fields
+        if (!isFieldsDisabled.division) {
+            setDivision('');
+            setDivisionName([]);
+        }
+        resetSubsequentFilters();
+        
+        // Reload dropdown data from session storage
+        loadDropdownDataFromSession();
     };
 
     const handleFileSelect = async (file) => {
@@ -364,13 +593,14 @@ const ViewDocuments = () => {
                             <Row className="g-3 mb-3">
                                 <Col md={4}>
                                     <FormGroup>
-                                        <Label>Division</Label>
+                                        <Label>Division <span className="text-danger">*</span></Label>
                                         <Input
                                             type="select"
                                             value={division}
                                             onChange={handleDivisionChange}
+                                            disabled={isFieldsDisabled.division}
                                         >
-                                            <option value="">Select Divisions</option>
+                                            <option value="">Select Division</option>
                                             {divisionName.map(div => (
                                                 <option key={div.div_code} value={div.div_code}>{div.division}</option>
                                             ))}
@@ -379,14 +609,14 @@ const ViewDocuments = () => {
                                 </Col>
                                 <Col md={4}>
                                     <FormGroup>
-                                        <Label>Sub Division</Label>
+                                        <Label>Sub Division <span className="text-danger">*</span></Label>
                                         <Input
                                             type="select"
                                             value={subDivision}
                                             onChange={handleSubDivisionChange}
-                                            disabled={!division}
+                                            disabled={isFieldsDisabled.subDivision || !division}
                                         >
-                                            <option value="">All Sub Divisions</option>
+                                            <option value="">Select Sub Division</option>
                                             {subDivisions.map(subDiv => (
                                                 <option key={subDiv.sd_code} value={subDiv.sd_code}>
                                                     {subDiv.sub_division}
@@ -397,14 +627,14 @@ const ViewDocuments = () => {
                                 </Col>
                                 <Col md={4}>
                                     <FormGroup>
-                                        <Label>Section</Label>
+                                        <Label>Section <span className="text-danger">*</span></Label>
                                         <Input
                                             type="select"
                                             value={section}
                                             onChange={(e) => setSection(e.target.value)}
-                                            disabled={!subDivision}
+                                            disabled={isFieldsDisabled.section || !subDivision}
                                         >
-                                            <option value="">All Sections</option>
+                                            <option value="">Select Section</option>
                                             {sectionOptions.map(sec => (
                                                 <option key={sec.so_code} value={sec.so_code}>
                                                     {sec.section_office}
