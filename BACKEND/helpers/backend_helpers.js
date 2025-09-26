@@ -29,4 +29,6 @@ export const QC_UPLOAD="/backend-service/qcUpload"
 
 export const DOCUMENT_AUDIT_LOGS="/backend-service/document_audit_logs"
 
+export const INDENT="/backend-service/indent"
+
 
