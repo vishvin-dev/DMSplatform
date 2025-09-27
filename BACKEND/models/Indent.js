@@ -16,6 +16,20 @@ export const insertIndentCreation = async () => {
         );
         return rows
     } catch (error) {
+        console.log("Error Inserting the IndentCreation", error)
+    }
+}
 
+
+export const fetchCreatedIndenetViews=async()=>{
+    try {
+        const [rows]=await pool.execute(`
+            
+
+            
+            `);
+            return rows
+    } catch (error) {
+        console.log("Error fetching The CreatedIndenetView",error)
     }
 }
