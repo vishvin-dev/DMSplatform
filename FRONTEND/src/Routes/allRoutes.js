@@ -333,10 +333,12 @@ import ManageRole from "../pages/Roles/ManageRole-creation";
 import WelcomePage from "../pages/welcomepage/welcomepage";
 import CreateIndent from "../pages/Indent/createindent";
 import ViewIndent from "../pages/Indent/viewindent";
+import Report from "../pages/Reports/Report";
 
 // import AddDocuments from "../pages/AddDocuments/AddDocuments";
 
 const authProtectedRoutes = [
+  {path: "/Reports", component: <Report/>},
  {path: "/Testing", component: <Test/>},
  {path: "/categorycreation", component: <Category/>},
   {path: "/viewdocuments", component: <ViewDocuments/>},
