@@ -65,7 +65,7 @@ const TagEditor = ({ tags, onAddTag, onRemoveTag, readOnly = false }) => {
 const DocumentThumbnails = ({ documents, selectedFile, onFileSelect }) => (
     <Card className="flex-grow-1">
         <CardHeader className="bg-light p-3 position-relative" style={{ borderTop: '3px solid #405189' }}>
-            <h5 className="mb-0">Documents <Badge color="secondary" pill>{documents.length}</Badge></h5>
+            <h5 className="mb-0">Documents<Badge color="secondary" pill>{documents.length}</Badge></h5>
         </CardHeader>
         <CardBody className="p-2 thumbnail-pane">
             <Row className="g-2">
@@ -1294,3 +1294,30 @@ const DocumentReview = () => {
 };
 
 export default DocumentReview;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
