@@ -163,13 +163,16 @@ const ViewIndent = () => {
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(5);
 
-    // --- Column Definition ---
+    // --- Column Definition (UPDATED to separate View and Action) ---
     const columns = useMemo(() => [
         { header: 'Indent number', accessorKey: 'indentNumber', sortable: true },
         { header: 'Status', accessorKey: 'status', sortable: true }, 
         { header: 'Section/Sub-Division', accessorKey: 'selectedOptionNames', sortable: true },
         { header: 'Created on', accessorKey: 'createdOn', sortable: true },
-        { header: 'Action', accessorKey: 'action', sortable: false },
+        // New dedicated View column
+        { header: 'View', accessorKey: 'viewAction', sortable: false }, 
+        // New dedicated Action column for Resubmit, Approve, Reject
+        { header: 'Action', accessorKey: 'otherAction', sortable: false }, 
     ], []);
 
     // --- Core Filtering Logic ---
@@ -440,7 +443,7 @@ const ViewIndent = () => {
                             cursor: isActionOrUnsortable ? 'default' : 'pointer', 
                             userSelect: 'none', 
                             whiteSpace: 'nowrap',
-                            textAlign: col.accessorKey === 'action' ? 'left' : 'left'
+                            textAlign: (col.accessorKey === 'viewAction' || col.accessorKey === 'otherAction') ? 'center' : 'left'
                         }} 
                     >
                         {col.header}
@@ -452,7 +455,7 @@ const ViewIndent = () => {
 
     const renderTableRows = () => {
         if (!paginatedData || paginatedData.length === 0) {
-            return (<tr><td colSpan={columns.length} style={{ textAlign: 'center', padding: '24px' }}>No Documents Found in the Resubmit Queue</td></tr>);
+            return (<tr><td colSpan={columns.length} style={{ textAlign: 'center', padding: '24px' }}>No Documents Found in the {viewStatus === 'returned_for_revision' ? 'Resubmit Queue' : viewStatus === 'to_approve' ? 'Pending Approval Queue' : 'Search Results'}</td></tr>);
         }
         return paginatedData.map((indent) => (
             <tr key={indent.indentNumber}>
@@ -462,22 +465,30 @@ const ViewIndent = () => {
                     {formatSelectedOptions(indent.selectedOptionNames)}
                 </td>
                 <td>{new Date(indent.createdOn).toLocaleString()}</td>
-                <td style={{ textAlign: 'left' }}>
-                    <div className="d-flex justify-content-start align-items-center gap-2">
-                        {/* Always show View button */}
-                        <Button color="primary" size="sm" onClick={() => handleViewClick(indent)}>View</Button>
-                        
-                        {/* Project Manager's Resubmit Action */}
+                
+                {/* Dedicated View Column */}
+                <td style={{ textAlign: 'center' }}>
+                    <Button color="primary" size="sm" onClick={() => handleViewClick(indent)}>View</Button>
+                </td>
+                
+                {/* Dedicated Action Column (Resubmit, Approve, Reject) */}
+                <td style={{ textAlign: 'center' }}>
+                    <div className="d-flex justify-content-center align-items-center gap-2">
+                        {/* 1. Resubmit Action (Visible when returned) */}
                         {indent.status === 'Returned for Revision' && (
                             <Button color="success" size="sm" onClick={() => handleOpenPmResubmit(indent)}>Resubmit</Button>
                         )}
 
-                        {/* Officer's Actions (Visible if user manually filters to To Be Approved) */}
+                        {/* 2. Approve/Reject Actions (Visible when pending approval) */}
                         {indent.status === 'To Be Approved' && (
                             <>
                                 <Button color="success" size="sm" onClick={() => handleOpenApprove(indent)}>Approve</Button>
                                 <Button color="danger" size="sm" onClick={() => handleOpenReject(indent)}>Reject</Button>
                             </>
+                        )}
+                         {/* Placeholder for Approved/Rejected status to keep columns aligned */}
+                        {(indent.status === 'Approved' || indent.status === 'Rejected') && (
+                             <span className="text-muted" style={{ fontSize: '0.8rem' }}>N/A</span>
                         )}
                     </div>
                 </td>
@@ -628,8 +639,8 @@ const ViewIndent = () => {
                         {/* Display Last Recorded Reason for context */}
                         {selectedIndent?.rejectionReason && (
                              <div className="alert alert-warning p-2 mb-3 border border-warning" style={{ fontSize: '14px' }}>
-                                <strong>Reason:</strong> {selectedIndent.rejectionReason}
-                            </div>
+                                 <strong>Reason:</strong> {selectedIndent.rejectionReason}
+                             </div>
                         )}
 
                         <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto' }}>

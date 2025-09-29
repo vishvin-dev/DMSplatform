@@ -296,7 +296,7 @@ const CreateIndent = () => {
         // 3. Set Status (Mocking 'Pending' status after creation)
         setSubmissionStatus({
             status: 'Pending',
-            message: `Your Indent (${newIndentData.indentNumber}) has been submitted successfully and is awaiting approval from the concerned officer.`
+            message: `Your Indent (${newIndentData.indentNumber}) has been created successfully and it has been forwarded to the concerned officer.`
         });
 
         // 4. Add new indent to the mock dashboard list for immediate feedback
@@ -491,7 +491,7 @@ const CreateIndent = () => {
                     <i className={`ri-checkbox-circle-fill text-${statusColor}`} style={{ fontSize: '5rem' }}></i>
                     <h5 className={`mt-3 mb-4 text-success`}>Success!</h5>
                     <p className="lead">
-                        Your Indent (<strong className="text-primary">{indentData.indentNumber}</strong>) has been submitted successfully and is awaiting approval  from the concerned officer.
+                        Your Indent (<strong className="text-primary">{indentData.indentNumber}</strong>) has been created successfully and it has been forwarded to the concerned officer.
                     </p>
 
                     <hr className='my-4' />
