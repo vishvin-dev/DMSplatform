@@ -1,6 +1,6 @@
 
 
-import {  getAllCounts, clickGetPendingDocs, clickGetApprovedDocs, clickGetRejectedDocs } from "../../models/QcUpload.js"
+import { getAllCounts, clickGetPendingDocs, clickGetApprovedDocs, clickGetRejectedDocs, clickToApproved, clickToReject } from "../../models/QcUpload.js"
 
 
 // export const Qcupload = async (req, res) => {
@@ -87,7 +87,7 @@ import {  getAllCounts, clickGetPendingDocs, clickGetApprovedDocs, clickGetRejec
 //                     message: result.message || "Rejection failed",
 //                 });
 //             }
-            
+
 //         } else {
 //             return res.status(400).json({ status: "failed", message: "Invalid flagId provided" });
 //         }
@@ -154,7 +154,7 @@ export const verifiedQc = async (req, res) => {
 
 export const Qcupload = async (req, res) => {
     try {
-        const { flagId, User_Id, so_code } = req.body;
+        const { flagId, User_Id, so_code, DocumentId, Role_Id, comment } = req.body;
 
         if (!flagId) {
             return res.status(400).json({ status: "failed", message: "flagId is required" });
@@ -180,7 +180,7 @@ export const Qcupload = async (req, res) => {
                 results
             })
         }
-         //======THIS IS THE WHEN WE CLCIK TO THE APPROVED_DOCUMENTS IT FETCHES ALL APPROVED DOCUMNETS=============
+        //======THIS IS THE WHEN WE CLCIK TO THE APPROVED_DOCUMENTS IT FETCHES ALL APPROVED DOCUMNETS=============
         else if (parseInt(flagId) === 3) {
             results = await clickGetApprovedDocs(User_Id, so_code)
             return res.status(200).json({
@@ -190,7 +190,7 @@ export const Qcupload = async (req, res) => {
                 results
             })
         }
-         //======THIS IS THE WHEN WE CLCIK TO THE APPROVED_DOCUMENTS IT FETCHES ALL APPROVED DOCUMNETS=============
+        //======THIS IS THE WHEN WE CLCIK TO THE REJECTED_DOCUMENTS IT FETCHES ALL REJECTED DOCUMNETS=============
         else if (parseInt(flagId) === 4) {
             results = await clickGetRejectedDocs(User_Id, so_code)
             return res.status(200).json({
@@ -200,10 +200,26 @@ export const Qcupload = async (req, res) => {
                 results
             })
         }
+
+        //======THIS WHEN WE CLCIK TO THE APPROVED BUTTON THEN IT TO BE APPROVED OK=============
+        else if (parseInt(flagId) === 5) {
+            results = await clickToApproved(User_Id, DocumentId, Role_Id)
+            return res.status(200).json({
+                status: "success",
+                message: "Document Approved Successfully",
+            })
+        }
+        //======THIS WHEN WE CLCIK TO THE Rejected BUTTON THEN IT TO BE REJECTED OK=============
+        else if (parseInt(flagId) === 6) {
+            results = await clickToReject(User_Id, DocumentId, comment)
+            return res.status(200).json({
+                status: "success",
+                message: "Document Rejected Successfully",
+            })
+        }
         else {
             return res.status(400).json({ status: "failed", message: "Invalid flagId provided" });
         }
-
     } catch (error) {
         return res.status(500).json({
             status: "failed",

@@ -3,7 +3,7 @@ import fs from "fs";
 import mime from "mime-types"
 import { getDivisions, getSubDivisions, getSections, getRoles, getDocumentLists, getCircle } from "../../models/userModel.js"
 import {
-    getAccountId, getConsumerDetails, postFileUpload, getDocumentCategory, getDocumentsView, getSingleDocumentById, postFileMetaOnly, insertDocumentVersion
+    getAccountId, getConsumerDetails, postFileUpload, getDocumentCategory, getDocumentsView, getSingleDocumentById, getSingleDocumentByIdByDraft, postFileMetaOnly, insertDocumentVersion
     , getLatestVersion, getNextVersionLabel, markOldVersionNotLatest, updateDocumentStatus, resolveRejection, saveDraft, fetchDraftDocumentByAccountId, finalizeDrafts
 } from "../../models/DocumentUpload.js"
 
@@ -25,7 +25,7 @@ export const DocumentUpload = async (req, res) => {
         if (flagId === 1) {
             results = await getDivisions(circle_code);
         }
-          else if (flagId === 11) {
+        else if (flagId === 11) {
             results = await getCircle();
         } else if (flagId === 2) {
             if (!div_code) return res.status(400).json({ error: "div_code is required" });
@@ -270,170 +270,229 @@ export const DocumentUpload = async (req, res) => {
         // }
 
         //This is The final uploading the documents ok 
+        //     else if (parseInt(flagId) === 10) {
+        //         console.log(req.body)
+        //         const {
+        //             DocumentName,
+        //             DocumentDescription,
+        //             MetaTags,
+        //             CreatedByUser_Id,
+        //             account_id,
+        //             CreatedByUserName,
+        //             Category_Id,
+        //             Status_Id,
+        //             Role_Id,
+        //             ReUploadDocumentId, // optional re-upload
+        //             ChangeReason, // optional
+        //             div_code,   
+        //             sd_code,
+        //             so_code
+        //         } = req.body;
+
+        // const uploadResults = [];
+
+        // // 1. Check for drafts for this account
+        // const drafts = await fetchDraftDocumentByAccountId(account_id);
+
+        // if (drafts.length > 0) {
+        //     for (const draft of drafts) {
+        //         let docId = await postFileMetaOnly(
+        //             draft.DraftName,
+        //             draft.DraftDescription,
+        //             draft.MetaTags || MetaTags,
+        //             CreatedByUser_Id,
+        //             account_id,
+        //             draft.CreatedByUserName || CreatedByUserName,
+        //             Category_Id,
+        //             Status_Id,
+        //             Role_Id,
+        //             div_code,   
+        //             sd_code,
+        //             so_code
+        //         );
+
+        //         // Insert into documentversion
+        //         await insertDocumentVersion(docId, 'v1', draft.FilePath, CreatedByUser_Id);
+
+        //         uploadResults.push({ field: 'DraftFile', DocumentId: docId, versionLabel: 'v1' });
+        //     }
+
+        //     // Mark drafts as finalized
+        //         const draftIds = drafts.map(d => d.Draft_Id);
+        //         await finalizeDrafts(draftIds);
+        // }
+
+        // // 2. Handle new uploads (mandatory + other documents)
+        // // const mandatoryDocs = [
+        // //     "AadharCard",
+        // //     "EPICVoterIDCard",
+        // //     "DrivingLicense",
+        // //     "Passport",
+        // //     "PANCard",
+        // //     "TANCard",
+        // //     "OwnerShipProof",
+        // //     "KhataCertificate",
+        // //     "PowerAgreement",
+        // //     "SiteSketch"
+        // // ];
+
+        // // // Mandatory files
+        // // for (let field of mandatoryDocs) {
+        // //     if (req.files[field] && req.files[field].length > 0) {
+        // //         const file = req.files[field][0];
+        // //         const FilePath = file.path;
+
+        // //         let docId = ReUploadDocumentId;
+        // //         let versionLabel = "v1";
+
+        // //         if (docId) {
+        // //             const latest = await getLatestVersion(docId);
+        // //             versionLabel = getNextVersionLabel(latest.VersionLabel);
+        // //             await markOldVersionNotLatest(docId);
+        // //             await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id, ChangeReason);
+        // //             await updateDocumentStatus(docId, Status_Id);
+        // //             await resolveRejection(docId);
+        // //         } else {
+        // //             docId = await postFileMetaOnly(
+        // //                 `${DocumentName} - ${field}`,
+        // //                 DocumentDescription,
+        // //                 MetaTags,
+        // //                 CreatedByUser_Id,
+        // //                 account_id,
+        // //                 CreatedByUserName,
+        // //                 Category_Id,
+        // //                 Status_Id,
+        // //                 Role_Id,
+        // //                 div_code,   
+        // //                 sd_code,
+        // //                 so_code
+        // //             );
+        // //             await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id);
+        // //         }
+
+        // //         uploadResults.push({ field, DocumentId: docId, versionLabel });
+        // //     }
+        // // }
+
+        // // // Optional files
+        // // if (req.files.OtherDocuments && req.files.OtherDocuments.length > 0) {
+        // //     for (let file of req.files.OtherDocuments) {
+        // //         const FilePath = file.path;
+
+        // //         let docId = ReUploadDocumentId;
+        // //         let versionLabel = "v1";
+
+        // //         if (docId) {
+        // //             const latest = await getLatestVersion(docId);
+        // //             versionLabel = getNextVersionLabel(latest.VersionLabel);
+        // //             await markOldVersionNotLatest(docId);
+        // //             await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id, ChangeReason);
+        // //             await updateDocumentStatus(docId, Status_Id);
+        // //             await resolveRejection(docId);
+        // //         } else {
+        // //             docId = await postFileMetaOnly(
+        // //                 `${DocumentName} - Additional`,
+        // //                 DocumentDescription,
+        // //                 MetaTags,
+        // //                 CreatedByUser_Id,
+        // //                 account_id,
+        // //                 CreatedByUserName,
+        // //                 Category_Id,
+        // //                 Status_Id,
+        // //                 Role_Id,
+        // //                 div_code,   
+        // //                 sd_code,
+        // //                 so_code
+        // //             );
+        // //             await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id);
+        // //         }
+
+        // //         uploadResults.push({ field: "OtherDocuments", DocumentId: docId, versionLabel });
+        // //     }
+        // // }
+
+        // // if (uploadResults.length === 0) {
+        // //     return res.status(400).json({ error: "No files uploaded." });
+        // // }
+
+        // //         let message = "";
+
+        // //         if (drafts.length > 0 && uploadResults.some(u => u.field === "DraftFile")) {
+        // //             message = "Draft files finalized and uploaded successfully along with new files.";
+        // //         } else if (uploadResults.length > 0) {
+        // //             message = "Files uploaded successfully (no drafts to finalize).";
+        // //         } else {
+        // //             return res.status(400).json({ error: "No files uploaded." });
+        // //         }
+
+        //         // return res.json({
+        //         //     status: "success",
+        //         //     message,
+        //         //     uploadedFiles: uploadResults.length,
+        //         //     data: uploadResults
+        //         // })
+        //     }
+
         else if (parseInt(flagId) === 10) {
             const {
-                DocumentName,
-                DocumentDescription,
-                MetaTags,
-                CreatedByUser_Id,
                 account_id,
-                CreatedByUserName,
-                Category_Id,
-                Status_Id,
-                Role_Id,
-                ReUploadDocumentId, // optional re-upload
-                ChangeReason, // optional
-                div_code,   
-                sd_code,
-                so_code
+                CreatedByUser_Id,
+                Status_Id
             } = req.body;
 
-    const uploadResults = [];
+            const uploadResults = [];
 
-    // 1. Check for drafts for this account
-    const drafts = await fetchDraftDocumentByAccountId(account_id);
+            // 1. Fetch all drafts for this account
+            const drafts = await fetchDraftDocumentByAccountId(account_id);
 
-    if (drafts.length > 0) {
-        for (const draft of drafts) {
-            let docId = await postFileMetaOnly(
-                draft.DraftName,
-                draft.DraftDescription,
-                draft.MetaTags || MetaTags,
-                CreatedByUser_Id,
-                account_id,
-                draft.CreatedByUserName || CreatedByUserName,
-                Category_Id,
-                Status_Id,
-                Role_Id,
-                div_code,   
-                sd_code,
-                so_code
-            );
+            if (drafts.length === 0) {
+                return res.status(400).json({ error: "No drafts found to finalize." });
+            }
 
-            // Insert into documentversion
-            await insertDocumentVersion(docId, 'v1', draft.FilePath, CreatedByUser_Id);
+            // 2. Process drafts → move each to DocumentUpload + DocumentVersion
+            for (const draft of drafts) {
+                // Insert into DocumentUpload using draft metadata
+                const docId = await postFileMetaOnly(
+                    draft.DraftName,
+                    draft.DraftDescription,
+                    draft.MetaTags,
+                    draft.CreatedByUser_Id,
+                    draft.Account_Id,
+                    draft.CreatedByUserName,
+                    draft.Category_Id,
+                    Status_Id || 1, // use provided or default to 1
+                    draft.Role_Id,
+                    draft.div_code,
+                    draft.sd_code,
+                    draft.so_code
+                );
 
-            uploadResults.push({ field: 'DraftFile', DocumentId: docId, versionLabel: 'v1' });
-        }
+                // Insert first version
+                await insertDocumentVersion(docId, 'v1', draft.FilePath, CreatedByUser_Id);
 
-        // Mark drafts as finalized
+                uploadResults.push({
+                    field: 'DraftFile',
+                    DocumentId: docId,
+                    versionLabel: 'v1'
+                });
+            }
+
+            // 3. Mark drafts as finalized
             const draftIds = drafts.map(d => d.Draft_Id);
             await finalizeDrafts(draftIds);
-    }
 
-    // 2. Handle new uploads (mandatory + other documents)
-    const mandatoryDocs = [
-        "AadharCard",
-        "EPICVoterIDCard",
-        "DrivingLicense",
-        "Passport",
-        "PANCard",
-        "TANCard",
-        "OwnerShipProof",
-        "KhataCertificate",
-        "PowerAgreement",
-        "SiteSketch"
-    ];
-
-    // Mandatory files
-    for (let field of mandatoryDocs) {
-        if (req.files[field] && req.files[field].length > 0) {
-            const file = req.files[field][0];
-            const FilePath = file.path;
-
-            let docId = ReUploadDocumentId;
-            let versionLabel = "v1";
-
-            if (docId) {
-                const latest = await getLatestVersion(docId);
-                versionLabel = getNextVersionLabel(latest.VersionLabel);
-                await markOldVersionNotLatest(docId);
-                await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id, ChangeReason);
-                await updateDocumentStatus(docId, Status_Id);
-                await resolveRejection(docId);
-            } else {
-                docId = await postFileMetaOnly(
-                    `${DocumentName} - ${field}`,
-                    DocumentDescription,
-                    MetaTags,
-                    CreatedByUser_Id,
-                    account_id,
-                    CreatedByUserName,
-                    Category_Id,
-                    Status_Id,
-                    Role_Id,
-                    div_code,   
-                    sd_code,
-                    so_code
-                );
-                await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id);
-            }
-
-            uploadResults.push({ field, DocumentId: docId, versionLabel });
-        }
-    }
-
-    // Optional files
-    if (req.files.OtherDocuments && req.files.OtherDocuments.length > 0) {
-        for (let file of req.files.OtherDocuments) {
-            const FilePath = file.path;
-
-            let docId = ReUploadDocumentId;
-            let versionLabel = "v1";
-
-            if (docId) {
-                const latest = await getLatestVersion(docId);
-                versionLabel = getNextVersionLabel(latest.VersionLabel);
-                await markOldVersionNotLatest(docId);
-                await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id, ChangeReason);
-                await updateDocumentStatus(docId, Status_Id);
-                await resolveRejection(docId);
-            } else {
-                docId = await postFileMetaOnly(
-                    `${DocumentName} - Additional`,
-                    DocumentDescription,
-                    MetaTags,
-                    CreatedByUser_Id,
-                    account_id,
-                    CreatedByUserName,
-                    Category_Id,
-                    Status_Id,
-                    Role_Id,
-                    div_code,   
-                    sd_code,
-                    so_code
-                );
-                await insertDocumentVersion(docId, versionLabel, FilePath, CreatedByUser_Id);
-            }
-
-            uploadResults.push({ field: "OtherDocuments", DocumentId: docId, versionLabel });
-        }
-    }
-
-    if (uploadResults.length === 0) {
-        return res.status(400).json({ error: "No files uploaded." });
-    }
-
-            let message = "";
-
-            if (drafts.length > 0 && uploadResults.some(u => u.field === "DraftFile")) {
-                message = "Draft files finalized and uploaded successfully along with new files.";
-            } else if (uploadResults.length > 0) {
-                message = "Files uploaded successfully (no drafts to finalize).";
-            } else {
-                return res.status(400).json({ error: "No files uploaded." });
-            }
-
+            // 4. Response
             return res.json({
                 status: "success",
-                message,
+                message: "Draft files finalized and uploaded successfully.",
                 uploadedFiles: uploadResults.length,
                 data: uploadResults
-            })
+            });
         }
+
         // This is the draft docunments upload ok 
         else if (parseInt(flagId) === 12) {
-            const { 
+            const {
                 DraftName,
                 DraftDescription,
                 MetaTags,
@@ -475,7 +534,7 @@ export const DocumentUpload = async (req, res) => {
                 message: "Draft saved successfully",
                 draftId,
             });
-            }
+        }
         else if (flagId === 13) {
             const draftDocs = await fetchDraftDocumentByAccountId(account_id);
 
@@ -516,6 +575,33 @@ export const DocumentView = async (req, res) => {
                 return res.status(400).json({ status: "error", message: "DocumentId is required" });
             }
             const documentData = await getSingleDocumentById(DocumentId);
+            if (!documentData || documentData.length === 0) {
+                return res.status(404).json({ status: "error", message: "Document not found" });
+            }
+            const rawFilePath = path.resolve(documentData[0].FilePath);
+            const fileName = path.basename(rawFilePath);
+
+            if (!fs.existsSync(rawFilePath)) {
+                return res.status(404).json({ status: "error", message: "File not found on server" });
+            }
+            const mimeType = mime.lookup(rawFilePath) || "application/octet-stream";
+            const stream = fs.createReadStream(rawFilePath);
+
+            res.setHeader("Content-Type", mimeType);
+            res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+            res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+
+            stream.on("error", (err) => {
+                console.error("Stream Error:", err);
+                return res.status(500).json({ status: "error", message: "Error streaming file" });
+            });
+            stream.pipe(res);
+        }
+        else if (parseInt(flagId) === 3) {
+            if (!DocumentId) {
+                return res.status(400).json({ status: "error", message: "DocumentId is required" });
+            }
+            const documentData = await getSingleDocumentByIdByDraft(DocumentId);
             if (!documentData || documentData.length === 0) {
                 return res.status(404).json({ status: "error", message: "Document not found" });
             }

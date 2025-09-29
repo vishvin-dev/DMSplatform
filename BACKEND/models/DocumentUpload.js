@@ -313,6 +313,17 @@ export const getSingleDocumentById = async (documentId) => {
 };
 
 
+export const getSingleDocumentByIdByDraft = async (documentId) => {
+  const [result] = await pool.execute(
+    `
+        SELECT * FROM documentdraft
+        WHERE Draft_Id = ?
+        `,
+    [documentId]
+  );
+  return result;
+};
+
 
 
 //=========================this is the saving draft documents(partially documents ok )===========================

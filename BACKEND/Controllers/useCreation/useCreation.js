@@ -4,7 +4,7 @@ import { insertUser, insertUserZoneAccess, findUserByEmail, getDivisions, getSub
 export const useCreations = async (req, res) => {
     try {
         const userData = req.body;
-        console
+      
 
         // check duplicate email
         const emailExists = await findUserByEmail(userData.email);

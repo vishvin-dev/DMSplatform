@@ -13,8 +13,9 @@ import DocumentUpload from "../Routes/DocumentUpload/DocumentUpload.js"
 import DocumentCategory from "../Routes/DocumentCategory/DocumentCategory.js"
 import Qcupload from "../Routes/Qcupload/Qcupload.js"
 import DocumentsAuditLogs from "../Routes/DocumentsAuditLogs/DocumentsAuditLogs.js"
+import Indent from "../Routes/Indent/Indent.js"
 
- 
+
 // Ensure uploads directory exists
 if (!fs.existsSync("uploads")) {
   fs.mkdirSync("uploads");
@@ -40,6 +41,8 @@ const applyRoutes = (app) => {
   
   //audit logs of the documents
   app.use(backendHelpers.DOCUMENT_AUDIT_LOGS, DocumentsAuditLogs);
+
+  app.use(backendHelpers.INDENT, Indent);
   
 };
 
