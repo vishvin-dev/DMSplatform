@@ -83,7 +83,7 @@ import { pool } from "../Config/db.js"
 
 // Step 1️ Insert basic Indent (Draft)
 export const insertIndentCreation = async (data) => {
-    const { CreatedByUser_Id, Role_Id, TotalQty, div_code, sd_code, so_code, Status_Id, RequestUserName } = data;
+    const { CreatedByUser_Id, Role_Id, TotalQty, zones, Status_Id, RequestUserName } = data;
 
     // Generate next Indent_No
     const [rows] = await pool.execute(`SELECT MAX(CAST(Indent_No AS UNSIGNED)) AS maxIndent FROM Indent`);
@@ -94,21 +94,55 @@ export const insertIndentCreation = async (data) => {
     // Insert into Indent table
     const [result] = await pool.execute(`
         INSERT INTO Indent
-        (Indent_No, CreatedByUser_Id, Role_Id, TotalQty, div_code, sd_code, so_code, Status_Id, CreatedOn, RequestUserName)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
-    `, [formattedIndentNo, CreatedByUser_Id, Role_Id, TotalQty || null, div_code, sd_code, so_code, Status_Id || null, RequestUserName]); // Status_Id = 1 (Draft)
+        (Indent_No, CreatedByUser_Id, Role_Id, TotalQty, Status_Id, CreatedOn, RequestUserName)
+        VALUES (?, ?, ?, ?, ?, NOW(), ?)
+    `, [formattedIndentNo, CreatedByUser_Id, Role_Id, TotalQty || null, Status_Id || null, RequestUserName]); // Status_Id = 1 (Draft)
 
     const indentId = result.insertId;
 
-    // // Insert first version in IndentFileVersion (v1)
-    // await pool.execute(`
-    //     INSERT INTO IndentFileVersion
-    //     (Indent_Id, VersionLabel, FilePath, UploadedByUser_Id, UploadedAt, IsLatest)
-    //     VALUES (?, ?, ?, ?, NOW(), 1)
-    // `, [indentId, "v1", null, CreatedByUser_Id]);
+     // Insert multiple zone mappings
+    if (zones && zones.length > 0) {
+        for (const z of zones) {
+            await pool.execute(`
+                INSERT INTO IndentZoneMapping (Indent_Id, div_code, sd_code, so_code, CreatedOn)
+                VALUES (?, ?, ?, ?, NOW())
+            `, [indentId, z.div_code, z.sd_code, z.so_code]);
+        }
+    }
 
     return [{ Indent_Id: indentId, Indent_No: formattedIndentNo }];
 }
+
+// Step 2️ Submit Indent (update details + change status to Submitted)
+export const submitIndent = async (data) => {
+    const { Indent_No, TotalQty, Status_Id, RequestUserName } = data;
+
+    // Find internal ID from Indent_No
+    const [rows] = await pool.execute(
+        `SELECT Indent_Id FROM Indent WHERE Indent_No = ?`,
+        [Indent_No]
+    );
+
+    if (!rows || rows.length === 0) {
+        return { status: "failed", message: "Invalid Indent_No" };
+    }
+
+    const indentId = rows[0].Indent_Id;
+
+    // Update using internal Id
+    await pool.execute(`
+        UPDATE Indent
+        SET TotalQty = ?,
+            Status_Id = ?,
+            UpdatedOn = NOW(),
+            RequestUserName = ?
+        WHERE Indent_Id = ?
+    `, [TotalQty || null, Status_Id || 2, RequestUserName, indentId]);
+
+    return { Indent_No, Status_Id: Status_Id || 2, message: "Indent submitted successfully" };
+};
+
+
 
 // Step 2️ Update indent with file + status (any action)
 export const updateIndentWithFile = async (data) => {

@@ -1,4 +1,4 @@
-import { insertIndentCreation, updateIndentWithFile } from "../../models/Indent.js";
+import { insertIndentCreation, submitIndent, updateIndentWithFile } from "../../models/Indent.js";
 
 export const Indent = async (req, res) => {
     const { flagId, ...data } = req.body;
@@ -20,10 +20,17 @@ export const Indent = async (req, res) => {
                 result
             });
         }
-
+        else if (Number(flagId) === 2) {
+            const result = await submitIndent(data);
+            return res.status(200).json({
+                message: "Indent submitted successfully",
+                status: "success",
+                result
+            });
+        }
         // Step 2️ Update indent with file + status
         // In your Indent controller
-        else if (Number(flagId) === 2) {
+        else if (Number(flagId) === 3) {
             // Multer stores uploaded file info in req.file
             const filePath = req.file ? req.file.path : null;
 
@@ -41,7 +48,7 @@ export const Indent = async (req, res) => {
 
 
         // 2️ Fetch Indent Views (for dashboard / listing)
-        else if (Number(flagId) === 3) {
+        else if (Number(flagId) === 4) {
             const result = await fetchCreatedIndenetViews(data);
             return res.status(200).json({
                 message: "Indent views fetched successfully",
