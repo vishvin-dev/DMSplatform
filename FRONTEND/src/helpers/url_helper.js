@@ -326,7 +326,7 @@ export const MANAGE_USER_GET = "/backend-service/editUser";
 export const GET_MANAGE_USER_DROPDOWNS="/backend-service/editUser/getDpdwns";
 export const GET_CATEGORY_CREATION = "/backend-service/documentCategory";
 export const GET_QC_DOCUMENT = "/backend-service/qcUpload";
-
+export const POST_CREATE_INDENT = "/backend-service/indent";
 
 //**************** */
 
@@ -624,6 +624,7 @@ export const ADD_NEW_TODO_PROJECT = "/add/project";
 
 //JOB APPLICATION
 export const GET_APPLICATION_LIST = "/application-list";
+
 
 //JOB APPLICATION
 export const GET_API_KEY = "/api-key";
