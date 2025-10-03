@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-    Button, Card, CardBody, CardHeader, Col, Container, Row,
+    Button, Card, CardBody, CardHeader, Col, Container, Row, Label,
     Modal, ModalBody, ModalHeader, Input, Alert, Badge, ListGroup, ListGroupItem, Spinner, InputGroup, Progress,
     ModalFooter
 } from 'reactstrap';
@@ -203,7 +203,8 @@ const DocumentPreview = ({ file, loading, error }) => {
     );
 };
 
-const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comment, onCommentChange, isVerified, onVerifiedChange, onSubmit, loading, canSubmit, readOnly = false }) => (
+// UPDATED: Added verificationDetails prop
+const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comment, onCommentChange, isVerified, onVerifiedChange, onSubmit, loading, canSubmit, readOnly = false, verificationDetails }) => (
     <div className="info-pane">
         <Card className="mb-3">
             <CardHeader className="bg-light p-3" style={{ borderTop: '3px solid #405189' }}><h6 className="mb-0">Scanned Highlights</h6></CardHeader>
@@ -220,18 +221,52 @@ const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comme
                 ) : <p className="text-muted small m-1">Select a document.</p>}
             </CardBody>
         </Card>
-        {selectedFile && (
-            <Card className="mb-3">
-                <CardHeader className="bg-light p-3" style={{ borderTop: '3px solid #405189' }}><h6 className="mb-0">Document Details</h6></CardHeader>
-                <CardBody className="p-2">
-                    <ListGroup flush className="small">
-                        <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between"><strong>Type:</strong><span className="text-muted ms-1">{selectedFile.category}</span></ListGroupItem>
-                        <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between"><strong>File:</strong><span className="text-muted ms-1 text-break">{selectedFile.name}</span></ListGroupItem>
-                        <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between"><strong>Desc:</strong><span className="text-muted ms-1">{selectedFile.description}</span></ListGroupItem>
-                    </ListGroup>
-                </CardBody>
-            </Card>
-        )}
+        <Card className="mb-3">
+            <CardHeader className="bg-light p-3" style={{ borderTop: '3px solid #405189' }}><h6 className="mb-0">Document Details</h6></CardHeader>
+            <CardBody className="p-2">
+                <ListGroup flush className="small">
+                    {/* Display session storage data if available */}
+                    {verificationDetails ? (
+                        <>
+                            <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
+                                <strong>No. of Pages:</strong><span className="text-muted ms-1">{verificationDetails.noOfPages || 'N/A'}</span>
+                            </ListGroupItem>
+                            <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
+                                <strong>File Number:</strong><span className="text-muted ms-1">{verificationDetails.fileNumber || 'N/A'}</span>
+                            </ListGroupItem>
+                            <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
+                                <strong>Contractor:</strong><span className="text-muted ms-1">{verificationDetails.contractorName || 'N/A'}</span>
+                            </ListGroupItem>
+                            <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
+                                <strong>Approved By:</strong><span className="text-muted ms-1">{verificationDetails.approvedBy || 'N/A'}</span>
+                            </ListGroupItem>
+                            <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
+                                <strong>Category:</strong><span className="text-muted ms-1">{verificationDetails.category || 'N/A'}</span>
+                            </ListGroupItem>
+                            <hr className="my-1"/>
+                        </>
+                    ) : (
+                        <ListGroupItem className="px-1 py-1 border-0 text-muted">Verification details are unavailable.</ListGroupItem>
+                    )}
+
+                    {/* Display selected file's metadata */}
+                    {selectedFile && (
+                        <>
+                            <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
+                                <strong>Doc Type:</strong><span className="text-muted ms-1">{selectedFile.category}</span>
+                            </ListGroupItem>
+                            <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
+                                <strong>File Name:</strong><span className="text-muted ms-1 text-break">{selectedFile.name}</span>
+                            </ListGroupItem>
+                            <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
+                                <strong>Desc:</strong><span className="text-muted ms-1">{selectedFile.description}</span>
+                            </ListGroupItem>
+                        </>
+                    )}
+                    
+                </ListGroup>
+            </CardBody>
+        </Card>
         <Card className="mb-3">
             <CardHeader className="bg-light p-3" style={{ borderTop: '3px solid #405189' }}><h6 className="mb-0">Meta Tags</h6></CardHeader>
             <CardBody className="p-2">
@@ -553,9 +588,30 @@ const DocumentReview = () => {
     const [isRescanning, setIsRescanning] = useState(false);
     const [pageToRescanId, setPageToRescanId] = useState(null);
     const [isSubmittingDraft, setIsSubmittingDraft] = useState(false);
+    
+    // NEW STATE: To hold verification data from session storage
+    const [verificationDetails, setVerificationDetails] = useState(null);
 
 
     const SCANNER_ENDPOINT = "http://192.168.23.58:5000";
+
+    // NEW EFFECT HOOK: Load verification data from session storage
+    useEffect(() => {
+        try {
+            const dataString = sessionStorage.getItem('verificationData');
+            if (dataString) {
+                const data = JSON.parse(dataString);
+                // Simple check to ensure required fields are present
+                if (data.noOfPages && data.fileNumber && data.contractorName) {
+                    setVerificationDetails(data);
+                }
+            }
+        } catch (error) {
+            console.error("Failed to parse verificationData from session storage:", error);
+            // Optionally clear the invalid session data
+            sessionStorage.removeItem('verificationData');
+        }
+    }, []);
 
     useEffect(() => {
         const socketConnection = io(SCANNER_ENDPOINT, { transports: ["websocket", "polling"] });
@@ -667,80 +723,80 @@ const DocumentReview = () => {
         fetchDocumentTypes();
     }, []);
 
-  const handleFileSelect = useCallback(async (file) => {
-    // 1. Save state of the currently selected file before changing.
-    if (selectedFile) {
-        setDocumentsForReview(prevDocs => prevDocs.map(doc =>
-            doc.id === selectedFile.id ? { ...doc, comment: responseText, tags: metaTags } : doc
-        ));
-    }
-    
-    // 2. Find the new file to select and update the basic state immediately.
-    const newSelectedFile = documentsForReview.find(doc => doc.id === file.id);
-    if (!newSelectedFile) {
-        console.error("Selected file not found in the documents list.");
-        return;
-    }
-    setSelectedFile(newSelectedFile);
-    setResponseText(newSelectedFile.comment || '');
-    setMetaTags(newSelectedFile.tags || []);
-    setScannedHighlights([{ type: 'Header', text: 'BESCOM Bill' }, { type: 'Footer', text: newSelectedFile.createdAt }, { type: 'Word', text: newSelectedFile.consumer_name }]);
-    setPreviewLoading(true);
-    setPreviewError(null);
-
-    // 3. Asynchronously fetch and update the preview URL only if needed.
-    if (newSelectedFile.draftId && !newSelectedFile.previewUrl) {
-        console.log(`Attempting to fetch document preview for draftId: ${newSelectedFile.draftId}`);
-        try {
-            const response = await view(
-                { flagId: 3, DocumentId: newSelectedFile.draftId },
-                {
-                    responseType: "blob",
-                    headers: { "Content-Type": "application/json" },
-                    transformResponse: [(data, headers) => ({ data, headers })],
-                }
-            );
-
-            const blob = response.data;
-            const contentType = (response.headers && response.headers['content-type']) || '';
-            
-            if (blob instanceof Blob && (contentType.startsWith('image/') || contentType === 'application/pdf')) {
-                const fileUrl = URL.createObjectURL(blob);
-                const hydratedFile = { ...newSelectedFile, previewUrl: fileUrl, fileObject: new File([blob], newSelectedFile.name, { type: contentType }), type: contentType };
-                setDocumentsForReview(prev => prev.map(doc => doc.id === hydratedFile.id ? hydratedFile : doc));
-                setSelectedFile(hydratedFile);
-                console.log("Successfully fetched and set document preview.");
-            } else {
-                // Defensive check: only attempt to read as text if the response is a Blob.
-                if (blob instanceof Blob) {
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        try {
-                            const errorJson = JSON.parse(reader.result);
-                            setPreviewError(errorJson.message || "API did not return a valid document.");
-                        } catch (e) {
-                            setPreviewError(reader.result || "API did not return a valid document.");
-                        }
-                    };
-                    reader.onerror = () => {
-                        setPreviewError("Failed to read API response.");
-                    };
-                    reader.readAsText(blob);
-                } else {
-                    setPreviewError("API response was not a valid file or error message.");
-                }
-            }
-        } catch (err) {
-            console.error("Error fetching document preview:", err);
-            setPreviewError("Failed to load document preview: " + (err.message || 'An unknown error occurred.'));
-        } finally {
-            setPreviewLoading(false);
+    const handleFileSelect = useCallback(async (file) => {
+        // 1. Save state of the currently selected file before changing.
+        if (selectedFile) {
+            setDocumentsForReview(prevDocs => prevDocs.map(doc =>
+                doc.id === selectedFile.id ? { ...doc, comment: responseText, tags: metaTags } : doc
+            ));
         }
-    } else {
-        setPreviewLoading(false);
-        console.log("No draftId or previewUrl found, skipping API call.");
-    }
-}, [selectedFile, documentsForReview, responseText, metaTags]);
+        
+        // 2. Find the new file to select and update the basic state immediately.
+        const newSelectedFile = documentsForReview.find(doc => doc.id === file.id);
+        if (!newSelectedFile) {
+            console.error("Selected file not found in the documents list.");
+            return;
+        }
+        setSelectedFile(newSelectedFile);
+        setResponseText(newSelectedFile.comment || '');
+        setMetaTags(newSelectedFile.tags || []);
+        setScannedHighlights([{ type: 'Header', text: 'BESCOM Bill' }, { type: 'Footer', text: newSelectedFile.createdAt }, { type: 'Word', text: newSelectedFile.consumer_name }]);
+        setPreviewLoading(true);
+        setPreviewError(null);
+
+        // 3. Asynchronously fetch and update the preview URL only if needed.
+        if (newSelectedFile.draftId && !newSelectedFile.previewUrl) {
+            console.log(`Attempting to fetch document preview for draftId: ${newSelectedFile.draftId}`);
+            try {
+                const response = await view(
+                    { flagId: 3, DocumentId: newSelectedFile.draftId },
+                    {
+                        responseType: "blob",
+                        headers: { "Content-Type": "application/json" },
+                        transformResponse: [(data, headers) => ({ data, headers })],
+                    }
+                );
+
+                const blob = response.data;
+                const contentType = (response.headers && response.headers['content-type']) || '';
+                
+                if (blob instanceof Blob && (contentType.startsWith('image/') || contentType === 'application/pdf')) {
+                    const fileUrl = URL.createObjectURL(blob);
+                    const hydratedFile = { ...newSelectedFile, previewUrl: fileUrl, fileObject: new File([blob], newSelectedFile.name, { type: contentType }), type: contentType };
+                    setDocumentsForReview(prev => prev.map(doc => doc.id === hydratedFile.id ? hydratedFile : doc));
+                    setSelectedFile(hydratedFile);
+                    console.log("Successfully fetched and set document preview.");
+                } else {
+                    // Defensive check: only attempt to read as text if the response is a Blob.
+                    if (blob instanceof Blob) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            try {
+                                const errorJson = JSON.parse(reader.result);
+                                setPreviewError(errorJson.message || "API did not return a valid document.");
+                            } catch (e) {
+                                setPreviewError(reader.result || "API did not return a valid document.");
+                            }
+                        };
+                        reader.onerror = () => {
+                            setPreviewError("Failed to read API response.");
+                        };
+                        reader.readAsText(blob);
+                    } else {
+                        setPreviewError("API response was not a valid file or error message.");
+                    }
+                }
+            } catch (err) {
+                console.error("Error fetching document preview:", err);
+                setPreviewError("Failed to load document preview: " + (err.message || 'An unknown error occurred.'));
+            } finally {
+                setPreviewLoading(false);
+            }
+        } else {
+            setPreviewLoading(false);
+            console.log("No draftId or previewUrl found, skipping API call.");
+        }
+    }, [selectedFile, documentsForReview, responseText, metaTags]);
 
 
     useEffect(() => {
@@ -784,6 +840,16 @@ const DocumentReview = () => {
             setResponse("Consumer data is missing. Please try again.");
             setErrorModal(true); setLoading(false); return;
         }
+        
+        // Append verification details from session storage
+        if (verificationDetails) {
+             formData.append('NoOfPages', verificationDetails.noOfPages || '');
+             formData.append('FileNumber', verificationDetails.fileNumber || '');
+             formData.append('ContractorName', verificationDetails.contractorName || '');
+             formData.append('ApprovedBy', verificationDetails.approvedBy || '');
+             formData.append('CategoryName', verificationDetails.category || '');
+        }
+
         formData.append('flagId', '10');
         formData.append('DocumentName', `Docs for ${consumerData.rr_no}`);
         formData.append('DocumentDescription', responseText);
@@ -816,6 +882,8 @@ const DocumentReview = () => {
         try {
             const apiResponse = await postDocumentUpload(formData);
             if (apiResponse?.status === 'success') {
+                // Clear verification details from session after successful submission
+                sessionStorage.removeItem('verificationData');
                 setResponse(apiResponse.message || `Successfully uploaded files.`);
                 setSuccessModal(true);
             } else {
@@ -1228,6 +1296,8 @@ const DocumentReview = () => {
                                             onTagsChange={setMetaTags} comment={responseText} onCommentChange={(e) => setResponseText(e.target.value)}
                                             isVerified={isVerified} onVerifiedChange={setIsVerified} onSubmit={handleSubmitReview}
                                             loading={loading} canSubmit={documentsForReview.length > 0} readOnly={!selectedFile}
+                                            // Pass the new verification details
+                                            verificationDetails={verificationDetails}
                                         />
                                     </Col>
                                 </Row>
@@ -1294,30 +1364,3 @@ const DocumentReview = () => {
 };
 
 export default DocumentReview;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
