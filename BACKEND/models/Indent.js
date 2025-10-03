@@ -1,35 +1,154 @@
 
+// import { pool } from "../Config/db.js"
+// //===============INDENT===================================
+
+// //==================THIS IS THE INSERTING THE INDNET ZONES AND GENERATING THE INDENT_ID AND INSERTED AUTOMATICALLY=============
+
+
+// // Step 1️ Insert basic Indent (metadata only, no file yet)
+// export const insertIndentCreation = async (data) => {
+//     const { CreatedByUser_Id, Role_Id, TotalQty, div_code, sd_code, so_code, Status_Id, RequestUserName } = data;
+
+//     // Get next Indent_No (custom sequence, not auto_increment)
+//     const [rows] = await pool.execute(`SELECT MAX(CAST(Indent_No AS UNSIGNED)) AS maxIndent FROM Indent`);
+//     let nextIndentNo = 1;
+//     if (rows && rows[0].maxIndent) {
+//         nextIndentNo = rows[0].maxIndent + 1;
+//     }
+//     const formattedIndentNo = String(nextIndentNo).padStart(3, "0");
+
+//     // Insert into Indent table
+//     const insertSql = `
+//         INSERT INTO Indent 
+//         (Indent_No, CreatedByUser_Id, Role_Id, TotalQty, div_code, sd_code, so_code, Status_Id, CreatedOn, RequestUserName)
+//         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
+//     `;
+  
+//     const [result] = await pool.execute(insertSql, [
+//         formattedIndentNo,
+//         CreatedByUser_Id,
+//         Role_Id,
+//         TotalQty || null,
+//         div_code,
+//         sd_code,
+//         so_code,
+//         Status_Id || null,
+//         RequestUserName
+//     ]);
+
+//     return [{ Indent_Id: result.insertId, Indent_No: formattedIndentNo }];
+// };
+
+// // Step 2️ Attach file + update status
+// export const updateIndentWithFile = async (data) => {
+//     const { Indent_Id, Status_Id, FilePath, UploadedByUser_Id } = data;
+
+//     // 1. Update status in Indent
+//     await pool.execute(`UPDATE Indent SET Status_Id = ?, UpdatedOn = NOW() WHERE Indent_Id = ?`, [
+//         Status_Id,
+//         Indent_Id
+//     ]);
+
+//     // 2. Insert into IndentFileVersion (version v1 by default if first file)
+//     const [rows] = await pool.execute(
+//         `SELECT COUNT(*) AS count FROM IndentFileVersion WHERE Indent_Id = ?`,
+//         [Indent_Id]
+//     );
+//     const versionCount = rows[0].count || 0;
+//     const versionLabel = versionCount === 0 ? "v1" : `v${versionCount + 1}`;
+
+//     const insertFileSql = `
+//         INSERT INTO IndentFileVersion 
+//         (Indent_Id, VersionLabel, FilePath, UploadedByUser_Id, UploadedAt, IsLatest)
+//         VALUES (?, ?, ?, ?, NOW(), ?)
+//     `;
+//     await pool.execute(insertFileSql, [
+//         Indent_Id,
+//         versionLabel,
+//         FilePath,
+//         UploadedByUser_Id,
+//         1
+//     ]);
+
+//     // Mark older versions as not latest
+//     await pool.execute(
+//         `UPDATE IndentFileVersion SET IsLatest = 0 WHERE Indent_Id = ? AND VersionLabel <> ?`,
+//         [Indent_Id, versionLabel]
+//     );
+
+//     return [{ Indent_Id, VersionLabel: versionLabel, Status_Id }];
+// };
+
 import { pool } from "../Config/db.js"
-//===============INDENT===================================
 
-//==================THIS IS THE INSERTING THE INDNET ZONES AND GENERATING THE INDENT_ID AND INSERTED AUTOMATICALLY=============
-export const insertIndentCreation = async () => {
-    try {
-        const [rows] = await pool.execute(`
-            
-            
-            
-        
-            
-            
-            `,[]
-        );
-        return rows
-    } catch (error) {
-        console.log("Error Inserting the IndentCreation", error)
-    }
+// Step 1️ Insert basic Indent (Draft)
+export const insertIndentCreation = async (data) => {
+    const { CreatedByUser_Id, Role_Id, TotalQty, div_code, sd_code, so_code, Status_Id, RequestUserName } = data;
+
+    // Generate next Indent_No
+    const [rows] = await pool.execute(`SELECT MAX(CAST(Indent_No AS UNSIGNED)) AS maxIndent FROM Indent`);
+    let nextIndentNo = 1;
+    if (rows && rows[0].maxIndent) nextIndentNo = rows[0].maxIndent + 1;
+    const formattedIndentNo = String(nextIndentNo).padStart(3, "0");
+
+    // Insert into Indent table
+    const [result] = await pool.execute(`
+        INSERT INTO Indent
+        (Indent_No, CreatedByUser_Id, Role_Id, TotalQty, div_code, sd_code, so_code, Status_Id, CreatedOn, RequestUserName)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
+    `, [formattedIndentNo, CreatedByUser_Id, Role_Id, TotalQty || null, div_code, sd_code, so_code, Status_Id || null, RequestUserName]); // Status_Id = 1 (Draft)
+
+    const indentId = result.insertId;
+
+    // // Insert first version in IndentFileVersion (v1)
+    // await pool.execute(`
+    //     INSERT INTO IndentFileVersion
+    //     (Indent_Id, VersionLabel, FilePath, UploadedByUser_Id, UploadedAt, IsLatest)
+    //     VALUES (?, ?, ?, ?, NOW(), 1)
+    // `, [indentId, "v1", null, CreatedByUser_Id]);
+
+    return [{ Indent_Id: indentId, Indent_No: formattedIndentNo }];
 }
 
+// Step 2️ Update indent with file + status (any action)
+export const updateIndentWithFile = async (data) => {
+    const { Indent_Id, Status_Id, FilePath, UploadedByUser_Id } = data;
 
-export const fetchCreatedIndenetViews=async()=>{
-    try {
-        const [rows]=await pool.execute(`
-            
+    // Update current status in Indent table
+    //this is the updaing the indent table ok
+    await pool.execute(`UPDATE Indent SET Status_Id = ?, UpdatedOn = NOW() WHERE Indent_Id = ?`, [Status_Id, Indent_Id]);   
 
-            
-            `);
-            return rows
-    } catch (error) {
-        console.log("Error fetching The CreatedIndenetView",error)
-    }
+    // Get current max version for this indent
+    const [rows] = await pool.execute(`SELECT COUNT(*) AS count FROM IndentFileVersion WHERE Indent_Id = ?`, [Indent_Id]);
+    const versionCount = rows[0].count || 0;
+    const versionLabel = `v${versionCount + 1}`;
+
+    // Insert new version row
+    await pool.execute(`
+        INSERT INTO IndentFileVersion
+        (Indent_Id, VersionLabel, FilePath, UploadedByUser_Id, UploadedAt, IsLatest)
+        VALUES (?, ?, ?, ?, NOW(), 1)
+    `, [Indent_Id, versionLabel, FilePath || null, UploadedByUser_Id]);
+
+    // Mark all previous versions as not latest
+    await pool.execute(`
+        UPDATE IndentFileVersion SET IsLatest = 0 WHERE Indent_Id = ? AND VersionLabel <> ?
+    `, [Indent_Id, versionLabel]);
+
+    return { Indent_Id, VersionLabel: versionLabel, Status_Id };
 }
+
+// Step 3️ Fetch all versions for an indent
+export const fetchIndentVersions = async (Indent_Id) => {
+    const [rows] = await pool.execute(`
+        SELECT VersionLabel, FilePath, UploadedByUser_Id, UploadedAt, IsLatest, i.Status_Id, s.StatusName
+        FROM IndentFileVersion f
+        JOIN Indent i ON f.Indent_Id = i.Indent_Id
+        JOIN IndentStatusMaster s ON i.Status_Id = s.Status_Id
+        WHERE f.Indent_Id = ?
+        ORDER BY f.VersionLabel ASC
+    `, [Indent_Id]);
+
+    return rows;
+}
+
