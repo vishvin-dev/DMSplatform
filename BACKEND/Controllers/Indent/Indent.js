@@ -1,5 +1,5 @@
 
-import { insertIndentCreation, submitIndent, fetchCreatedIndenetViews, fetchOfficersAssignedIndent } from "../../models/Indent.js";
+import { insertIndentCreation, submitIndent, fetchCreatedIndenetViews, fetchOfficersAssignedIndent, submitOfficerApproveIndent, fetchOfficerApproveIndent } from "../../models/Indent.js";
 
 export const Indent = async (req, res) => {
     const { flagId, ...data } = req.body;
@@ -56,6 +56,31 @@ export const Indent = async (req, res) => {
                 result
             });
         }
+
+         //===============THIS IS THE WHEN THE OFFICERS SUBMIT THE APPROVED IDNENT MEANS FIRST TIME ENTERS THE APPROVED INDENT ==================================
+         else if (Number(flagId) === 5) {
+            const result = await submitOfficerApproveIndent(data);
+            return res.status(200).json({
+                message: "Indent Submited successfully",
+                status: "success",
+                count:result.length,
+                result
+            });
+        }
+
+
+        // pending=====================
+
+         else if (Number(flagId) === 6) {
+            const result = await fetchOfficerApproveIndent(data.Role_Id);
+            return res.status(200).json({
+                message: "Indent Fetched successfully",
+                status: "success",
+                count:result.length,
+                result
+            });
+        }
+
         else {
             return res.status(400).json({
                 status: "failed",
@@ -73,20 +98,3 @@ export const Indent = async (req, res) => {
 };
 
 
- // Step 2️ Update indent with file + status
-        // In your Indent controller
-        // else if (Number(flagId) === 3) {
-        //     // Multer stores uploaded file info in req.file
-        //     const filePath = req.file ? req.file.path : null;
-
-        //     const result = await updateIndentWithFile({
-        //         ...data,        // Indent_Id, Status_Id, UploadedByUser_Id
-        //         FilePath: filePath
-        //     });
-
-        //     return res.status(200).json({
-        //         message: "Indent updated with file successfully",
-        //         status: "success",
-        //         result
-        //     });
-        // }
