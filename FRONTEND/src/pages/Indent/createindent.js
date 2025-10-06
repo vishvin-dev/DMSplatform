@@ -956,7 +956,7 @@ const CreateIndent = () => {
                                                             className="form-check-input"
                                                         />
                                                         <Label check htmlFor="input-confirmation" className="form-label" style={{ fontWeight: 'normal' }}>
-                                                            **I confirm that all above given inputs are correct.** <span className="text-danger">*</span>
+                                                            I confirm that all above given inputs are correct.<span className="text-danger">*</span>
                                                         </Label>
                                                     </FormGroup>
                                                 </Col>
