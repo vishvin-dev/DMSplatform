@@ -177,7 +177,37 @@ export const fetchOfficersAssignedIndent = async (Role_Id) => {
         console.log("Error while Fetching The IndentViews", error)
     }
 }
+export const fetchOfficersAssignedIndentCount = async (Role_Id) => {
+    try {
+        const [result] = await pool.execute(`
+            SELECT 
+                COUNT(DISTINCT i.Indent_Id) AS AssignedIndentCount
+            FROM Indent i
+            JOIN User u 
+                ON i.CreatedByUser_Id = u.User_Id
+            JOIN Roles r 
+                ON i.Role_Id = r.Role_Id
+            LEFT JOIN IndentStatusMaster sm 
+                ON i.Status_Id = sm.Status_Id
+            LEFT JOIN IndentZoneMapping z 
+                ON i.Indent_Id = z.Indent_Id
+            LEFT JOIN zone_codes zc
+                ON z.div_code = zc.div_code 
+                AND z.sd_code = zc.sd_code 
+                AND z.so_code = zc.so_code
+            WHERE 
+                i.Role_Id = ?
+                AND i.Status_Id = 1;
+        `, [Role_Id]);
 
+        return result[0]?.AssignedIndentCount || 0;
+
+    } catch (error) {
+        console.log("Error while Fetching Assigned Indent Count", error);
+        return 0;
+    }
+};
+//=======================================================================================================
 
 export const submitOfficerApproveIndent = async (data) => {
     const {
@@ -231,63 +261,71 @@ export const submitOfficerApproveIndent = async (data) => {
     }
     // 3️ Update the main Indent status
    // Hardcode ApprovedByDO status id = 2
-const approvedByDOStatus = 2;
+        const approvedByDOStatus = 2;
 
-await pool.execute(
-    `UPDATE Indent
-     SET Status_Id = ?
-     WHERE Indent_Id = ?`,
-    [approvedByDOStatus, Indent_Id]
-);
+        await pool.execute(
+            `UPDATE Indent
+            SET Status_Id = ?
+            WHERE Indent_Id = ?`,
+            [approvedByDOStatus, Indent_Id]
+        );
 
 
 
     return insertedRows;
 };
+//============================================================================
 
-
-//pending 
+// THIS IS THE FETHCING THE APPOROVED INDENT FOR HIS BASED ON THE ROLE_ID OF THE OFFICERS 
 export const fetchOfficerApproveIndent = async (Role_Id) => {
     try {
         const [result] = await pool.execute(`
-            SELECT 
+           SELECT 
+                s.SectionQtyDetail_Id,
                 s.Indent_Id,
-                i.Indent_No,
+                i.Indent_No,                      
                 s.VersionLabel,
                 s.UploadedByUser_Id,
                 u.FirstName AS UploadedByName,
                 s.Role_Id,
                 r.RoleName,
+                s.div_code,
+                z.division AS DivisionName,
+                s.sd_code,
+                z.sub_division AS SubDivisionName,
+                s.so_code,
+                z.section_office AS SectionOfficeName,
+                s.EnteredQty,
                 s.Status_Id,
-                st.StatusName AS StatusName,
+                sm.StatusName,
+                s.comment,
                 s.CreatedByUser_Id,
-                MIN(s.UploadedAt) AS FirstUploadedAt,
-                MAX(s.UploadedAt) AS LastUploadedAt,
-                GROUP_CONCAT(
-                    CONCAT_WS('-', 
-                        s.div_code, 
-                        z_div.division, 
-                        s.sd_code, 
-                        z_sd.sub_division, 
-                        s.so_code, 
-                        z_so.section_office, 
-                        s.EnteredQty, 
-                        COALESCE(s.comment,'')
-                    ) 
-                    ORDER BY s.SectionQtyDetail_Id
-                ) AS Sections
-            FROM IndentSectionQtyDetail s
-            JOIN Indent i ON s.Indent_Id = i.Indent_Id
-            JOIN Roles r ON s.Role_Id = r.Role_Id
-            JOIN User u ON s.UploadedByUser_Id = u.User_Id
-            JOIN IndentStatusMaster st ON s.Status_Id = st.Status_Id
-            LEFT JOIN zone_codes z_div ON s.div_code = z_div.div_code
-            LEFT JOIN zone_codes z_sd ON s.sd_code = z_sd.sd_code
-            LEFT JOIN zone_codes z_so ON s.so_code = z_so.so_code
-            WHERE s.Status_Id = 2          -- ApprovedByDO
-              AND s.Role_Id = ?            -- single role ID dynamically
-            GROUP BY s.Indent_Id, s.VersionLabel, s.UploadedByUser_Id, s.Role_Id, s.Status_Id, st.StatusName, s.CreatedByUser_Id, u.FirstName, r.RoleName, i.Indent_No
-            ORDER BY LastUploadedAt DESC;
+                cu.FirstName AS CreatedByName,
+                s.UploadedAt,
+                i.CreatedOn AS IndentCreatedOn,
+                i.RequestUserName
+            FROM 
+                indentsectionqtydetail s
+            LEFT JOIN 
+                indent i ON s.Indent_Id = i.Indent_Id
+            LEFT JOIN 
+                user u ON s.UploadedByUser_Id = u.User_Id
+            LEFT JOIN 
+                user cu ON s.CreatedByUser_Id = cu.User_Id
+            LEFT JOIN 
+                roles r ON s.Role_Id = r.Role_Id
+            LEFT JOIN 
+                indentstatusmaster sm ON s.Status_Id = sm.Status_Id
+            LEFT JOIN 
+                zone_codes z 
+                ON s.div_code = z.div_code 
+                AND s.sd_code = z.sd_code 
+                AND s.so_code = z.so_code
+            WHERE 
+                s.Status_Id = 2
+                AND s.Role_Id = ?
+            ORDER BY 
+                s.UploadedAt DESC;
         `, [Role_Id]);
 
         return result.map(row => ({
@@ -299,4 +337,34 @@ export const fetchOfficerApproveIndent = async (Role_Id) => {
         console.log("Error while Fetching The IndentViews", error)
     }
 }
+
+export const fetchOfficerApproveIndentCount = async (Role_Id) => {
+    try {
+        const [result] = await pool.execute(`
+            SELECT COUNT(*) AS totalCount
+            FROM indentsectionqtydetail s
+            LEFT JOIN indent i ON s.Indent_Id = i.Indent_Id
+            LEFT JOIN user u ON s.UploadedByUser_Id = u.User_Id
+            LEFT JOIN user cu ON s.CreatedByUser_Id = cu.User_Id
+            LEFT JOIN roles r ON s.Role_Id = r.Role_Id
+            LEFT JOIN indentstatusmaster sm ON s.Status_Id = sm.Status_Id
+            LEFT JOIN zone_codes z 
+                ON s.div_code = z.div_code 
+               AND s.sd_code = z.sd_code 
+               AND s.so_code = z.so_code
+            WHERE 
+                s.Status_Id = 2
+                AND s.Role_Id = ?;
+        `, [Role_Id]);
+
+        return result[0].totalCount; // returns just the count as a number
+
+    } catch (error) {
+        console.log("Error while fetching the indent count", error);
+        return 0;
+    }
+}
+
+//=====================================================================================
+
 
