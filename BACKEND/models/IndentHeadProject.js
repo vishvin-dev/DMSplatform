@@ -1,14 +1,15 @@
 
 
 import { pool } from "../Config/db.js";
-import {getFullIndentNo} from "../utils/IndentPrefix/indent.js"
+import { getFullIndentNo } from "../utils/IndentPrefix/indent.js"
 
-  //THIS IS THE FETCHING THE APPROVED DOCUMENTS FOR THE PROJECT HEAD HIS CREATED INDENTS_COUNTS=================================
+//THIS IS THE FETCHING THE APPROVED DOCUMENTS FOR THE PROJECT HEAD HIS CREATED INDENTS_COUNTS=================================
 export const fetchApprovedIndentForProjectHeads = async (CreatedByUser_Id) => {
     try {
         const [result] = await pool.execute(`
         
            SELECT 
+              MAX(s.SectionQtyDetail_Id) AS SectionQtyDetail_Id,
               i.Indent_Id,
               i.Indent_No,
               i.Status_Id,
@@ -59,7 +60,7 @@ export const fetchApprovedIndentForProjectHeads = async (CreatedByUser_Id) => {
         return result.map(row => ({
             ...row,
             fullIndentNo: getFullIndentNo(row.Indent_No),
-             
+
         }));
 
     } catch (error) {
@@ -91,7 +92,109 @@ export const fetchApprovedIndentForProjectHeadCount = async (CreatedByUser_Id) =
     }
 
 }
-// =============================================================================================================================
+
+//THIS IS THE FINAL_INDENT APPROVED SUBMISSION IT IS FRO THE PROJECT MANAGER 
+export const submitFinalApprovedIndent = async (data) => {
+    try {
+        const { ApprovedByUser_Id, ApprovedByRole_Id, Status_Id, requestUserName, ApprovedFilePath, sections } = data;
+
+        let insertResults = [];
+
+        // Keep track of Indent_Id(s) to update status later
+        const indentIds = new Set();
+
+        // Insert each section into finalapprovedindent
+        for (let section of sections) {
+            const { SectionQtyDetail_Id, Indent_Id, VersionLabel, div_code, sd_code, so_code, OfficerEnteredQty, FinalApprovedQty } = section;
+
+            const [result] = await pool.execute(`
+                INSERT INTO finalapprovedindent
+                (Indent_Id, SectionQtyDetail_Id, VersionLabel, div_code, sd_code, so_code, OfficerEnteredQty, FinalApprovedQty, ApprovedByUser_Id, ApprovedByRole_Id, ApprovedFilePath, Status_Id, requestUserName)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                Indent_Id,
+                SectionQtyDetail_Id,
+                VersionLabel,
+                div_code,
+                sd_code,
+                so_code,
+                OfficerEnteredQty,
+                FinalApprovedQty,
+                ApprovedByUser_Id,
+                ApprovedByRole_Id,
+                ApprovedFilePath,
+                Status_Id,
+                requestUserName
+            ]);
+
+            insertResults.push({ SectionQtyDetail_Id, insertId: result.insertId });
+            indentIds.add(Indent_Id);
+        }
+
+        // Update the Indent table and its section details to Status_Id = 3
+        for (let id of indentIds) {
+            // Update parent indent
+            await pool.execute(`UPDATE indent SET Status_Id = 3 WHERE Indent_Id = ?`, [id]);
+
+            // Update all related section details
+            await pool.execute(`UPDATE indentsectionqtydetail SET Status_Id = 3 WHERE Indent_Id = ?`, [id]);
+        }
+
+        return insertResults;
+
+    } catch (error) {
+        console.log("Error submitting final approved indent:", error);
+        throw error;
+    }
+};
+
+//THIS IS THE FETCHING THE APPROVED Acknowledged FOR THE PROJECT_MANAGER
+export const fetchFinalApprovedIndent = async (CreatedByUser_Id) => {
+    try {
+        const [result] = await pool.execute(`
+        
+        SELECT 
+            f.FinalApprovedIndent_Id,
+            f.Indent_Id,
+            i.Indent_No,
+            f.SectionQtyDetail_Id,
+            f.VersionLabel,
+            f.div_code,
+            f.sd_code,
+            f.so_code,
+            f.OfficerEnteredQty,
+            f.FinalApprovedQty,
+            f.ApprovedOn,
+            f.ApprovedFilePath,
+            f.Status_Id,
+            s.StatusName AS StatusName,
+            f.ApprovedByUser_Id,
+            u.FirstName AS ApprovedByName,
+            f.ApprovedByRole_Id,
+            r.RoleName AS ApprovedByRoleName,
+            f.requestUserName
+        FROM finalapprovedindent f
+        LEFT JOIN indent i 
+            ON f.Indent_Id = i.Indent_Id
+        LEFT JOIN user u 
+            ON f.ApprovedByUser_Id = u.User_Id
+        LEFT JOIN roles r 
+            ON f.ApprovedByRole_Id = r.Role_Id
+        LEFT JOIN indentstatusmaster s
+            ON f.Status_Id = s.Status_Id
+        WHERE f.ApprovedByUser_Id = ?  -- <--- pass the User_Id here
+        ORDER BY f.ApprovedOn DESC;
+
+        `, [CreatedByUser_Id]);
+
+        return result
+    } catch (error) {
+        console.log("Error while Fetching The IndentViews", error)
+    }
+
+}
+
+//=============================================================================================================================
 
 
 

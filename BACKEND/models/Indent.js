@@ -281,27 +281,26 @@ export const fetchOfficerApproveIndent = async (Role_Id) => {
     try {
         const [result] = await pool.execute(`
            SELECT 
-                s.SectionQtyDetail_Id,
-                s.Indent_Id,
+                i.Indent_Id,
                 i.Indent_No,                      
                 s.VersionLabel,
                 s.UploadedByUser_Id,
                 u.FirstName AS UploadedByName,
                 s.Role_Id,
                 r.RoleName,
-                s.div_code,
-                z.division AS DivisionName,
-                s.sd_code,
-                z.sub_division AS SubDivisionName,
-                s.so_code,
-                z.section_office AS SectionOfficeName,
-                s.EnteredQty,
+                GROUP_CONCAT(DISTINCT s.div_code) AS div_code,
+                GROUP_CONCAT(DISTINCT z.division) AS DivisionName,
+                GROUP_CONCAT(DISTINCT s.sd_code) AS sd_code,
+                GROUP_CONCAT(DISTINCT z.sub_division) AS SubDivisionName,
+                GROUP_CONCAT(DISTINCT s.so_code) AS so_code,
+                GROUP_CONCAT(DISTINCT z.section_office) AS SectionOfficeName,
+                GROUP_CONCAT(DISTINCT s.EnteredQty) AS EnteredQty,
                 s.Status_Id,
                 sm.StatusName,
-                s.comment,
+                MAX(s.comment) AS comment,
                 s.CreatedByUser_Id,
                 cu.FirstName AS CreatedByName,
-                s.UploadedAt,
+                MAX(s.UploadedAt) AS UploadedAt,
                 i.CreatedOn AS IndentCreatedOn,
                 i.RequestUserName
             FROM 
@@ -324,8 +323,22 @@ export const fetchOfficerApproveIndent = async (Role_Id) => {
             WHERE 
                 s.Status_Id = 2
                 AND s.Role_Id = ?
+            GROUP BY 
+                i.Indent_Id, 
+                i.Indent_No, 
+                s.VersionLabel, 
+                s.UploadedByUser_Id,
+                s.Role_Id,
+                s.Status_Id,
+                sm.StatusName,
+                s.CreatedByUser_Id,
+                cu.FirstName,
+                i.CreatedOn,
+                i.RequestUserName,
+                u.FirstName,
+                r.RoleName
             ORDER BY 
-                s.UploadedAt DESC;
+                MAX(s.UploadedAt) DESC;
         `, [Role_Id]);
 
         return result.map(row => ({
@@ -341,7 +354,7 @@ export const fetchOfficerApproveIndent = async (Role_Id) => {
 export const fetchOfficerApproveIndentCount = async (Role_Id) => {
     try {
         const [result] = await pool.execute(`
-            SELECT COUNT(*) AS totalCount
+            SELECT COUNT(DISTINCT s.Indent_Id) AS totalCount
             FROM indentsectionqtydetail s
             LEFT JOIN indent i ON s.Indent_Id = i.Indent_Id
             LEFT JOIN user u ON s.UploadedByUser_Id = u.User_Id
@@ -354,7 +367,7 @@ export const fetchOfficerApproveIndentCount = async (Role_Id) => {
                AND s.so_code = z.so_code
             WHERE 
                 s.Status_Id = 2
-                AND s.Role_Id = ?;
+                AND s.Role_Id = ?
         `, [Role_Id]);
 
         return result[0].totalCount; // returns just the count as a number

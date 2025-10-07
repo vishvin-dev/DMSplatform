@@ -2,6 +2,8 @@ import multer from "multer";
 import fs from "fs";
 
 const networkFolder = "Z:\\192.168.23.15\\File_Uplode";
+const indentNetworkFolder = "Z:\\192.168.23.15\\IndentFile";
+
 
 const getUploadFolder = (req) => {
   if (req.originalUrl.includes("zoneupload")) {
@@ -10,6 +12,9 @@ const getUploadFolder = (req) => {
     return "uploads/consumerdetails";
   } else if (req.originalUrl.includes("documentUpload")) {
     return networkFolder;
+  } else if (req.originalUrl.includes("IndentProjectHead")) {
+    // ✅ New route for Indent Final Approved Files
+    return indentNetworkFolder;
   } else {
     return "uploads/other";
   }
@@ -54,3 +59,6 @@ export const uploadMultiple = multer({ storage }).fields([
 
     { name: "DraftFile", maxCount: 100 },
 ]);
+
+
+export const uploadIndentFinal = multer({ storage }).single("ApprovedFilePath");
