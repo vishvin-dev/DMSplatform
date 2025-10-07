@@ -730,7 +730,7 @@ const ManagerApprovalView = () => {
         if (fetchError) { return (<tr><td colSpan={5} className="text-center py-5"><Alert color="danger" className="mb-0">{fetchError}</Alert></td></tr>); }
         if (!paginatedData || paginatedData.length === 0) {
             const noDataMessage = viewStatus === 'approved' 
-                ? "**No pending indents in the Acknowledge Queue.**" 
+                ? "No pending indents in the Acknowledge Queue." 
                 : "No indents found in this queue (API not integrated for this status).";
 
             return (<tr><td colSpan={5} style={{ textAlign: 'center', padding: '24px' }}>{noDataMessage}</td></tr>);

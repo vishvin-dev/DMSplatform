@@ -23,6 +23,7 @@ const VIEW_STATUS_MAP = {
 
 const formatSelectedOptions = (names) => {
     if (!names) return '';
+    // This formats the string for the Subject line (e.g., "ANDOOR and KAMTHAN / GULBARGA")
     return names.replace(/,/g, ' and ').replace(/\s*\/\s*/g, ' / ');
 };
 
@@ -53,11 +54,14 @@ const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, 
         if (response && response.status === 'success' && response.result) {
             const apiData = Array.isArray(response.result) ? response.result : [];
 
-            // --- Grouping and Aggregation Logic ---
+            // --- Grouping and Aggregation Logic (REVISED FOR ROW SEPARATION AND QUANTITY SPLITTING) ---
             const groupedDataMap = apiData.reduce((acc, item) => {
                 const indentId = item.Indent_Id;
-                const sectionNamesString = item.section_names || '';
-                const soCodesString = item.so_codes || '';
+                
+                // Get the comma-separated strings for names, codes, and quantities
+                const sectionNamesString = item.section_names || item.SectionOfficeName || '';
+                const soCodesString = item.so_codes || item.so_code || '';
+                const enteredQtyString = item.EnteredQty || ''; 
 
                 if (!acc[indentId]) {
                     const createdDate = new Date(item.IndentCreatedOn || item.UpdatedOn || new Date());
@@ -69,53 +73,61 @@ const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, 
                         createdOn: item.IndentCreatedOn || item.UpdatedOn,
                         date: createdDate.toLocaleDateString('en-GB'),
                         time: createdDate.toLocaleTimeString('en-US', { hour12: true }),
-                        division: item.division_names || 'N/A',
-                        subDivision: item.subdivision_names || 'N/A',
-                        divisionCode: item.div_codes || null,
-                        subDivisionCode: item.sd_codes || null,
+                        division: item.division_names || item.DivisionName || 'N/A', // Added DivisionName fallback
+                        subDivision: item.subdivision_names || item.SubDivisionName || 'N/A', // Added SubDivisionName fallback
+                        divisionCode: item.div_codes || item.div_code || null,
+                        subDivisionCode: item.sd_codes || item.sd_code || null,
                         status: statusFromApi,
                         rejectionReason: item.RejectionReason || item.comment || null,
                         createdBy: item.CreatedByName || item.RequestUserName || 'N/A',
                         createdByUserId: item.CreatedByIndent || item.CreatedByUser_Id || null,
-                        rawSectionNames: [],
-                        selectedOptions: [], // Array of {name, code, quantity}
+                        selectedOptions: [], // Array of {name, code, quantity} - MUST be multiple items for multiple rows
                     };
                 }
 
                 const currentIndent = acc[indentId];
-                const addOption = (name, code, qty) => {
-                    if (name && name !== 'N/A' && !currentIndent.selectedOptions.some(o => o.name === name)) {
-                        currentIndent.selectedOptions.push({ name, code, quantity: qty });
+                
+                // 1. Split the names, codes, and quantities arrays
+                const names = sectionNamesString.split(',').map(s => s.trim()).filter(s => s);
+                const codes = soCodesString.split(',').map(s => s.trim()).filter(s => s);
+                const quantities = enteredQtyString.split(',').map(s => parseInt(s.trim(), 10));
+                
+                // 2. Iterate over the names (which should be the most reliable count)
+                names.forEach((name, index) => {
+                    const code = codes[index] || null;
+                    const qty = quantities.length > index && !isNaN(quantities[index]) ? quantities[index] : 0;
+
+                    // Only add if the name is valid and we haven't already added this exact section
+                    if (name && name !== 'N/A' && !currentIndent.selectedOptions.some(o => o.name === name && o.code === code)) {
+                        currentIndent.selectedOptions.push({ 
+                            name, 
+                            code, 
+                            quantity: qty 
+                        });
                     }
-                };
+                });
 
-                // Process aggregated string data
-                if (sectionNamesString) {
-                    const names = sectionNamesString.split(',').map(s => s.trim()).filter(s => s);
-                    const codes = (soCodesString || '').split(',').map(s => s.trim()).filter(s => s);
-                    const qty = parseInt(item.EnteredQty, 10) || 0;
+                // Handle single-item fallback if no aggregated strings were found but SubDivision/SectionOfficeName exists
+                if (currentIndent.selectedOptions.length === 0 && (item.SectionOfficeName || item.SubDivisionName)) {
+                     const name = item.SectionOfficeName || item.SubDivisionName;
+                     const code = item.so_code || item.sd_code;
+                     const qty = parseInt(item.EnteredQty, 10) || 0;
+                     if (name && name !== 'N/A') {
+                         currentIndent.selectedOptions.push({ name, code, quantity: qty });
+                     }
+                }
 
-                    names.forEach((name, index) => {
-                        addOption(name, codes[index] || null, qty);
-                    });
-                }
-                // Case: Standard flat response (fallback)
-                else if (item.SectionOfficeName || item.SubDivisionName) {
-                    const name = item.SectionOfficeName || item.SubDivisionName;
-                    const code = item.so_code || item.sd_code;
-                    const qty = parseInt(item.EnteredQty, 10) || 0;
-                    addOption(name, code, qty);
-                }
 
                 return acc;
             }, {});
 
             // Convert map back to an array of objects and finalize names
             let finalResults = Object.values(groupedDataMap).map(indent => {
+                // Combine unique names for the summary field (used in table list and document subject)
                 const uniqueNames = [...new Set(indent.selectedOptions.map(o => o.name).filter(n => n && n !== 'N/A'))];
-                indent.selectedOptionNames = uniqueNames.join(' / ');
+                indent.selectedOptionNames = uniqueNames.join(', ');
 
-                // Fallback for missing selected options if subDivision exists
+                // Final check to prevent empty selectedOptions if data was tricky
                 if (indent.selectedOptions.length === 0 && indent.subDivision && indent.subDivision !== 'N/A') {
                     indent.selectedOptions.push({
                         name: indent.subDivision,
@@ -124,8 +136,7 @@ const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, 
                     });
                     indent.selectedOptionNames = indent.subDivision;
                 }
-
-                delete indent.rawSectionNames;
+                
                 return indent;
             });
 
@@ -183,7 +194,7 @@ const fetchIndentCount = async (flagId, roleId, requestUserName, setIsLoading, s
 };
 
 
-// --- Template Rendering Functions (Unchanged) ---
+// --- Template Rendering Functions (Unchanged as they correctly iterate over selectedOptions) ---
 
 const renderIndentTemplate = (indentData) => {
     if (!indentData) return null;
@@ -191,9 +202,7 @@ const renderIndentTemplate = (indentData) => {
     const isReturned = indentData.status === 'Returned for Revision';
 
     const getToCode = () => indentData.subDivisionCode || 'N/A';
-    const submitTo = indentData.subDivision || 'Sub-Division';
-
-    const formattedOptionNames = indentData.selectedOptionNames || 'N/A';
+    const formattedOptionNames = indentData.selectedOptionNames || 'N/A'; 
 
     return (
         <div className="a4-sheet-modal" style={{ backgroundImage: `url(${letterheadImg})` }}>
@@ -220,11 +229,12 @@ const renderIndentTemplate = (indentData) => {
                             <th>SL NO</th>
                             <th>Division</th>
                             <th>Sub-Division</th>
-                            <th>Section / Sub-Division</th>
+                            <th>Section </th>
                             {(isReturned || indentData.status === 'Approved') && <th style={{ width: '20%' }}>{indentData.status === 'Approved' ? 'Acknowledged Qty' : 'Last Recorded Qty'}</th>}
                         </tr>
                     </thead>
                     <tbody>
+                        {/* This loop now renders separate rows due to the corrected data loading logic */}
                         {selectedOptions.map((option, index) => {
                             const recordedQty = option.quantity || 0;
                             return (
@@ -328,7 +338,7 @@ const ViewIndent = () => {
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(5);
 
-    // --- Session Data Retrieval ---
+    // --- Session Data Retrieval (Unchanged) ---
     const sessionData = useMemo(() => {
         const defaultData = { userId: null, roleId: null, requestUserName: null };
         const storageKeys = ['loginData', 'authUser', 'user'];
@@ -399,7 +409,7 @@ const ViewIndent = () => {
 
     }, [viewStatus, sessionData.roleId, sessionData.requestUserName, sessionData.userId]);
 
-    // --- Core Filtering and Pagination Logic ---
+    // --- Core Filtering and Pagination Logic (Unchanged) ---
 
     const filteredIndents = useMemo(() => {
         let results = indents;
@@ -441,7 +451,8 @@ const ViewIndent = () => {
             const initialQuantities = indent.selectedOptions.map(option => ({
                 code: option.code,
                 name: option.name,
-                quantity: option.quantity !== undefined && option.quantity !== null ? option.quantity.toString() : ''
+                // Use quantity from the loaded data for pre-filling
+                quantity: option.quantity !== undefined && option.quantity !== null && option.quantity > 0 ? option.quantity.toString() : ''
             }));
             setSectionQuantities(initialQuantities);
             setFormError('');
@@ -460,13 +471,17 @@ const ViewIndent = () => {
     const handleRejectSubmit = () => {
         if (!rejectionReason.trim()) { setFormError('Rejection reason is required.'); return; }
 
-        // --- Simulated Reject API call/state update (Flag ID 3 implicit) ---
-        setIndents(prev => prev.map(indent => indent.indentNumber === selectedIndent.indentNumber ? { ...indent, status: 'Rejected', rejectionReason: rejectionReason } : indent));
+        // Simulate state update for rejection (returns for revision)
+        setIndents(prev => prev.map(indent => indent.indentNumber === selectedIndent.indentNumber ? { 
+            ...indent, 
+            status: 'Returned for Revision', 
+            rejectionReason: rejectionReason 
+        } : indent));
 
-        setResponseModalContent({ title: 'Rejected', message: `Indent ${selectedIndent.displayIndentNo} has been rejected.`, isSuccess: false });
+        setResponseModalContent({ title: 'Returned for Revision', message: `Indent ${selectedIndent.displayIndentNo} has been returned for revision.`, isSuccess: false });
         toggleRejectModal();
         toggleResponseModal();
-        setViewStatus('rejected');
+        setViewStatus('returned_for_revision');
         setSelectedIndent(null);
     };
 
@@ -483,7 +498,7 @@ const ViewIndent = () => {
         const initialQuantities = indent.selectedOptions.map(option => ({
             code: option.code,
             name: option.name,
-            quantity: option.quantity !== undefined && option.quantity !== null ? option.quantity.toString() : ''
+            quantity: option.quantity !== undefined && option.quantity !== null && option.quantity > 0 ? option.quantity.toString() : ''
         }));
         setPmResubmitQuantities(initialQuantities);
         setResubmitFormError('');
@@ -509,7 +524,7 @@ const ViewIndent = () => {
             };
         });
 
-        // --- Simulated API Call for Resubmit (Flag 1 implicit) ---
+        // Simulate state update for resubmit
         setIndents(prev => prev.map(i => i.indentNumber === selectedIndent.indentNumber ? {
             ...i,
             status: 'To Be Approved',
@@ -546,6 +561,7 @@ const ViewIndent = () => {
         try {
             const finalComment = approvalComments.trim();
 
+            // 1. Prepare the sections payload with the new quantities
             const sectionsPayload = selectedIndent.selectedOptions.map(original => {
                 const enteredItem = sectionQuantities.find(q => q.code === original.code);
                 const enteredQty = enteredItem ? parseInt(enteredItem.quantity, 10) : 0;
@@ -576,6 +592,7 @@ const ViewIndent = () => {
             const response = await postcreateindent(finalApprovalPayload);
 
             if (response && response.status === 'success') {
+                // Update selectedOptions with the acknowledged quantities for the template
                 const acknowledgedOptions = sectionsPayload.map(s => ({
                     name: selectedIndent.selectedOptions.find(o => o.code === s.so_code)?.name || s.so_code,
                     code: s.so_code,
@@ -586,7 +603,8 @@ const ViewIndent = () => {
                     ...selectedIndent,
                     comments: finalComment,
                     status: 'Approved',
-                    selectedOptions: acknowledgedOptions
+                    selectedOptions: acknowledgedOptions, // Use the new quantities
+                    selectedOptionNames: acknowledgedOptions.map(o => o.name).join(', ')
                 };
                 setAcknowledgementData(ackData);
 
@@ -614,7 +632,7 @@ const ViewIndent = () => {
         }
     };
 
-    // Handler for the final submit button in the Acknowledgement Modal
+    // Handler for the final submit button in the Acknowledgement Modal (Unchanged)
     const handleSubmitAcknowledgement = () => {
         setResponseModalContent({
             title: 'Success!',
@@ -638,7 +656,7 @@ const ViewIndent = () => {
         }
     };
 
-    // --- Render Logic (Table) ---
+    // --- Render Logic (Table) (Unchanged) ---
     
     // Determine the columns based on viewStatus
     const tableColumns = useMemo(() => {
@@ -893,7 +911,7 @@ const ViewIndent = () => {
                     </ModalBody>
                     <ModalFooter>
                         <Button color="secondary" onClick={toggleRejectModal}>Cancel</Button>
-                        <Button color="danger" onClick={handleRejectSubmit}>Confirm Rejection</Button>
+                        <Button color="danger" onClick={handleRejectSubmit}>Return for Revision</Button>
                     </ModalFooter>
                 </Modal>
 
@@ -1008,5 +1026,3 @@ const ViewIndent = () => {
 };
 
 export default ViewIndent;
-
-
