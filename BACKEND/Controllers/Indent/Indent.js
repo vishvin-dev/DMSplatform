@@ -1,5 +1,14 @@
 
-import { insertIndentCreation, submitIndent, fetchCreatedIndenetViews, fetchOfficersAssignedIndent, submitOfficerApproveIndent, fetchOfficerApproveIndent } from "../../models/Indent.js";
+import { 
+    insertIndentCreation,
+    submitIndent, 
+    fetchCreatedIndenetViews,
+    fetchOfficersAssignedIndent,
+    submitOfficerApproveIndent,
+    fetchOfficerApproveIndent,
+    fetchOfficersAssignedIndentCount,
+    fetchOfficerApproveIndentCount
+} from "../../models/Indent.js";
 
 export const Indent = async (req, res) => {
     const { flagId, ...data } = req.body;
@@ -46,11 +55,24 @@ export const Indent = async (req, res) => {
         //Invalid flag
 
 
+
+
+
         //=================THIS IS THE WEHN DIV/SUBDIV/SECTION OFFICERS LOGIN BASED ON THE ROLE_ID HIS ASSIGNED INDENT TO BE LOAD 
         else if (Number(flagId) === 4) {
             const result = await fetchOfficersAssignedIndent(data.Role_Id);
             return res.status(200).json({
                 message: "Indent Views Fetched successfully",
+                status: "success",
+                count:result.length,
+                result
+            });
+        }
+
+        else if (Number(flagId) === 7) {
+            const result = await fetchOfficersAssignedIndentCount(data.Role_Id);
+            return res.status(200).json({
+                message: "Indent Count Views Fetched successfully",
                 status: "success",
                 count:result.length,
                 result
@@ -69,7 +91,7 @@ export const Indent = async (req, res) => {
         }
 
 
-        // pending=====================
+        // ==========================THIS IS THE APPROVED IDENT IS FETCHED BASED ON THE USERID OK 
 
          else if (Number(flagId) === 6) {
             const result = await fetchOfficerApproveIndent(data.Role_Id);
@@ -81,6 +103,15 @@ export const Indent = async (req, res) => {
             });
         }
 
+         else if (Number(flagId) === 8) {
+            const result = await fetchOfficerApproveIndentCount(data.Role_Id);
+            return res.status(200).json({
+                message: "Indent Count Fetched successfully",
+                status: "success",
+                count:result.length,
+                result
+            });
+        }
         else {
             return res.status(400).json({
                 status: "failed",
