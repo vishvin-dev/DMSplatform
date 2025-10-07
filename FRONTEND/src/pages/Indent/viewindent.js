@@ -4,10 +4,12 @@ import {
     ModalHeader, ModalBody, ModalFooter, Row, Col, Label, FormGroup, Alert, Spinner
 } from 'reactstrap';
 import letterheadImg from './VishvinLetterHead.jpg';
-// Assuming 'postcreateindent' is available and correctly imported
 import { postcreateindent } from '../../helpers/fakebackend_helper';
 
 
+// =================================================================
+// 1. CONSTANTS AND UTILITY FUNCTIONS
+// =================================================================
 
 const INITIAL_INDENTS = [];
 const STATUS_MAP = { 1: 'To Be Approved', 4: 'Returned for Revision', 2: 'Approved', 3: 'Rejected' };
@@ -16,19 +18,13 @@ const VIEW_STATUS_MAP = {
     'returned_for_revision': 'Returned for Revision',
     'rejected': 'Rejected',
     'all': null,
-    'approved': 'Approved' // Used for client-side filtering of Flag 4, although Flag 6 is used for API call
+    'approved': 'Approved'
 };
 
-/**
- * Replaces commas with ' and ' and standardizes multiple slashes.
- * @param {string} names - The string of names (e.g., "Sec A, Sec B / Sec C").
- * @returns {string} Formatted string.
- */
 const formatSelectedOptions = (names) => {
     if (!names) return '';
     return names.replace(/,/g, ' and ').replace(/\s*\/\s*/g, ' / ');
 };
-
 
 
 /**
@@ -37,7 +33,7 @@ const formatSelectedOptions = (names) => {
 const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, setIndents, setIsLoading, setError) => {
     setIsLoading(true);
     setError(null);
-    setIndents([]); // Clear old data
+    setIndents([]);
 
     let payload;
     let flagId;
@@ -93,17 +89,17 @@ const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, 
                     }
                 };
 
-                // FIX: Process aggregated string data (for list views like Flag 4/6)
+                // Process aggregated string data
                 if (sectionNamesString) {
                     const names = sectionNamesString.split(',').map(s => s.trim()).filter(s => s);
                     const codes = (soCodesString || '').split(',').map(s => s.trim()).filter(s => s);
-                    const qty = parseInt(item.EnteredQty, 10) || 0; // Use the aggregated quantity
+                    const qty = parseInt(item.EnteredQty, 10) || 0;
 
                     names.forEach((name, index) => {
                         addOption(name, codes[index] || null, qty);
                     });
                 }
-                // Case: Standard flat response (one section per row, historical format) - fallback
+                // Case: Standard flat response (fallback)
                 else if (item.SectionOfficeName || item.SubDivisionName) {
                     const name = item.SectionOfficeName || item.SubDivisionName;
                     const code = item.so_code || item.sd_code;
@@ -133,7 +129,7 @@ const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, 
                 return indent;
             });
 
-            // Apply client-side filtering if flagId is 4 AND a specific status is targeted (excluding 'all' and 'approved' which uses Flag 6)
+            // Apply client-side filtering if flagId is 4 AND a specific status is targeted
             if (flagId === 4 && filterStatus) {
                 finalResults = finalResults.filter(indent => indent.status === filterStatus);
             }
@@ -187,6 +183,112 @@ const fetchIndentCount = async (flagId, roleId, requestUserName, setIsLoading, s
 };
 
 
+// --- Template Rendering Functions (Unchanged) ---
+
+const renderIndentTemplate = (indentData) => {
+    if (!indentData) return null;
+    const selectedOptions = indentData.selectedOptions || [];
+    const isReturned = indentData.status === 'Returned for Revision';
+
+    const getToCode = () => indentData.subDivisionCode || 'N/A';
+    const submitTo = indentData.subDivision || 'Sub-Division';
+
+    const formattedOptionNames = indentData.selectedOptionNames || 'N/A';
+
+    return (
+        <div className="a4-sheet-modal" style={{ backgroundImage: `url(${letterheadImg})` }}>
+            <div className="content-wrapper-modal">
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                    <div><strong>Indent No.:</strong> {indentData.displayIndentNo}</div>
+                    <div style={{ textAlign: 'right' }}><div><strong>Date:</strong> {indentData.date}</div><div><strong>Time:</strong> {indentData.time}</div></div>
+                </div>
+
+                {isReturned && indentData.rejectionReason && (
+                    <div className="alert alert-info p-3 mb-3 border border-info" style={{ fontSize: '14px' }}>
+                        <h6 className="mb-1 text-dark">Revision Instructions:</h6>
+                        <p className="mb-0 fw-bold">{indentData.rejectionReason}</p>
+                    </div>
+                )}
+
+                <div><p>To,</p><p>The Officer</p><p>{getToCode()}</p></div>
+                <div style={{ fontWeight: 'bold', marginBottom: '20px' }}><p>Subject: Request for physical records of Gescom Consumer of {formatSelectedOptions(formattedOptionNames)}</p><p>DWA No: 14,42,53,250</p></div>
+                <div><p>Dear Sir/Madam,</p><p>With reference to the above DWA no and subject, we request for the physical available consumer records of the below listed location(s).</p></div>
+
+                <Table bordered size="sm" className="mb-4">
+                    <thead>
+                        <tr>
+                            <th>SL NO</th>
+                            <th>Division</th>
+                            <th>Sub-Division</th>
+                            <th>Section / Sub-Division</th>
+                            {(isReturned || indentData.status === 'Approved') && <th style={{ width: '20%' }}>{indentData.status === 'Approved' ? 'Acknowledged Qty' : 'Last Recorded Qty'}</th>}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {selectedOptions.map((option, index) => {
+                            const recordedQty = option.quantity || 0;
+                            return (
+                                <tr key={index}>
+                                    <td>{index + 1}</td>
+                                    <td>{indentData.division || 'N/A'}</td>
+                                    <td>{indentData.subDivision || 'N/A'}</td>
+                                    <td>{option.name || 'N/A'}</td>
+                                    {(isReturned || indentData.status === 'Approved') && <td className="fw-bold">{recordedQty}</td>}
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </Table>
+
+                <p>Kindly process and arrange for handover of physical consumer records of above mentioned location.</p>
+                <div style={{ marginTop: '40px' }}><p>Thanking you,</p><p>Yours faithfully,</p><br /><p>_________________________</p><p><small>Disclaimer * seal is not mandatory</small></p><p><small>(This is a computer/system generated copy)</small></p></div>
+            </div>
+        </div>
+    );
+};
+
+
+const renderAcknowledgementTemplate = (ackData) => {
+    if (!ackData) return null;
+    const selectedOptionsWithQuantity = ackData.selectedOptions || [];
+    const formattedOptionNames = ackData.selectedOptionNames || 'N/A';
+
+    return (
+        <div className="a4-sheet-modal" style={{ backgroundImage: `url(${letterheadImg})` }}>
+            <div className="content-wrapper-modal">
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                    <div><strong>Indent No.:</strong> {ackData.displayIndentNo}</div>
+                    <div style={{ textAlign: 'right' }}><div><strong>Date:</strong> {ackData.date}</div><div><strong>Time:</strong> {ackData.time}</div></div>
+                </div>
+                <div><p>To,</p><p>The Project Manager</p><p>Vishvin Technologies</p></div>
+                <div style={{ fontWeight: 'bold', marginBottom: '20px' }}><p>Subject: Acknowledgement of Physical Records for {formatSelectedOptions(formattedOptionNames)}</p><p>DWA No: 14,42,53,250</p></div>
+                <div><p>Dear Sir/Madam,</p><p>This is to acknowledge the receipt of the physical consumer records with reference to the above DWA no and subject for the below listed location(s).</p></div>
+                <Table bordered size="sm" className="mb-4">
+                    <thead><tr><th>SL NO</th><th>Division</th><th>Sub-Division</th><th>Section / Sub-Division</th><th>Quantity Received</th></tr></thead>
+                    <tbody>
+                        {selectedOptionsWithQuantity.map((option, index) => (
+                            <tr key={index}><td>{index + 1}</td><td>{ackData.division || 'N/A'}</td><td>{ackData.subDivision || 'N/A'}</td><td>{option.name || 'N/A'}</td><td>{option.quantity}</td></tr>
+                        ))}
+                    </tbody>
+                </Table>
+
+                {ackData.comments && (
+                    <div style={{ marginBottom: '20px' }}>
+                        <p><strong>Comments/Remarks:</strong> {ackData.comments}</p>
+                    </div>
+                )}
+
+                <p>The handover of the physical consumer records for the above mentioned locations has been processed.</p>
+                <div style={{ marginTop: '40px' }}><p>Thanking you,</p><p>Yours faithfully,</p><br /><p>_________________________</p><p><small>Disclaimer * seal is not mandatory</small></p><p><small>(This is a computer/system generated copy)</small></p></div>
+            </div>
+        </div>
+    );
+};
+
+
+// =================================================================
+// 2. MAIN COMPONENT
+// =================================================================
 
 const ViewIndent = () => {
     document.title = `Indent Approval Queue | DMS`;
@@ -218,15 +320,15 @@ const ViewIndent = () => {
     const [approvalComments, setApprovalComments] = useState('');
     const [formError, setFormError] = useState('');
     const [resubmitFormError, setResubmitFormError] = useState('');
-    const [sectionQuantities, setSectionQuantities] = useState([]); // Officer Approval
-    const [pmResubmitQuantities, setPmResubmitQuantities] = useState([]); // PM Resubmit
+    const [sectionQuantities, setSectionQuantities] = useState([]);
+    const [pmResubmitQuantities, setPmResubmitQuantities] = useState([]);
     const [responseModalContent, setResponseModalContent] = useState({ title: '', message: '', isSuccess: false });
 
     // Pagination
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(5);
 
-    // --- Session Data Retrieval (Memoized for stability) ---
+    // --- Session Data Retrieval ---
     const sessionData = useMemo(() => {
         const defaultData = { userId: null, roleId: null, requestUserName: null };
         const storageKeys = ['loginData', 'authUser', 'user'];
@@ -237,9 +339,7 @@ const ViewIndent = () => {
             if (dataString) {
                 try {
                     const data = JSON.parse(dataString);
-                    // Check for nested user data structure
                     if (data.user && data.user.Role_Id) { userData = data.user; break; }
-                    // Check for flat user data structure
                     if (data.Role_Id && data.Email) { userData = data; break; }
                 } catch (e) { /* silent fail on parse error */ }
             }
@@ -253,7 +353,6 @@ const ViewIndent = () => {
             };
         }
 
-        // Fallback to individual items
         const fallbackRoleId = sessionStorage.getItem('Role_Id') || sessionStorage.getItem('roleId');
         const fallbackEmail = sessionStorage.getItem('Email') || sessionStorage.getItem('requestUserName');
         const fallbackUserId = sessionStorage.getItem('User_Id') || sessionStorage.getItem('userId');
@@ -269,7 +368,7 @@ const ViewIndent = () => {
         return defaultData;
     }, []);
 
-    // --- Effects (API Calls) ---
+    // --- API Data Fetching Effect (Triggers on mount and status change) ---
     useEffect(() => {
         if (!sessionData.roleId || !sessionData.requestUserName) {
             setFetchError("Authentication error: Missing user session data. Please ensure you are logged in.");
@@ -281,7 +380,7 @@ const ViewIndent = () => {
         setFetchError(null);
         setPage(0);
 
-        // 1. Fetch the main queue data (Flags 4 or 6)
+        // 1. Fetch the main queue data for the selected status (uses Flag 4 or 6)
         fetchIndentsFromAPI(
             viewStatus,
             sessionData.userId,
@@ -292,15 +391,15 @@ const ViewIndent = () => {
             setFetchError
         );
 
-        // 2. Fetch the explicit count for Pending Approval (Flag 7)
+        // 2. Separate logic to fetch the *explicit count* for Pending Approval (Flag 7)
         fetchIndentCount(7, sessionData.roleId, sessionData.requestUserName, setIsCountLoading, setPendingApprovalCount);
 
-        // 3. Fetch the explicit count for Approved (Flag 8)
+        // 3. Separate logic to fetch the *explicit count* for Approved (Flag 8)
         fetchIndentCount(8, sessionData.roleId, sessionData.requestUserName, setIsApprovedCountLoading, setApprovedCount);
 
     }, [viewStatus, sessionData.roleId, sessionData.requestUserName, sessionData.userId]);
 
-
+    // --- Core Filtering and Pagination Logic ---
 
     const filteredIndents = useMemo(() => {
         let results = indents;
@@ -313,7 +412,7 @@ const ViewIndent = () => {
         return results;
     }, [searchTerm, indents]);
 
-    const processedData = filteredIndents; // Renaming for clarity, no further processing needed currently
+    const processedData = filteredIndents;
 
     const pageCount = pageSize === -1 ? 1 : Math.ceil(processedData.length / pageSize);
     const paginatedData = useMemo(() => {
@@ -322,8 +421,7 @@ const ViewIndent = () => {
         return processedData.slice(start, start + pageSize);
     }, [processedData, page, pageSize]);
 
-
-    // --- Handlers (Modal Toggles) ---
+    // --- Modal Toggles and Handlers (Unchanged) ---
 
     const toggleViewModal = useCallback(() => setIsViewModalOpen(prev => !prev), []);
     const toggleRejectModal = useCallback(() => setIsRejectModalOpen(prev => !prev), []);
@@ -331,8 +429,6 @@ const ViewIndent = () => {
     const toggleAcknowledgementModal = useCallback(() => setIsAcknowledgementModalOpen(prev => !prev), []);
     const toggleResponseModal = useCallback(() => setIsResponseModalOpen(prev => !prev), []);
     const togglePmResubmitQtyModal = useCallback(() => setIsPmResubmitQtyModalOpen(prev => !prev), []);
-
-    // --- Handlers (Actions) ---
 
     const handleViewClick = (indent) => {
         setSelectedIndent(indent);
@@ -361,6 +457,27 @@ const ViewIndent = () => {
         toggleRejectModal();
     };
 
+    const handleRejectSubmit = () => {
+        if (!rejectionReason.trim()) { setFormError('Rejection reason is required.'); return; }
+
+        // --- Simulated Reject API call/state update (Flag ID 3 implicit) ---
+        setIndents(prev => prev.map(indent => indent.indentNumber === selectedIndent.indentNumber ? { ...indent, status: 'Rejected', rejectionReason: rejectionReason } : indent));
+
+        setResponseModalContent({ title: 'Rejected', message: `Indent ${selectedIndent.displayIndentNo} has been rejected.`, isSuccess: false });
+        toggleRejectModal();
+        toggleResponseModal();
+        setViewStatus('rejected');
+        setSelectedIndent(null);
+    };
+
+    const handleSectionQuantityChange = (code, value) => {
+        if (value === '' || (/^\d+$/.test(value) && parseInt(value) >= 0)) {
+            setSectionQuantities(prev => prev.map(item => (item.code === code) ? { ...item, quantity: value } : item));
+            setFormError('');
+        }
+    };
+
+    // --- PM Resubmit Actions (Unchanged) ---
     const handleOpenPmResubmit = (indent) => {
         setSelectedIndent(indent);
         const initialQuantities = indent.selectedOptions.map(option => ({
@@ -373,13 +490,6 @@ const ViewIndent = () => {
         togglePmResubmitQtyModal();
     };
 
-    const handleSectionQuantityChange = (code, value) => {
-        if (value === '' || (/^\d+$/.test(value) && parseInt(value) >= 0)) {
-            setSectionQuantities(prev => prev.map(item => (item.code === code) ? { ...item, quantity: value } : item));
-            setFormError('');
-        }
-    };
-
     const handlePmResubmitQuantityChange = (code, value) => {
         if (value === '' || (/^\d+$/.test(value) && parseInt(value) >= 0)) {
             setPmResubmitQuantities(prev => prev.map(item => (item.code === code) ? { ...item, quantity: value } : item));
@@ -387,33 +497,9 @@ const ViewIndent = () => {
         }
     };
 
-    // --- API Submission Handlers ---
-
-    // NOTE: Reject API call is simulated as its payload is not explicitly defined using postcreateindent with a specific flag.
-    const handleRejectSubmit = () => {
-        if (!rejectionReason.trim()) { setFormError('Rejection reason is required.'); return; }
-
-        // Simulate state update for rejection
-        setIndents(prev => prev.map(indent =>
-            indent.indentNumber === selectedIndent.indentNumber
-                ? { ...indent, status: 'Rejected', rejectionReason: rejectionReason }
-                : indent
-        ));
-
-        setResponseModalContent({ title: 'Rejected', message: `Indent ${selectedIndent.displayIndentNo} has been rejected.`, isSuccess: false });
-        toggleRejectModal();
-        toggleResponseModal();
-        setViewStatus('rejected');
-        setSelectedIndent(null);
-    };
-
-    // NOTE: PM Resubmit API call is simulated as its payload is not explicitly defined using postcreateindent with a specific flag for resubmit.
     const handlePmResubmitSubmit = async () => {
         const invalidQuantity = pmResubmitQuantities.some(item => item.quantity === '' || item.quantity === null || parseInt(item.quantity) < 0 || isNaN(parseInt(item.quantity)));
-        if (invalidQuantity) {
-            setResubmitFormError('All quantities must be entered and be non-negative integers before resubmitting.');
-            return;
-        }
+        if (invalidQuantity) { setResubmitFormError('All quantities must be entered and be non-negative integers before resubmitting.'); return; }
 
         const updatedSelectedOptions = selectedIndent.selectedOptions.map(original => {
             const correctedItem = pmResubmitQuantities.find(q => q.code === original.code);
@@ -423,7 +509,7 @@ const ViewIndent = () => {
             };
         });
 
-        // Simulate state update for resubmit
+        // --- Simulated API Call for Resubmit (Flag 1 implicit) ---
         setIndents(prev => prev.map(i => i.indentNumber === selectedIndent.indentNumber ? {
             ...i,
             status: 'To Be Approved',
@@ -438,9 +524,7 @@ const ViewIndent = () => {
         setSelectedIndent(null);
     };
 
-    /**
-     * CORE: Officer Approval API Call (flagId: 5, Status_Id: 2)
-     */
+    // --- CORE INTEGRATION POINT: Officer Approval API Call (flagId: 5) ---
     const handleQuantitySubmit = async () => {
         const invalidQuantity = sectionQuantities.some(item =>
             item.quantity === '' || item.quantity === null || parseInt(item.quantity) < 0 || isNaN(parseInt(item.quantity))
@@ -478,7 +562,7 @@ const ViewIndent = () => {
                 return sectionObject;
             });
 
-            // Construct the Approval Payload (Flag ID 5)
+            // 2. Construct the Approval Payload (Flag ID 5)
             const finalApprovalPayload = {
                 "flagId": 5,
                 "Indent_Id": selectedIndent.indentNumber,
@@ -506,7 +590,7 @@ const ViewIndent = () => {
                 };
                 setAcknowledgementData(ackData);
 
-                // Update local state
+                // Update local state to reflect the status change
                 setIndents(prev => prev.map(i => i.indentNumber === selectedIndent.indentNumber ? {
                     ...i,
                     status: 'Approved',
@@ -530,6 +614,7 @@ const ViewIndent = () => {
         }
     };
 
+    // Handler for the final submit button in the Acknowledgement Modal
     const handleSubmitAcknowledgement = () => {
         setResponseModalContent({
             title: 'Success!',
@@ -542,7 +627,7 @@ const ViewIndent = () => {
         setSelectedIndent(null);
     };
 
-    // --- Helper for UI ---
+    // --- Helper for UI (Unchanged) ---
     const getStatusColor = (status) => {
         switch (status) {
             case 'Approved': return 'success';
@@ -553,141 +638,47 @@ const ViewIndent = () => {
         }
     };
 
-
-
-    // --- Render: Indent Document Template ---
-    const renderIndentTemplate = (indentData) => {
-        if (!indentData) return null;
-        const selectedOptions = indentData.selectedOptions || [];
-        const isReturned = indentData.status === 'Returned for Revision';
-
-        // NOTE: 'submitTo' logic is inferred/missing from the provided data structure, 
-        // falling back to subDivision details as per original code's logic.
-        const getToCode = () => indentData.subDivisionCode || 'N/A';
-        const submitTo = indentData.subDivision || 'Sub-Division';
-
-        const formattedOptionNames = indentData.selectedOptionNames || 'N/A';
-
-        return (
-            <div className="a4-sheet-modal" style={{ backgroundImage: `url(${letterheadImg})` }}>
-                <div className="content-wrapper-modal">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                        <div><strong>Indent No.:</strong> {indentData.displayIndentNo}</div>
-                        <div style={{ textAlign: 'right' }}><div><strong>Date:</strong> {indentData.date}</div><div><strong>Time:</strong> {indentData.time}</div></div>
-                    </div>
-
-                    {isReturned && indentData.rejectionReason && (
-                        <div className="alert alert-info p-3 mb-3 border border-info" style={{ fontSize: '14px' }}>
-                            <h6 className="mb-1 text-dark">Revision Instructions:</h6>
-                            <p className="mb-0 fw-bold">{indentData.rejectionReason}</p>
-                        </div>
-                    )}
-
-                    <div><p>To,</p><p>The Officer</p><p>{getToCode()}</p></div>
-                    <div style={{ fontWeight: 'bold', marginBottom: '20px' }}><p>Subject: Request for physical records of Gescom Consumer of {formatSelectedOptions(formattedOptionNames)}</p><p>DWA No: 14,42,53,250</p></div>
-                    <div><p>Dear Sir/Madam,</p><p>With reference to the above DWA no and subject, we request for the physical available consumer records of the below listed location(s).</p></div>
-
-                    <Table bordered size="sm" className="mb-4">
-                        <thead>
-                            <tr>
-                                <th>SL NO</th>
-                                <th>Division</th>
-                                <th>Sub-Division</th>
-                                <th>Section / Sub-Division</th>
-                                {(isReturned || indentData.status === 'Approved') && <th style={{ width: '20%' }}>{indentData.status === 'Approved' ? 'Acknowledged Qty' : 'Last Recorded Qty'}</th>}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {selectedOptions.map((option, index) => {
-                                const recordedQty = option.quantity || 0;
-                                return (
-                                    <tr key={index}>
-                                        <td>{index + 1}</td>
-                                        <td>{indentData.division || 'N/A'}</td>
-                                        <td>{indentData.subDivision || 'N/A'}</td>
-                                        <td>{option.name || 'N/A'}</td>
-                                        {(isReturned || indentData.status === 'Approved') && <td className="fw-bold">{recordedQty}</td>}
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </Table>
-
-                    <p>Kindly process and arrange for handover of physical consumer records of above mentioned location.</p>
-                    <div style={{ marginTop: '40px' }}><p>Thanking you,</p><p>Yours faithfully,</p><br /><p>_________________________</p><p><small>Disclaimer * seal is not mandatory</small></p><p><small>(This is a computer/system generated copy)</small></p></div>
-                </div>
-            </div>
-        );
-    };
-
-  
-    const renderAcknowledgementTemplate = (ackData) => {
-        if (!ackData) return null;
-        const selectedOptionsWithQuantity = ackData.selectedOptions || [];
-        const formattedOptionNames = ackData.selectedOptionNames || 'N/A';
-
-        return (
-            <div className="a4-sheet-modal" style={{ backgroundImage: `url(${letterheadImg})` }}>
-                <div className="content-wrapper-modal">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                        <div><strong>Indent No.:</strong> {ackData.displayIndentNo}</div>
-                        <div style={{ textAlign: 'right' }}><div><strong>Date:</strong> {ackData.date}</div><div><strong>Time:</strong> {ackData.time}</div></div>
-                    </div>
-                    <div><p>To,</p><p>The Project Manager</p><p>Vishvin Technologies</p></div>
-                    <div style={{ fontWeight: 'bold', marginBottom: '20px' }}><p>Subject: Acknowledgement of Physical Records for {formatSelectedOptions(formattedOptionNames)}</p><p>DWA No: 14,42,53,250</p></div>
-                    <div><p>Dear Sir/Madam,</p><p>This is to acknowledge the receipt of the physical consumer records with reference to the above DWA no and subject for the below listed location(s).</p></div>
-                    <Table bordered size="sm" className="mb-4">
-                        <thead><tr><th>SL NO</th><th>Division</th><th>Sub-Division</th><th>Section / Sub-Division</th><th>Quantity Received</th></tr></thead>
-                        <tbody>
-                            {selectedOptionsWithQuantity.map((option, index) => (
-                                <tr key={index}><td>{index + 1}</td><td>{ackData.division || 'N/A'}</td><td>{ackData.subDivision || 'N/A'}</td><td>{option.name || 'N/A'}</td><td>{option.quantity}</td></tr>
-                            ))}
-                        </tbody>
-                    </Table>
-
-                    {ackData.comments && (
-                        <div style={{ marginBottom: '20px' }}>
-                            <p><strong>Comments/Remarks:</strong> {ackData.comments}</p>
-                        </div>
-                    )}
-
-                    <p>The handover of the physical consumer records for the above mentioned locations has been processed.</p>
-                    <div style={{ marginTop: '40px' }}><p>Thanking you,</p><p>Yours faithfully,</p><br /><p>_________________________</p><p><small>Disclaimer * seal is not mandatory</small></p><p><small>(This is a computer/system generated copy)</small></p></div>
-                </div>
-            </div>
-        );
-    };
-
-    // --- Render: Table Header ---
-    const renderTableHeader = () => {
-        const columns = [
-            { header: 'Indent number', accessorKey: 'displayIndentNo' },
-            { header: 'Status', accessorKey: 'status' },
-            { header: 'Section/Sub-Division', accessorKey: 'selectedOptionNames' },
-            { header: 'Created on', accessorKey: 'createdOn' },
-            { header: 'View', accessorKey: 'viewAction' },
-            { header: 'Action', accessorKey: 'otherAction' },
+    // --- Render Logic (Table) ---
+    
+    // Determine the columns based on viewStatus
+    const tableColumns = useMemo(() => {
+        const baseColumns = [
+            { header: 'Indent number', accessorKey: 'displayIndentNo', key: 'displayIndentNo' },
+            { header: 'Status', accessorKey: 'status', key: 'status' },
+            { header: 'Section/Sub-Division', accessorKey: 'selectedOptionNames', key: 'selectedOptionNames' },
+            { header: 'Created on', accessorKey: 'createdOn', key: 'createdOn' },
+            { header: 'View', accessorKey: 'viewAction', key: 'viewAction' },
         ];
 
-        return (
-            <tr>
-                {columns.map((col) => (
-                    <th key={col.accessorKey}
-                        style={{ cursor: 'default', userSelect: 'none', whiteSpace: 'nowrap', textAlign: (col.accessorKey === 'viewAction' || col.accessorKey === 'otherAction') ? 'center' : 'left' }}
+        // Omit the 'Action' column when viewing the 'approved' queue
+        if (viewStatus !== 'approved') {
+            baseColumns.push({ header: 'Action', accessorKey: 'otherAction', key: 'otherAction' });
+        }
+        return baseColumns;
+    }, [viewStatus]);
+
+    const renderTableHeader = () => (
+        <tr>
+            {tableColumns.map((col) => {
+                return (
+                    <th key={col.key}
+                        style={{ cursor: 'default', userSelect: 'none', whiteSpace: 'nowrap', textAlign: (col.key === 'viewAction' || col.key === 'otherAction') ? 'center' : 'left' }}
                     >
                         {col.header}
                     </th>
-                ))}
-            </tr>
-        );
-    };
+                );
+            })}
+        </tr>
+    );
+    
+    // Calculate the total column span needed for loading/no data rows
+    const totalColumns = tableColumns.length;
 
-    // --- Render: Table Rows ---
     const renderTableRows = () => {
-        if (isLoading) { return (<tr><td colSpan={6} className="text-center py-5"><Spinner size="sm" className="me-2" /> Loading Indents...</td></tr>); }
-        if (fetchError) { return (<tr><td colSpan={6} className="text-center py-5"><Alert color="danger" className="mb-0">{fetchError}</Alert></td></tr>); }
+        if (isLoading) { return (<tr><td colSpan={totalColumns} className="text-center py-5"><Spinner size="sm" className="me-2" /> Loading Indents...</td></tr>); }
+        if (fetchError) { return (<tr><td colSpan={totalColumns} className="text-center py-5"><Alert color="danger" className="mb-0">{fetchError}</Alert></td></tr>); }
         if (!paginatedData || paginatedData.length === 0) {
-            return (<tr><td colSpan={6} style={{ textAlign: 'center', padding: '24px' }}>No documents found in the selected queue.</td></tr>);
+            return (<tr><td colSpan={totalColumns} style={{ textAlign: 'center', padding: '24px' }}>No documents found in the selected queue.</td></tr>);
         }
 
         return paginatedData.map((indent) => (
@@ -701,27 +692,30 @@ const ViewIndent = () => {
                     <Button color="primary" size="sm" onClick={() => handleViewClick(indent)}>View</Button>
                 </td>
 
-                <td style={{ textAlign: 'center' }}>
-                    <div className="d-flex justify-content-center align-items-center gap-2">
-                        {/* PM Action */}
-                        {indent.status === 'Returned for Revision' && (
-                            <Button color="success" size="sm" onClick={() => handleOpenPmResubmit(indent)}>Resubmit</Button>
-                        )}
-                        {/* Officer Action */}
-                        {indent.status === 'To Be Approved' && (<>
-                            <Button color="success" size="sm" onClick={() => handleOpenApprove(indent)}>Approve</Button>
-                            <Button color="danger" size="sm" onClick={() => handleOpenReject(indent)}>Reject</Button>
-                        </>)}
-                        {(indent.status === 'Approved' || indent.status === 'Rejected') && (
-                            <span className="text-muted" style={{ fontSize: '0.8rem' }}>N/A</span>
-                        )}
-                    </div>
-                </td>
+                {/* Conditionally render the Action cell */}
+                {viewStatus !== 'approved' && (
+                    <td style={{ textAlign: 'center' }}>
+                        <div className="d-flex justify-content-center align-items-center gap-2">
+                            {/* PM Action */}
+                            {indent.status === 'Returned for Revision' && (
+                                <Button color="success" size="sm" onClick={() => handleOpenPmResubmit(indent)}>Resubmit</Button>
+                            )}
+                            {/* Officer Action */}
+                            {indent.status === 'To Be Approved' && (<>
+                                <Button color="success" size="sm" onClick={() => handleOpenApprove(indent)}>Approve</Button>
+                                <Button color="danger" size="sm" onClick={() => handleOpenReject(indent)}>Reject</Button>
+                            </>)}
+                            {(indent.status === 'Approved' || indent.status === 'Rejected') && (
+                                <span className="text-muted" style={{ fontSize: '0.8rem' }}>N/A</span>
+                            )}
+                        </div>
+                    </td>
+                )}
             </tr>
         ));
     };
 
-    // --- Render: Pagination ---
+    // --- Render: Pagination (Unchanged) ---
     const renderPagination = () => {
         const pageSizeOptions = [{ value: 5, label: '5' }, { value: 10, label: '10' }, { value: 25, label: '25' }, { value: -1, label: 'All' }];
         const totalPages = pageCount;
@@ -758,7 +752,6 @@ const ViewIndent = () => {
         );
     };
 
-    
 
     return (
         <div className="page-content">
@@ -993,7 +986,6 @@ const ViewIndent = () => {
                     </ModalBody>
                 </Modal>
             </Container>
-            {}
             <style>{`
                 /* Ensure horizontal scrollbar for overflowing content in the table */
                 .table-responsive { overflow-x: auto; }
@@ -1016,3 +1008,5 @@ const ViewIndent = () => {
 };
 
 export default ViewIndent;
+
+

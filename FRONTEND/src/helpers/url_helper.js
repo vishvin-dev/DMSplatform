@@ -327,6 +327,7 @@ export const GET_MANAGE_USER_DROPDOWNS="/backend-service/editUser/getDpdwns";
 export const GET_CATEGORY_CREATION = "/backend-service/documentCategory";
 export const GET_QC_DOCUMENT = "/backend-service/qcUpload";
 export const POST_CREATE_INDENT = "/backend-service/indent";
+export const INDENT_PROJECT_HEAD = "/backend-service/indent/IndentProjectHead";
 
 //**************** */
 
