@@ -62,10 +62,12 @@ const renderAcknowledgementTemplate = (ackData) => {
     const selectedOptionsWithQuantity = ackData.selectedOptions || [];
     const isApprovedStatus = ackData.status === 'Approved';
     const isResubmittedStatus = ackData.status === 'Resubmitted';
+    const isAcknowledgedStatus = ackData.status === 'Acknowledged';
     
     let titleText = 'Acknowledgement of Physical Records';
     if (isApprovedStatus) titleText = 'Confirmation of Records for Manager Review (Officer Approved)';
     if (isResubmittedStatus) titleText = 'RESUBMITTED: Records Awaiting Correction';
+    if (isAcknowledgedStatus) titleText = 'FINAL ACKNOWLEDGEMENT: Physical Records Received';
     
     return (
         <div className="a4-sheet-modal" style={{ backgroundImage: `url(${letterheadImg})` }}>
@@ -85,7 +87,13 @@ const renderAcknowledgementTemplate = (ackData) => {
                     <thead><tr><th>SL NO</th><th>Division</th><th>Sub-Division</th><th>Section / Sub-Division</th><th>Quantity Received</th></tr></thead>
                     <tbody>
                         {selectedOptionsWithQuantity.map((option, index) => (
-                            <tr key={index}><td>{index + 1}</td><td>{ackData.division}</td><td>{ackData.subDivision}</td><td>{option.name}</td><td>{option.quantity}</td></tr>
+                            <tr key={index}>
+                                <td>{index + 1}</td>
+                                <td>{option.divisionName || ackData.division}</td> {/* Use per-row name if available */}
+                                <td>{option.subDivisionName || ackData.subDivision}</td> {/* Use per-row name if available */}
+                                <td>{option.name}</td> {/* Display only the specific section name */}
+                                <td>{option.quantity}</td>
+                            </tr>
                         ))}
                     </tbody>
                 </Table>
@@ -102,84 +110,127 @@ const renderAcknowledgementTemplate = (ackData) => {
 
 const normalizeManagerIndentData = (apiData) => {
     return apiData.map(item => {
-        const createdDate = new Date(item.IndentCreatedOn || new Date());
-        const status = STATUS_MAP[item.Status_Id] || 'Unknown';
+        // Use ApprovedOn for acknowledged date, fall back to UploadedAt/IndentCreatedOn
+        const createdDate = new Date(item.ApprovedOn || item.UploadedAt || item.IndentCreatedOn || new Date());
+        // Use StatusName if available, otherwise map IndentStatus_Id/Status_Id
+        const status = item.StatusName || STATUS_MAP[item.IndentStatus_Id || item.Status_Id] || 'Unknown';
         
         let selectedOptions = [];
         
         // Extract required fields from API response item for the section payload structure
         const indentId = item.Indent_Id || 0;
-        const versionLabel = item.VersionLabel || 'v1';
+        const versionLabel = item.VersionLabels || item.VersionLabel || 'v1';
         const divCode = item.div_codes || '';
         const sdCode = item.sd_codes || '';
-        const officerEnteredQty = item.EnteredQty || item.EnteredQtys || '0';
+        
+        // **CRITICAL FIELDS FOR QUANTITY AND NAMES**
+        const finalApprovedQtys = item.FinalApprovedQtys || item.FinalApprovedQty || '0';
+        const officerEnteredQtys = item.OfficerEnteredQtys || item.OfficerEnteredQty || item.EnteredQtys || item.EnteredQty || '0';
         const sectionQtyDetailId = item.SectionQtyDetail_Id || 0;
         const sectionOfficeCode = item.so_codes || item.sd_codes || '';
-        const sectionOfficeName = item.section_names || item.SubDivisionName || 'N/A';
+        
+        // Use the collective names from the primary object, as they define the context
+        const divisionNames = item.division_names || item.DivisionNames || 'N/A';
+        const subDivisionNames = item.subdivision_names || item.SubDivisionNames || 'N/A';
+        const sectionNames = item.section_names || item.SectionNames || 'N/A';
 
+        // Logic to select which quantity to display in the view modal's Quantity Received column:
+        const displayQuantitySource = (status === 'Acknowledged') ? finalApprovedQtys : officerEnteredQtys;
+        let displayQuantities = (displayQuantitySource.toString()).split(',').map(qty => parseInt(qty.trim(), 10) || 0);
 
-        // 1. Process explicit sections array (preferred, as it is detailed)
+        // Parse officer quantities for the OfficerEnteredQty field used in sub-modals (Resubmit/Quantity Check)
+        const officerQuantities = (officerEnteredQtys.toString()).split(',').map(qty => parseInt(qty.trim(), 10) || 0);
+        
+        // --- Populate selectedOptions array ---
         if (Array.isArray(item.sections) && item.sections.length > 0) {
-            selectedOptions = item.sections.map(section => ({
-                name: section.SectionOfficeName || section.SubDivisionName || 'N/A',
-                code: section.so_code || section.sd_code,
-                quantity: parseInt(section.EnteredQty, 10) || 0,
+            
+            selectedOptions = item.sections.map((section, index) => {
+                const oQty = section.OQty || '0';
+                const finalQty = section.FinalApprovedQty || oQty; // Use FinalApprovedQty if available
                 
-                // Fields required for the final Flag 3 API payload
-                SectionQtyDetail_Id: section.SectionQtyDetail_Id || 0,
-                // Indent_Id must be included in the sections array per the screenshot sample
-                Indent_Id: indentId, 
-                VersionLabel: versionLabel,
-                div_code: divCode,
-                sd_code: sdCode,
-                so_code: section.so_code || section.sd_code, 
-                OfficerEnteredQty: section.EnteredQty || '0',
-                FinalApprovedQty: section.EnteredQty || '0', 
-            }));
+                const quantityToDisplay = parseInt((status === 'Acknowledged' ? finalQty : oQty), 10) || 0; 
+                
+                // CRITICAL FIX: Use section_names from inside the section object 
+                const sectionName = section.section_names || section.so_code || 'N/A';
+                
+                // CRITICAL FIX: Extract Division/Subdivision names from the section object for per-row display
+                const sectionDivisionName = section.division_names || divisionNames;
+                const sectionSubDivisionName = section.subdivision_names || subDivisionNames;
+
+                return {
+                    name: sectionName, 
+                    code: section.so_code || section.sd_code,
+                    quantity: quantityToDisplay,
+                    
+                    // Fields for row display in Modal
+                    divisionName: sectionDivisionName, // Pass to renderAcknowledgementTemplate
+                    subDivisionName: sectionSubDivisionName, // Pass to renderAcknowledgementTemplate
+                    
+                    // Fields required for the final Flag 3 API payload
+                    SectionQtyDetail_Id: section.SectionQtyDetail_Id || 0,
+                    Indent_Id: indentId, 
+                    VersionLabel: versionLabel,
+                    div_code: section.div_code || divCode,
+                    sd_code: section.sd_code || sdCode,
+                    so_code: section.so_code || section.sd_code, 
+                    OfficerEnteredQty: oQty, 
+                    FinalApprovedQty: finalQty, 
+                };
+            });
         } 
-        // 2. Fallback to comma-separated fields or single fields
+        // 2. Fallback to comma-separated fields (used for Flag 5 or simplified Flag 2)
         else {
-            const names = (item.section_names || sectionOfficeName).split(',').map(name => name.trim()).filter(name => name.length > 0);
+            const names = (sectionNames).split(',').map(name => name.trim()).filter(name => name.length > 0);
             const codes = (item.so_codes || item.sd_codes || sectionOfficeCode).split(',').map(code => code.trim()).filter(code => code.length > 0);
-            const quantities = (item.EnteredQtys || officerEnteredQty).split(',').map(qty => parseInt(qty.trim(), 10) || 0);
             const detailIds = (item.SectionQtyDetail_Ids || sectionQtyDetailId.toString()).split(',').map(id => parseInt(id.trim(), 10) || 0);
 
             selectedOptions = names.map((name, index) => {
-                const quantity = quantities[index] !== undefined ? quantities[index] : 0;
+                const finalQuantity = displayQuantities[index] !== undefined ? displayQuantities[index] : 0;
+                const officerQty = officerQuantities[index] !== undefined ? officerQuantities[index] : 0;
                 const code = codes[index] || sectionOfficeCode; 
                 const detailId = detailIds[index] || sectionQtyDetailId;
 
                 return {
                     name: name, 
                     code: code,
-                    quantity: quantity, 
+                    quantity: finalQuantity, 
+                    
+                    // Fields for row display in Modal (using parent object's collective names)
+                    divisionName: divisionNames,
+                    subDivisionName: subDivisionNames,
                     
                     // Fields required for the final Flag 3 API payload
                     SectionQtyDetail_Id: detailId,
-                    // Indent_Id must be included in the sections array per the screenshot sample
                     Indent_Id: indentId, 
                     VersionLabel: versionLabel,
                     div_code: divCode,
                     sd_code: sdCode,
                     so_code: codes[index] || sectionOfficeCode, 
-                    OfficerEnteredQty: quantity.toString(),
-                    FinalApprovedQty: quantity.toString(), 
+                    OfficerEnteredQty: officerQty.toString(), 
+                    FinalApprovedQty: finalQuantity.toString(), 
                 };
             });
         }
 
         // Generate the joined string of names for display in modals
         const selectedOptionNames = selectedOptions.map(o => o.name).filter(n => n && n !== 'N/A').join(' / ');
+        
+        // Determine the "Approved By" name. 
+        const approvedBy = (status === 'Approved' || status === 'Acknowledged' || status === 'Resubmitted') 
+                            ? item.ApprovedByName || item.RequestUserName 
+                            : item.CreatedByName || item.RequestUserName;
 
         return {
             // General Display fields
             indentNumber: item.fullIndentNo || item.Indent_No || item.Indent_Id,
-            createdBy: item.CreatedByName || item.RequestUserName || 'N/A',
-            createdOn: item.IndentCreatedOn || new Date(),
+            createdBy: item.CreatedByName || item.RequestUserName || 'N/A', // Original creator for reference
+            approvedBy: approvedBy || 'N/A', // The name of the person who approved/acknowledged it last
+            createdOn: item.ApprovedOn || item.UploadedAt || item.IndentCreatedOn || new Date(), // Use ApprovedOn/UploadedAt for relevant date
             date: createdDate.toLocaleDateString('en-GB'),
             time: createdDate.toLocaleTimeString('en-US', { hour12: true }),
-            division: item.division_names || 'N/A',
-            subDivision: item.subdivision_names || 'N/A',
+            // Use the correct field names for Division/SubDivision display (these are often collective, but kept for non-section-based display)
+            division: divisionNames,
+            subDivision: subDivisionNames,
             divisionCode: item.div_codes || null,
             subDivisionCode: item.sd_codes || null,
             submitTo: item.SubmitTo || 'subdivision', 
@@ -194,6 +245,8 @@ const normalizeManagerIndentData = (apiData) => {
     });
 };
 
+// --- API FETCH FUNCTIONS ---
+
 const fetchManagerAcknowledgeData = async (sessionData, setIndents, setIsLoading, setError) => {
     const userId = sessionData.userId || null;
     const requestUserName = sessionData.requestUserName || null; 
@@ -203,7 +256,7 @@ const fetchManagerAcknowledgeData = async (sessionData, setIndents, setIsLoading
     setIndents([]);
 
     const payload = { 
-        "flagId": 2, // API Flag for Acknowledge Queue Data
+        "flagId": 2, // API Flag for Approved/Acknowledge Queue Data (Pending Manager Acknowledge)
         "CreatedByUser_Id": userId, 
         "RequestUserName": requestUserName 
     };
@@ -211,18 +264,59 @@ const fetchManagerAcknowledgeData = async (sessionData, setIndents, setIsLoading
     try {
         const response = await IndentProjectHead(payload);
 
-        if (response && response.status === 'success' && response.result) {
-            const apiData = Array.isArray(response.result) ? response.result : [];
+        // **CRITICAL FIX: Handle nested response structure**
+        const resultData = response && response.result && response.result.result ? response.result.result : response.result;
+        
+        if (response && response.status === 'success' && resultData) {
+            const apiData = Array.isArray(resultData) ? resultData : [];
             const normalizedData = normalizeManagerIndentData(apiData);
             setIndents(normalizedData);
         } else if (response && response.status === 'success') {
             setIndents([]);
         } else {
-            setError(response.message || 'Failed to fetch acknowledge indents (Flag 2).');
+            setError(response.message || response.result?.message || 'Failed to fetch acknowledge indents (Flag 2).');
         }
     } catch (err) {
         console.error("API Fetch Error (Flag 2):", err);
         setError('An unexpected network error occurred while fetching the acknowledge queue.');
+    } finally {
+        setIsLoading(false);
+    }
+};
+
+const fetchManagerAcknowledgedData = async (sessionData, setIndents, setIsLoading, setError) => {
+    const userId = sessionData.userId || null;
+    const requestUserName = sessionData.requestUserName || null; 
+
+    setIsLoading(true);
+    setError(null);
+    setIndents([]);
+
+    const payload = { 
+        "flagId": 5, // API Flag for ACKNOWLEDGED Indent Data (Completed)
+        "CreatedByUser_Id": userId, 
+        "RequestUserName": requestUserName 
+    };
+
+    try {
+        const response = await IndentProjectHead(payload);
+
+        // **CRITICAL FIX: Handle nested response structure**
+        const resultData = response && response.result && response.result.result ? response.result.result : response.result;
+
+        if (response && response.status === 'success' && resultData) {
+            const apiData = Array.isArray(resultData) ? resultData : [];
+            // Map the status ID 3 to 'Acknowledged' manually as this queue is for status 3 data
+            const normalizedData = normalizeManagerIndentData(apiData.map(item => ({...item, Status_Id: 3})));
+            setIndents(normalizedData);
+        } else if (response && response.status === 'success') {
+            setIndents([]);
+        } else {
+            setError(response.message || response.result?.message || 'Failed to fetch acknowledged indents (Flag 5).');
+        }
+    } catch (err) {
+        console.error("API Fetch Error (Flag 5):", err);
+        setError('An unexpected network error occurred while fetching the acknowledged indents.');
     } finally {
         setIsLoading(false);
     }
@@ -235,7 +329,7 @@ const fetchManagerAcknowledgeCount = async (sessionData, setIsCountLoading, setC
     setIsCountLoading(true);
     
     const countPayload = { 
-        "flagId": 1, // API Flag for Acknowledge Queue Count
+        "flagId": 1, // API Flag for Approved/Acknowledge Queue Count (Pending Manager Acknowledge)
         "CreatedByUser_Id": userId, 
         "RequestUserName": requestUserName 
     };
@@ -245,15 +339,20 @@ const fetchManagerAcknowledgeCount = async (sessionData, setIsCountLoading, setC
         let count = 0;
 
         if (response && response.status === 'success') {
-            if (Array.isArray(response.result) && response.result.length > 0) {
-                const nestedCount = response.result[0].TotalApprovedIndents;
-                if (nestedCount !== undefined) {
-                    count = nestedCount;
-                }
-            } else if (typeof response.result === 'number') {
-                count = response.result;
-            } else if (response.count !== undefined) {
+            // Check nested result structure first
+            const nestedResult = response.result && response.result.result && Array.isArray(response.result.result) ? response.result.result : response.result;
+            
+            // Priority 1: Check nested 'totalCount' from the result array, as specified
+            if (Array.isArray(nestedResult) && nestedResult.length > 0 && nestedResult[0].totalCount !== undefined) {
+                count = nestedResult[0].totalCount;
+            } 
+            // Priority 2: Fallback to top-level 'count' or nested count field
+            else if (response.count !== undefined) {
                 count = response.count;
+            } 
+            // Fallback 3: Check nested 'TotalApprovedIndents' (older structure)
+            else if (Array.isArray(nestedResult) && nestedResult.length > 0 && nestedResult[0].TotalApprovedIndents !== undefined) {
+                count = nestedResult[0].TotalApprovedIndents;
             }
             
             setCount(count);
@@ -263,6 +362,52 @@ const fetchManagerAcknowledgeCount = async (sessionData, setIsCountLoading, setC
         }
     } catch (err) {
         console.error("Network error fetching acknowledge count (Flag 1):", err);
+        setCount(0);
+    } finally {
+        setIsCountLoading(false);
+    }
+};
+
+const fetchManagerAcknowledgedCount = async (sessionData, setIsCountLoading, setCount) => {
+    const userId = sessionData.userId || null;
+    const requestUserName = sessionData.requestUserName || null;
+    
+    setIsCountLoading(true);
+    
+    const countPayload = { 
+        "flagId": 4, // API Flag for ACKNOWLEDGED Indent Count (Completed)
+        "CreatedByUser_Id": userId, 
+        "RequestUserName": requestUserName 
+    };
+
+    try {
+        const response = await IndentProjectHead(countPayload);
+        let count = 0;
+        
+        if (response && response.status === 'success') {
+            // Check nested result structure first
+            const nestedResult = response.result && response.result.result && Array.isArray(response.result.result) ? response.result.result : response.result;
+
+            // Priority 1: Check nested 'totalCount' from the result array, as specified
+            if (Array.isArray(nestedResult) && nestedResult.length > 0 && nestedResult[0].totalCount !== undefined) {
+                count = nestedResult[0].totalCount;
+            } 
+            // Priority 2: Fallback to top-level 'count' or nested count field
+            else if (response.count !== undefined) {
+                count = response.count;
+            } 
+            // Fallback 3: Check nested 'TotalAcknowledgedIndents' (older structure)
+            else if (Array.isArray(nestedResult) && nestedResult.length > 0 && nestedResult[0].TotalAcknowledgedIndents !== undefined) {
+                count = nestedResult[0].TotalAcknowledgedIndents;
+            }
+            
+            setCount(count);
+        } else {
+            console.error("API reported failure for Flag 4 count:", response.message || 'Unknown API Error');
+            setCount(0);
+        }
+    } catch (err) {
+        console.error("Network error fetching acknowledged count (Flag 4):", err);
         setCount(0);
     } finally {
         setIsCountLoading(false);
@@ -282,10 +427,12 @@ const ManagerApprovalView = () => {
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [fetchError, setFetchError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+    // 'approved' is for Flag 2 data (pending acknowledge), 'acknowledged' is for Flag 5 (completed)
     const [viewStatus, setViewStatus] = useState('approved'); 
 
     // Counts (API driven)
-    const [acknowledgeCount, setAcknowledgeCount] = useState(0);
+    const [acknowledgeCount, setAcknowledgeCount] = useState(0); // Flag 1 (Pending Acknowledge)
+    const [acknowledgedCount, setAcknowledgedCount] = useState(0); // Flag 4 (Acknowledged)
     const [isCountLoading, setIsCountLoading] = useState(false); 
 
     // Modals & Forms
@@ -359,14 +506,22 @@ const ManagerApprovalView = () => {
         setFetchError(null);
         setPage(0);
 
+        // Fetch Data based on selected viewStatus
         if (viewStatus === 'approved') {
             fetchManagerAcknowledgeData(sessionData, setIndents, setIsLoading, setFetchError);
-        } else {
+        } else if (viewStatus === 'acknowledged') {
+            // Fetch data for Flag 5
+            fetchManagerAcknowledgedData(sessionData, setIndents, setIsLoading, setFetchError);
+        }
+         else {
             setIndents([]);
             setIsLoading(false);
         }
         
-        fetchManagerAcknowledgeCount(sessionData, setIsCountLoading, setAcknowledgeCount);
+        // Fetch All Counts
+        fetchManagerAcknowledgeCount(sessionData, setIsCountLoading, setAcknowledgeCount); // Flag 1
+        // Fetch count for Flag 4
+        fetchManagerAcknowledgedCount(sessionData, setIsCountLoading, setAcknowledgedCount); // Flag 4
     }, [sessionData, viewStatus]);
 
     useEffect(() => {
@@ -381,7 +536,7 @@ const ManagerApprovalView = () => {
         if (searchTerm.trim() !== '') {
             results = results.filter(indent =>
                 (indent.indentNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (indent.createdBy || '').toLowerCase().includes(searchTerm.toLowerCase())
+                (indent.approvedBy || '').toLowerCase().includes(searchTerm.toLowerCase()) // Filter on Approved By
             );
         }
         
@@ -452,7 +607,9 @@ const ManagerApprovalView = () => {
         // Prepare initial section quantities for editing in the modal
         const initialQuantities = selectedIndent.selectedOptions.map(option => ({
             ...option,
-            quantity: option.quantity.toString() || '' // Use the normalized quantity
+            // When opening acknowledge modal (from Approved queue), pre-fill the input with the quantity 
+            // the officer confirmed, which is stored in the 'quantity' field of normalized data for Flag 2.
+            quantity: option.quantity.toString() || '' 
         }));
         
         setSectionQuantities(initialQuantities);
@@ -498,11 +655,17 @@ const ManagerApprovalView = () => {
             "Comment": resubmitComment,
             "UpdatedByUser_Id": sessionData.userId || null,
             "RequestUserName": sessionData.requestUserName || null,
-            "quantities": sectionQuantities.map(q => ({ code: q.code, qty: parseInt(q.quantity, 10) }))
+            // Construct sections array for payload 
+            "sections": sectionQuantities.map(q => ({ 
+                ...selectedIndent.selectedOptions.find(opt => opt.code === q.code), // Copy metadata
+                FinalApprovedQty: q.quantity, // Send the corrected quantity as FinalApprovedQty
+                OfficerEnteredQty: selectedIndent.selectedOptions.find(opt => opt.code === q.code)?.OfficerEnteredQty, // Keep original
+            })),
         };
 
         try {
-            const response = { status: 'success', message: 'Indent sent for revision.' }; // Simulate API success
+            // NOTE: Using a simulated response here as the full backend implementation for flag 10 is missing.
+            const response = { status: 'success', message: 'Indent sent for revision.' }; 
             // const response = await IndentProjectHead(resubmitPayload); 
 
             if (response.status === 'success') {
@@ -546,7 +709,8 @@ const ManagerApprovalView = () => {
         };
 
         try {
-            const response = { status: 'success', message: 'Indent permanently rejected.' }; // Simulate API success
+            // NOTE: Using a simulated response here as the full backend implementation for flag 9 is missing.
+            const response = { status: 'success', message: 'Indent permanently rejected.' }; 
             // const response = await IndentProjectHead(rejectPayload); 
 
             if (response.status === 'success') {
@@ -700,7 +864,8 @@ const ManagerApprovalView = () => {
         const columns = [
             { header: 'Indent number', accessorKey: 'indentNumber', sortable: true },
             { header: 'Status', accessorKey: 'status', sortable: true },
-            { header: 'Created by', accessorKey: 'createdBy', sortable: true },
+            // UPDATED: Change 'Created by' to 'Approved By' and use accessorKey 'approvedBy'
+            { header: 'Approved By', accessorKey: 'approvedBy', sortable: true }, 
             { header: 'Created on', accessorKey: 'createdOn', sortable: true },
             { header: 'View Indent', accessorKey: 'action', sortable: false },
         ];
@@ -731,7 +896,9 @@ const ManagerApprovalView = () => {
         if (!paginatedData || paginatedData.length === 0) {
             const noDataMessage = viewStatus === 'approved' 
                 ? "No pending indents in the Acknowledge Queue." 
-                : "No indents found in this queue (API not integrated for this status).";
+                : viewStatus === 'acknowledged'
+                ? "No indents found in the Acknowledged list."
+                : "No indents found in this queue.";
 
             return (<tr><td colSpan={5} style={{ textAlign: 'center', padding: '24px' }}>{noDataMessage}</td></tr>);
         }
@@ -739,7 +906,8 @@ const ManagerApprovalView = () => {
             <tr key={indent.indentNumber}>
                 <td>{indent.indentNumber}</td>
                 <td><span className={`badge bg-${getStatusColor(indent.status)}`}>{indent.status}</span></td>
-                <td>{indent.createdBy}</td>
+                {/* UPDATED: Display Approved By Name */}
+                <td>{indent.approvedBy}</td> 
                 <td>{new Date(indent.createdOn).toLocaleString()}</td>
                 <td className="text-center">
                     <Button color="primary" size="sm" onClick={() => handleViewClick(indent)}>View</Button>
@@ -801,23 +969,27 @@ const ManagerApprovalView = () => {
                                     </Button>
                                     <Button 
                                         color={viewStatus === 'acknowledged' ? 'info' : 'light'} 
-                                        onClick={() => setViewStatus('acknowledged')}>
-                                        Acknowledged (0)
+                                        onClick={() => setViewStatus('acknowledged')}
+                                        disabled={isLoading}>
+                                        Acknowledged ({isCountLoading ? <Spinner size="sm" color="info" /> : acknowledgedCount})
                                     </Button>
                                     <Button 
                                         color={viewStatus === 'resubmitted' ? 'primary' : 'light'} 
-                                        onClick={() => setViewStatus('resubmitted')}>
-                                        Resubmitted to Officer (0)
+                                        onClick={() => setViewStatus('resubmitted')}
+                                        disabled={isLoading}>
+                                        Resubmitted to Officer (0) {/* Placeholder for other flags */}
                                     </Button>
                                     <Button 
                                         color={viewStatus === 'to_approve' ? 'warning' : 'light'} 
-                                        onClick={() => setViewStatus('to_approve')}>
-                                        Pending Officer Approval (0)
+                                        onClick={() => setViewStatus('to_approve')}
+                                        disabled={isLoading}>
+                                        Pending Officer Approval (0) {/* Placeholder for other flags */}
                                     </Button>
                                     <Button 
                                         color={viewStatus === 'rejected' ? 'danger' : 'light'} 
-                                        onClick={() => setViewStatus('rejected')}>
-                                        Rejected (0)
+                                        onClick={() => setViewStatus('rejected')}
+                                        disabled={isLoading}>
+                                        Rejected (0) {/* Placeholder for other flags */}
                                     </Button>
                                 </div>
                             </Col>
@@ -825,7 +997,7 @@ const ManagerApprovalView = () => {
                         <Row className="mb-3">
                             <Col sm={4}>
                                 <div className="search-box">
-                                    <Input type="text" className="form-control" placeholder="Search by Indent # or Creator..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                                    <Input type="text" className="form-control" placeholder="Search by Indent # or Creator/Approver..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                                     <i className="ri-search-line search-icon"></i>
                                 </div>
                             </Col>
@@ -845,6 +1017,7 @@ const ManagerApprovalView = () => {
                     <Modal isOpen={isViewModalOpen} toggle={toggleViewModal} centered size="lg">
                         <ModalHeader toggle={toggleViewModal}>Indent Details: {selectedIndent.indentNumber} ({selectedIndent.status})</ModalHeader>
                         <ModalBody className="scrollable-modal-body">
+                            {/* The acknowledge template relies on 'selectedIndent.selectedOptions[i].quantity' for the count display */}
                             {['Approved', 'Acknowledged', 'Resubmitted'].includes(selectedIndent.status) ? 
                                 renderAcknowledgementTemplate(selectedIndent) : 
                                 renderIndentTemplate(selectedIndent)
@@ -893,7 +1066,8 @@ const ManagerApprovalView = () => {
                                         </thead>
                                         <tbody>
                                             {selectedIndent && sectionQuantities.map((item) => {
-                                                const officerQty = selectedIndent.selectedOptions.find(opt => opt.code === item.code)?.quantity || '0';
+                                                // OfficerEnteredQty field is correctly available in item.OfficerEnteredQty because of the normalization logic
+                                                const officerQty = selectedIndent.selectedOptions.find(opt => opt.code === item.code)?.OfficerEnteredQty || '0';
                                                 return (
                                                     <tr key={item.code}>
                                                         <td>{item.name}</td>
@@ -937,7 +1111,7 @@ const ManagerApprovalView = () => {
                     </ModalFooter>
                 </Modal>
 
-                {/* 3. Reject Indent Modal */}
+                /* 3. Reject Indent Modal */
                 <Modal isOpen={isRejectModalOpen} toggle={toggleRejectModal} centered>
                     <ModalHeader toggle={toggleRejectModal}>Reject Indent: {selectedIndent?.indentNumber}</ModalHeader>
                     <ModalBody>
@@ -955,7 +1129,7 @@ const ManagerApprovalView = () => {
                     </ModalFooter>
                 </Modal>
                 
-                {/* 4. Quantity Entry Modal (Manager's Final Check before Acknowledge) */}
+                /* 4. Quantity Entry Modal (Manager's Final Check before Acknowledge) */
                 <Modal isOpen={isQuantityModalOpen} toggle={toggleQuantityModal} centered>
                     <ModalHeader toggle={toggleQuantityModal}>
                         Confirm Quantities for Final Acknowledgment: {selectedIndent?.indentNumber}
@@ -975,8 +1149,8 @@ const ManagerApprovalView = () => {
                                     {selectedIndent && sectionQuantities.map((item) => (
                                         <tr key={item.code}>
                                             <td>{item.name}</td>
-                                            {/* **DISPLAYING OFFICER CONFIRMED QTY** */}
-                                            <td><span className="fw-bold text-success">{selectedIndent.selectedOptions.find(opt => opt.code === item.code)?.quantity || '0'}</span></td>
+                                            {/* **DISPLAYING OFFICER CONFIRMED QTY (From normalized data)** */}
+                                            <td><span className="fw-bold text-success">{selectedIndent.selectedOptions.find(opt => opt.code === item.code)?.OfficerEnteredQty || '0'}</span></td>
                                             <td>
                                                 <Input 
                                                     type="number" 
