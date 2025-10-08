@@ -5,69 +5,98 @@ import { getFullIndentNo } from "../utils/IndentPrefix/indent.js"
 
 //THIS IS THE FETCHING THE APPROVED DOCUMENTS FOR THE PROJECT HEAD HIS CREATED INDENTS_COUNTS=================================
 export const fetchApprovedIndentForProjectHeads = async (CreatedByUser_Id) => {
-    try {
-        const [result] = await pool.execute(`
-        
-           SELECT 
-              MAX(s.SectionQtyDetail_Id) AS SectionQtyDetail_Id,
-              i.Indent_Id,
-              i.Indent_No,
-              i.Status_Id,
-              sm.StatusName,
-              i.CreatedOn AS IndentCreatedOn,
-              i.RequestUserName,
-              u.User_Id AS CreatedByUser_Id,
-              u.FirstName AS CreatedByName,
-              r.Role_Id,
-              r.RoleName AS SubmitToRole,
-              GROUP_CONCAT(DISTINCT z.div_code) AS div_codes,
-              GROUP_CONCAT(DISTINCT z.sd_code) AS sd_codes,
-              GROUP_CONCAT(DISTINCT z.so_code) AS so_codes,
-              GROUP_CONCAT(DISTINCT z.division) AS division_names,
-              GROUP_CONCAT(DISTINCT z.sub_division) AS subdivision_names,
-              GROUP_CONCAT(DISTINCT z.section_office) AS section_names,
-              MAX(s.VersionLabel) AS VersionLabel,
-              MAX(s.UploadedAt) AS UploadedAt,
-              GROUP_CONCAT(s.EnteredQty) AS EnteredQtys,   -- ✅ comma-separated
-              MAX(s.comment) AS comment
-          FROM 
-              indentsectionqtydetail s
-          JOIN indent i 
-              ON s.Indent_Id = i.Indent_Id
-          LEFT JOIN user u 
-              ON s.CreatedByUser_Id = u.User_Id
-          LEFT JOIN roles r 
-              ON s.Role_Id = r.Role_Id
-          LEFT JOIN indentstatusmaster sm 
-              ON s.Status_Id = sm.Status_Id
-          LEFT JOIN zone_codes z 
-              ON s.div_code = z.div_code 
-            AND s.sd_code = z.sd_code 
-            AND s.so_code = z.so_code
-          WHERE 
-              s.Status_Id = 2
-              AND s.CreatedByUser_Id = ?
-          GROUP BY 
-              i.Indent_Id, i.Indent_No, i.Status_Id, sm.StatusName,
-              i.CreatedOn, i.RequestUserName,
-              u.User_Id, u.FirstName,
-              r.Role_Id, r.RoleName
-          ORDER BY 
-              MAX(s.UploadedAt) DESC;
+  try {
+    // Step 1️: fetch all approved section details with related info
+    const [rows] = await pool.execute(`
+      SELECT 
+        s.SectionQtyDetail_Id,
+        s.Indent_Id,
+        s.EnteredQty AS OQty,
+        s.VersionLabel,
+        s.comment AS ApprovalHistoryComment,
+        s.UploadedAt,
+        s.div_code,
+        s.sd_code,
+        s.so_code,
+        s.Role_Id AS DO_Role_Id,
+        i.Indent_No,
+        i.Status_Id AS IndentStatus_Id,
+        sm.StatusName,
+        i.RequestUserName,
+        u.User_Id AS CreatedByUser_Id,
+        u.FirstName AS CreatedByName,
+        r.Role_Id AS SubmitToRole_Id,
+        r.RoleName AS SubmitToRole,
+        z.division,
+        z.sub_division,
+        z.section_office
+      FROM indentsectionqtydetail s
+      JOIN indent i ON s.Indent_Id = i.Indent_Id
+      LEFT JOIN user u ON i.CreatedByUser_Id = u.User_Id
+      LEFT JOIN roles r ON i.Role_Id = r.Role_Id
+      LEFT JOIN indentstatusmaster sm ON i.Status_Id = sm.Status_Id
+      LEFT JOIN zone_codes z ON s.div_code = z.div_code 
+        AND s.sd_code = z.sd_code 
+        AND s.so_code = z.so_code
+      WHERE s.Status_Id = 2 AND s.CreatedByUser_Id = ?
+      ORDER BY s.Indent_Id, s.SectionQtyDetail_Id
+    `, [CreatedByUser_Id]);
 
-        `, [CreatedByUser_Id]);
+    // Step 2️: group sections by Indent_Id
+    const indentsMap = {};
+    rows.forEach(row => {
+      if (!indentsMap[row.Indent_Id]) {
+        indentsMap[row.Indent_Id] = {
+          Indent_Id: row.Indent_Id,
+          Indent_No: row.Indent_No,
+          fullIndentNo: getFullIndentNo(row.Indent_No),
+          IndentStatus_Id: row.IndentStatus_Id,
+          StatusName: row.StatusName,
+          RequestUserName: row.RequestUserName,
+          CreatedByUser_Id: row.CreatedByUser_Id,
+          CreatedByName: row.CreatedByName,
+          SubmitToRole_Id: row.SubmitToRole_Id,
+          SubmitToRole: row.SubmitToRole,
+          VersionLabel: row.VersionLabel,
+          UploadedAt: row.UploadedAt,
+        //   div_codes: row.div_code,
+        //   sd_codes: row.sd_code,
+        //   so_codes: row.so_code,
+        //   division_names: row.division,
+        //   subdivision_names: row.sub_division,
+        //   section_names: row.section_office,
+          sections: []
+        };
+      }
 
-        return result.map(row => ({
-            ...row,
-            fullIndentNo: getFullIndentNo(row.Indent_No),
+      indentsMap[row.Indent_Id].sections.push({
+        SectionQtyDetail_Id: row.SectionQtyDetail_Id,
+        OQty: row.OQty,
+        ApprovalHistoryComment: row.ApprovalHistoryComment,
+        div_code: row.div_code,
+        sd_code: row.sd_code,
+        so_code: row.so_code,
+        division_names: row.division,
+        subdivision_names: row.sub_division,
+        section_names: row.section_office,
+        DO_Role_Id: row.DO_Role_Id
+      });
+    });
 
-        }));
+    // Step 3️: convert map to array
+    return {
+      message: "Approved Indent fetched successfully",
+      status: "success",
+      count: Object.keys(indentsMap).length,
+      result: Object.values(indentsMap)
+    };
 
-    } catch (error) {
-        console.log("Error while Fetching The IndentViews", error)
-    }
+  } catch (error) {
+    console.log("Error while fetching approved indent sections:", error);
+    throw error;
+  }
+};
 
-}
 
 //============//THIS IS THE FETCHING THE APPROVED DOCUMENTS FOR THE PROJECT HEAD HIS CREATED INDENTS ALSO THIS OK (IF WE SEPRATE THE CREATOR OF THE INDENT THEN IT IS CHANGE OK )
 export const fetchApprovedIndentForProjectHeadCount = async (CreatedByUser_Id) => {
@@ -82,7 +111,7 @@ export const fetchApprovedIndentForProjectHeadCount = async (CreatedByUser_Id) =
             ON s.Indent_Id = i.Indent_Id
         WHERE 
             s.Status_Id = 2
-            AND s.CreatedByUser_Id = ?;  -- ✅ Filter by creator user
+            AND s.CreatedByUser_Id = ?;  --  Filter by creator user
 
         `, [CreatedByUser_Id]);
 
@@ -246,3 +275,67 @@ export const fetchFinalApprovedIndent = async (CreatedByUser_Id) => {
 
 
 
+// ===========================================================================================
+//THIS IS THE RESUBMIT THE INDENT QTY FOR THE DO OFFICER AGAIN FROM PROJECT HEAD
+// ===========================================================================================
+
+export const resubmittedToOfficerFromPM = async (data) => {
+  const {
+    Indent_Id,
+    SectionQtyDetail_Id,
+    ActionByUser_Id,
+    Role_Id,          // PM Role
+    DO_Role_Id,       // DO Role
+    Status_Id,        // e.g. Rejected or Resubmitted
+    PMQty,
+    OOQty,            // Officer’s original qty
+    ApprovalHistoryComment,
+  } = data;
+
+  try {
+    const [result] = await pool.execute(
+      `
+      INSERT INTO indentapprovalhistory 
+        (Indent_Id, SectionQtyDetail_Id, ActionByUser_Id, Role_Id, DO_Role_Id, 
+         Status_Id, PMQty, OOQty, ApprovalHistoryComment, ActionOn)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+      `,
+      [
+        Indent_Id,
+        SectionQtyDetail_Id,
+        ActionByUser_Id,
+        Role_Id,
+        DO_Role_Id,
+        Status_Id,
+        PMQty || null,
+        OOQty || null,
+        ApprovalHistoryComment || null,
+      ]
+    );
+
+    await pool.execute(
+      `UPDATE Indent 
+       SET Status_Id = 4, UpdatedOn = NOW() 
+       WHERE Indent_Id = ?`,
+      [Indent_Id]
+    );
+
+    // Step 3️⃣ - Update section detail table
+    await pool.execute(
+      `UPDATE IndentSectionQtyDetail 
+       SET Status_Id = 4
+       WHERE SectionQtyDetail_Id = ?`,
+      [SectionQtyDetail_Id]
+    );
+
+    return {
+      ApprovalHistory_Id: result.insertId,
+      message: "Indent resubmitted to officer successfully",
+    };
+  } catch (error) {
+    console.error("Error in resubmittedToOfficerFromPM:", error.message);
+    throw error;
+  }
+};
+// ===========================================================================================
+// ===========================================================================================

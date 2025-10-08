@@ -3,7 +3,8 @@ import {
     fetchApprovedIndentForProjectHeads,
     submitFinalApprovedIndent,
     fetchFinalApprovedIndent,
-    fetchFinalApprovedIndentCount
+    fetchFinalApprovedIndentCount,
+    resubmittedToOfficerFromPM
 } from "../../models/IndentHeadProject.js"
 
 // THIS IS THE PROJECT_HEAD SCREENS OK AND THE VIEW SCREENS OK 
@@ -17,8 +18,10 @@ export const IndentProjectHead = async (req, res) => {
                 message: "flagId is required"
             });
         }
-
-        //THIS IS THE FETCHING THE APPROVED DOCUMENTS FOR THE PROJECT HEAD HIS CREATED INDENTS_COUNTS=================================
+// =============================================================================================================
+// THIS IS THE SUBMITTING THE FINAL APPROVED THINGS ALL HERE OK FOR PROJECT HEADOK 
+// =============================================================================================================
+        //THIS IS THE FETCHING THE APPROVED DOCUMENTS FOR THE PROJECT HEAD HIS CREATED INDENTS_COUNTS===========
         if (Number(flagId) === 1) {
             const result = await fetchApprovedIndentForProjectHeadCount(data.CreatedByUser_Id);
             return res.status(200).json({
@@ -80,7 +83,23 @@ export const IndentProjectHead = async (req, res) => {
                 result,
             });
         }
-// ========================================================================
+// ===========================================================================================
+// ===========================================================================================
+
+// ===========================================================================================
+//THIS IS THE RESUBMIT THE INDENT QTY FOR THE DO OFFICER AGAIN FROM PROJECT HEAD 
+// ===========================================================================================
+ else if (Number(flagId) === 6) {
+            const result = await resubmittedToOfficerFromPM(data);
+            return res.status(200).json({
+                message: "Resbumitted Indent to The Officers successfully",
+                status: "success",
+                count: result.length,
+                result,
+            });
+        }
+// ===========================================================================================
+// ===========================================================================================
         else {
             return res.status(400).json({
                 status: "failed",
