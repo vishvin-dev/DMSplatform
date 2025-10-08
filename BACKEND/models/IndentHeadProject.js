@@ -148,43 +148,29 @@ export const submitFinalApprovedIndent = async (data) => {
     }
 };
 
-//THIS IS THE FETCHING THE APPROVED Acknowledged FOR THE PROJECT_MANAGER
-export const fetchFinalApprovedIndent = async (CreatedByUser_Id) => {
+
+// =================================================================================
+//THIS IS THE FETCHING THE APPROVED AcknowledgedCount FOR THE PROJECT_MANAGER
+export const fetchFinalApprovedIndentCount = async (CreatedByUser_Id) => {
     try {
         const [result] = await pool.execute(`
         
-        SELECT 
-            f.FinalApprovedIndent_Id,
-            f.Indent_Id,
-            i.Indent_No,
-            f.SectionQtyDetail_Id,
-            f.VersionLabel,
-            f.div_code,
-            f.sd_code,
-            f.so_code,
-            f.OfficerEnteredQty,
-            f.FinalApprovedQty,
-            f.ApprovedOn,
-            f.ApprovedFilePath,
-            f.Status_Id,
-            s.StatusName AS StatusName,
-            f.ApprovedByUser_Id,
-            u.FirstName AS ApprovedByName,
-            f.ApprovedByRole_Id,
-            r.RoleName AS ApprovedByRoleName,
-            f.requestUserName
-        FROM finalapprovedindent f
-        LEFT JOIN indent i 
-            ON f.Indent_Id = i.Indent_Id
-        LEFT JOIN user u 
-            ON f.ApprovedByUser_Id = u.User_Id
-        LEFT JOIN roles r 
-            ON f.ApprovedByRole_Id = r.Role_Id
-        LEFT JOIN indentstatusmaster s
-            ON f.Status_Id = s.Status_Id
-        WHERE f.ApprovedByUser_Id = ?  -- <--- pass the User_Id here
-        ORDER BY f.ApprovedOn DESC;
-
+           SELECT 
+                COUNT(DISTINCT f.Indent_Id) AS totalCount
+            FROM finalapprovedindent f
+            LEFT JOIN indent i 
+                ON f.Indent_Id = i.Indent_Id
+            LEFT JOIN user u 
+                ON f.ApprovedByUser_Id = u.User_Id
+            LEFT JOIN roles r 
+                ON f.ApprovedByRole_Id = r.Role_Id
+            LEFT JOIN indentstatusmaster s
+                ON f.Status_Id = s.Status_Id
+            LEFT JOIN zone_codes z 
+                ON f.div_code = z.div_code
+                AND f.sd_code = z.sd_code
+                AND f.so_code = z.so_code
+            WHERE f.ApprovedByUser_Id = ?;
         `, [CreatedByUser_Id]);
 
         return result
@@ -194,6 +180,68 @@ export const fetchFinalApprovedIndent = async (CreatedByUser_Id) => {
 
 }
 
+//THIS IS THE FETCHING THE APPROVED Acknowledged FOR THE PROJECT_MANAGER
+export const fetchFinalApprovedIndent = async (CreatedByUser_Id) => {
+    try {
+        const [result] = await pool.execute(`
+        
+            SELECT 
+                f.Indent_Id,
+                i.Indent_No,
+                GROUP_CONCAT(DISTINCT f.VersionLabel ORDER BY f.VersionLabel ASC) AS VersionLabels,
+                GROUP_CONCAT(DISTINCT z.division ORDER BY z.division ASC) AS DivisionNames,
+                GROUP_CONCAT(DISTINCT z.sub_division ORDER BY z.sub_division ASC) AS SubDivisionNames,
+                GROUP_CONCAT(DISTINCT z.section_office ORDER BY z.section_office ASC) AS SectionNames,
+                GROUP_CONCAT(DISTINCT f.div_code ORDER BY f.div_code ASC) AS div_codes,
+                GROUP_CONCAT(DISTINCT f.sd_code ORDER BY f.sd_code ASC) AS sd_codes,
+                GROUP_CONCAT(DISTINCT f.so_code ORDER BY f.so_code ASC) AS so_codes,
+                GROUP_CONCAT(DISTINCT f.OfficerEnteredQty ORDER BY f.SectionQtyDetail_Id ASC) AS OfficerEnteredQtys,
+                GROUP_CONCAT(DISTINCT f.FinalApprovedQty ORDER BY f.SectionQtyDetail_Id ASC) AS FinalApprovedQtys,
+                f.ApprovedOn,
+                f.ApprovedFilePath,
+                f.Status_Id,
+                s.StatusName AS StatusName,
+                f.ApprovedByUser_Id,
+                u.FirstName AS ApprovedByName,
+                f.ApprovedByRole_Id,
+                r.RoleName AS ApprovedByRoleName,
+                f.requestUserName
+            FROM finalapprovedindent f
+            LEFT JOIN indent i 
+                ON f.Indent_Id = i.Indent_Id
+            LEFT JOIN user u 
+                ON f.ApprovedByUser_Id = u.User_Id
+            LEFT JOIN roles r 
+                ON f.ApprovedByRole_Id = r.Role_Id
+            LEFT JOIN indentstatusmaster s
+                ON f.Status_Id = s.Status_Id
+            LEFT JOIN zone_codes z 
+                ON f.div_code = z.div_code
+                AND f.sd_code = z.sd_code
+                AND f.so_code = z.so_code
+            WHERE f.ApprovedByUser_Id = ?
+            GROUP BY 
+                f.Indent_Id, 
+                i.Indent_No, 
+                f.ApprovedOn, 
+                f.ApprovedFilePath, 
+                f.Status_Id, 
+                s.StatusName, 
+                f.ApprovedByUser_Id, 
+                u.FirstName, 
+                f.ApprovedByRole_Id, 
+                r.RoleName, 
+                f.requestUserName
+            ORDER BY f.ApprovedOn DESC;
+
+        `, [CreatedByUser_Id]);
+
+        return result
+    } catch (error) {
+        console.log("Error while Fetching The IndentViews", error)
+    }
+
+}
 //=============================================================================================================================
 
 

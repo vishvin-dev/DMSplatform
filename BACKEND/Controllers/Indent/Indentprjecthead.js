@@ -2,7 +2,8 @@ import {
     fetchApprovedIndentForProjectHeadCount,
     fetchApprovedIndentForProjectHeads,
     submitFinalApprovedIndent,
-    fetchFinalApprovedIndent
+    fetchFinalApprovedIndent,
+    fetchFinalApprovedIndentCount
 } from "../../models/IndentHeadProject.js"
 
 // THIS IS THE PROJECT_HEAD SCREENS OK AND THE VIEW SCREENS OK 
@@ -57,8 +58,20 @@ export const IndentProjectHead = async (req, res) => {
                 result
             });
         }
-        //THIS IS THE FETCHING THE APPROVED Acknowledged FOR THE PROJECT_MANAGER
+
+           //THIS IS THE FETCHING THE APPROVED AcknowledgedCount FOR THE PROJECT_MANAGER
          else if (Number(flagId) === 4) {
+            const result = await fetchFinalApprovedIndentCount(data.CreatedByUser_Id);
+            return res.status(200).json({
+                message: "Approved IndentCount fetched successfully",
+                status: "success",
+                count: result.length,
+                result,
+            });
+        }
+
+         //THIS IS THE FETCHING THE APPROVED Acknowledged FOR THE PROJECT_MANAGER
+         else if (Number(flagId) === 5) {
             const result = await fetchFinalApprovedIndent(data.CreatedByUser_Id);
             return res.status(200).json({
                 message: "Approved Indent fetched successfully",
