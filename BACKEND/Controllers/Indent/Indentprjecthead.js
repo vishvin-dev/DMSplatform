@@ -4,7 +4,8 @@ import {
     submitFinalApprovedIndent,
     fetchFinalApprovedIndent,
     fetchFinalApprovedIndentCount,
-    resubmittedToOfficerFromPM
+    resubmittedToOfficerFromPM,
+    fetchingResubmittedToOfficerFromPMCount
 } from "../../models/IndentHeadProject.js"
 
 // THIS IS THE PROJECT_HEAD SCREENS OK AND THE VIEW SCREENS OK 
@@ -93,6 +94,15 @@ export const IndentProjectHead = async (req, res) => {
                     const result = await resubmittedToOfficerFromPM(data);
                     return res.status(200).json({
                         message: "Resbumitted Indent to The Officers successfully",
+                        status: "success",
+                        count: result.length,
+                        result,
+                    });
+                }
+        else if (Number(flagId) === 7) {
+                    const result = await fetchingResubmittedToOfficerFromPMCount(data.CreatedByUser_Id);
+                    return res.status(200).json({
+                        message: "Fetched Resbumitted Indent Count to The Officers successfully",
                         status: "success",
                         count: result.length,
                         result,

@@ -282,60 +282,151 @@ export const fetchFinalApprovedIndent = async (CreatedByUser_Id) => {
 export const resubmittedToOfficerFromPM = async (data) => {
   const {
     Indent_Id,
-    SectionQtyDetail_Id,
     ActionByUser_Id,
-    Role_Id,          // PM Role
-    DO_Role_Id,       // DO Role
-    Status_Id,        // e.g. Rejected or Resubmitted
-    PMQty,
-    OOQty,            // Officer’s original qty
-    ApprovalHistoryComment,
+    Role_Id,      // PM Role
+    DO_Role_Id,   // Officer Role
+    Status_Id,    // e.g., Resubmitted (4)
+    sections
   } = data;
 
   try {
-    const [result] = await pool.execute(
-      `
-      INSERT INTO indentapprovalhistory 
-        (Indent_Id, SectionQtyDetail_Id, ActionByUser_Id, Role_Id, DO_Role_Id, 
-         Status_Id, PMQty, OOQty, ApprovalHistoryComment, ActionOn)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-      `,
-      [
-        Indent_Id,
+    const results = [];
+
+    for (const section of sections) {
+      const {
         SectionQtyDetail_Id,
-        ActionByUser_Id,
-        Role_Id,
-        DO_Role_Id,
-        Status_Id,
-        PMQty || null,
-        OOQty || null,
-        ApprovalHistoryComment || null,
-      ]
-    );
+        PMQty,
+        OOQty,
+        ApprovalHistoryComment
+      } = section;
 
-    await pool.execute(
-      `UPDATE Indent 
-       SET Status_Id = 4, UpdatedOn = NOW() 
-       WHERE Indent_Id = ?`,
-      [Indent_Id]
-    );
+      // Step 1️⃣: Insert record in approval history
+      const [insertResult] = await pool.execute(
+        `
+        INSERT INTO IndentApprovalHistory 
+          (Indent_Id, SectionQtyDetail_Id, ActionByUser_Id, Role_Id, DO_Role_Id, 
+           Status_Id, PMQty, OOQty, ApprovalHistoryComment, ActionOn)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        `,
+        [
+          Indent_Id,
+          SectionQtyDetail_Id,
+          ActionByUser_Id,
+          Role_Id,
+          DO_Role_Id,
+          Status_Id,
+          PMQty || null,
+          OOQty || null,
+          ApprovalHistoryComment || null,
+        ]
+      );
 
-    // Step 3️ - Update section detail table
-    await pool.execute(
-      `UPDATE IndentSectionQtyDetail 
-       SET Status_Id = 4
-       WHERE SectionQtyDetail_Id = ?`,
-      [SectionQtyDetail_Id]
-    );
+      // Step 2️⃣: Update indent master
+      await pool.execute(
+        `
+        UPDATE Indent 
+        SET Status_Id = ?, UpdatedOn = NOW() 
+        WHERE Indent_Id = ?
+        `,
+        [Status_Id, Indent_Id]
+      );
 
-    return {
-      ApprovalHistory_Id: result.insertId,
-      message: "Indent resubmitted to officer successfully",
-    };
+      // Step 3️⃣: Update section details
+      await pool.execute(
+        `
+        UPDATE IndentSectionQtyDetail 
+        SET Status_Id = ?
+        WHERE SectionQtyDetail_Id = ?
+        `,
+        [Status_Id, SectionQtyDetail_Id]
+      );
+
+      results.push({
+        ApprovalHistory_Id: insertResult.insertId,
+        SectionQtyDetail_Id,
+        message: "Section resubmitted successfully",
+      });
+    }
+
+    return results;
   } catch (error) {
     console.error("Error in resubmittedToOfficerFromPM:", error.message);
     throw error;
   }
 };
+
+
+
+
+
+export const fetchingResubmittedToOfficerFromPMCount = async (CreatedByUser_Id) => {
+  const sql = `
+    SELECT
+      i.Indent_Id,
+      i.Indent_No,
+      i.Status_Id,
+      ism.StatusName,
+      i.CreatedByUser_Id,
+      cu.FirstName AS CreatedByName,
+      (
+        SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'SectionQtyDetail_Id', s.SectionQtyDetail_Id,
+            'VersionLabel', s.VersionLabel,
+            'UploadedByUser_Id', s.UploadedByUser_Id,
+            'UploadedByName', u.FirstName,
+            'Role_Id', s.Role_Id,
+            'RoleName', r.RoleName,
+            'div_code', s.div_code,
+            'sd_code', s.sd_code,
+            'so_code', s.so_code,
+            'zone', z.zone,
+            'circle', z.circle,
+            'division', z.division,
+            'sub_division', z.sub_division,
+            'section_office', z.section_office,
+            'EnteredQty', s.EnteredQty,
+            'comment', s.comment,
+            'UploadedAt', DATE_FORMAT(s.UploadedAt, '%Y-%m-%d %H:%i:%s')
+          )
+        )
+        FROM indentsectionqtydetail s
+        LEFT JOIN user u ON s.UploadedByUser_Id = u.User_Id
+        LEFT JOIN roles r ON s.Role_Id = r.Role_Id
+        LEFT JOIN zone_codes z ON s.div_code = z.div_code
+        WHERE s.Indent_Id = i.Indent_Id
+          AND s.Status_Id = 4
+      ) AS sections
+    FROM indent i
+    LEFT JOIN indentstatusmaster ism ON i.Status_Id = ism.Status_Id
+    LEFT JOIN user cu ON i.CreatedByUser_Id = cu.User_Id
+    WHERE i.Status_Id = 4
+      AND i.CreatedByUser_Id = ?
+    ORDER BY i.Indent_Id;
+  `;
+
+  try {
+    const [rows] = await pool.execute(sql, [CreatedByUser_Id]);
+
+    const result = rows.map(r => ({
+      Indent_Id: r.Indent_Id,
+      Indent_No: r.Indent_No,
+      Status_Id: r.Status_Id,
+      StatusName: r.StatusName,
+      CreatedByUser_Id: r.CreatedByUser_Id,
+      CreatedByName: r.CreatedByName,
+      sections: r.sections || [] // <-- no JSON.parse
+    }));
+
+    return result;
+  } catch (error) {
+    console.error("Error fetching resubmitted indents:", error);
+    throw error;
+  }
+};
+
+
+
+
 // ===========================================================================================
 // ===========================================================================================
