@@ -381,3 +381,124 @@ export const fetchOfficerApproveIndentCount = async (Role_Id) => {
 //=====================================================================================
 
 
+
+//==================================================================================
+//  THIS IS THE INDENT RSUBMITTED SCREEN OK (OFFCIERS SCREEN)
+//THIS IS THE INDENT RESUBMITTED INDENT COUNT FETCHED HERE OK FOR THE OFFICERS SCREEN OK 
+ export const fetchingResubmittedIndentsCountByDORole=async(DO_Role_Id)=>{
+   try {
+    const [rows] = await pool.execute(`
+      SELECT COUNT(DISTINCT ah.Indent_Id) AS totalResubmittedIndents
+      FROM IndentApprovalHistory ah
+      JOIN IndentSectionQtyDetail s 
+        ON ah.SectionQtyDetail_Id = s.SectionQtyDetail_Id
+      WHERE ah.Status_Id = 4
+        AND ah.DO_Role_Id = ?
+    `, [DO_Role_Id]);
+
+    return {
+      message: "Resubmitted Indent count fetched successfully",
+      status: "success",
+      count: rows[0].totalResubmittedIndents
+    };
+
+  } catch (error) {
+    console.log("Error while fetching resubmitted indent count:", error);
+    throw error;
+  }
+};
+
+//THIS IS THE INDENT RESUBMITTED INDENTINFORMATION FETCHED HERE OK FOR THE OFFICERS SCREEN OK 
+export const fetchingResubmittedIndentsByDORole = async (DO_Role_Id) => {
+  try {
+    const [rows] = await pool.execute(`
+      SELECT 
+        ah.ApprovalHistory_Id,
+        ah.Indent_Id,
+        i.Indent_No,
+        i.Status_Id AS IndentStatus_Id,
+        sm.StatusName AS IndentStatusName,
+        i.RequestUserName,
+        u.User_Id AS CreatedByIndent,
+        u.FirstName AS CreatedByName,
+        r.RoleName AS SubmitToRole,
+        ah.SectionQtyDetail_Id,
+        ah.ActionByUser_Id,
+        ah.Role_Id AS ActionRole_Id,
+        ah.DO_Role_Id,
+        ah.ActionOn,
+        ah.Status_Id AS ApprovalStatus_Id,
+        ah.PMQty,
+        ah.OOQty AS OOQty,
+        ah.ApprovalHistoryComment,
+        s.div_code,
+        s.sd_code,
+        s.so_code,
+        z.division,
+        z.sub_division,
+        z.section_office
+      FROM IndentApprovalHistory ah
+      JOIN Indent i ON ah.Indent_Id = i.Indent_Id
+      LEFT JOIN User u ON i.CreatedByUser_Id = u.User_Id
+      LEFT JOIN Roles r ON i.Role_Id = r.Role_Id
+      LEFT JOIN IndentStatusMaster sm ON i.Status_Id = sm.Status_Id
+      LEFT JOIN IndentSectionQtyDetail s ON ah.SectionQtyDetail_Id = s.SectionQtyDetail_Id
+      LEFT JOIN zone_codes z 
+        ON s.div_code = z.div_code
+        AND s.sd_code = z.sd_code
+        AND s.so_code = z.so_code
+      WHERE ah.Status_Id = 4
+        AND ah.DO_Role_Id = ?
+      ORDER BY ah.Indent_Id, ah.ApprovalHistory_Id
+    `, [DO_Role_Id]);
+
+    // Group by Indent_Id
+    const indentsMap = {};
+    rows.forEach(row => {
+      if (!indentsMap[row.Indent_Id]) {
+        indentsMap[row.Indent_Id] = {
+          Indent_Id: row.Indent_Id,
+          Indent_No: row.Indent_No,
+          fullIndentNo: getFullIndentNo(row.Indent_No),
+          IndentStatus_Id: row.IndentStatus_Id,
+          IndentStatusName: row.IndentStatusName,
+          RequestUserName: row.RequestUserName,
+          CreatedByUser_Id: row.CreatedByUser_Id,
+          CreatedByName: row.CreatedByName,
+          SubmitToRole: row.SubmitToRole,
+          sections: []
+        };
+      }
+
+      indentsMap[row.Indent_Id].sections.push({
+        SectionQtyDetail_Id: row.SectionQtyDetail_Id,
+        PMQty: row.PMQty,
+        OOQty: row.OOQty,
+        ApprovalHistoryComment: row.ApprovalHistoryComment,
+        ActionByUser_Id: row.ActionByUser_Id,
+        ActionRole_Id: row.ActionRole_Id,
+        DO_Role_Id: row.DO_Role_Id,
+        ActionOn: row.ActionOn,
+        div_code: row.div_code,
+        sd_code: row.sd_code,
+        so_code: row.so_code,
+        division_names: row.division,
+        subdivision_names: row.sub_division,
+        section_names: row.section_office
+      });
+    });
+
+    return {
+      message: "Resubmitted indents fetched successfully",
+      status: "success",
+      count: Object.keys(indentsMap).length,
+      result: Object.values(indentsMap)
+    };
+
+  } catch (error) {
+    console.error("Error fetching resubmitted indents:", error);
+    throw error;
+  }
+};
+//==================================================================================
+//==================================================================================
