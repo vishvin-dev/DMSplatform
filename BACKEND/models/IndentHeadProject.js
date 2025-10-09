@@ -320,7 +320,7 @@ export const resubmittedToOfficerFromPM = async (data) => {
       [Indent_Id]
     );
 
-    // Step 3️⃣ - Update section detail table
+    // Step 3️ - Update section detail table
     await pool.execute(
       `UPDATE IndentSectionQtyDetail 
        SET Status_Id = 4
