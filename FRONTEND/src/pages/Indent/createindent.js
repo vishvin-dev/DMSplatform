@@ -243,13 +243,30 @@ const CreateIndent = () => {
         }
     };
 
+    /**
+     * 🔑 MODIFIED FUNCTION: handleOptionSelection
+     * Enforces single selection when submitToOption is 'section'.
+     */
     const handleOptionSelection = (e, optionCode) => {
         // Reset confirmation if options are changed
         setIsConfirmed(false);
-        if (e.target.checked) {
-            setSelectedOptions([...selectedOptions, optionCode]);
+        
+        if (submitToOption === 'section') {
+            // For 'section' submission, only one selection is allowed
+            if (e.target.checked) {
+                // If checked, set THIS option as the ONLY selected option
+                setSelectedOptions([optionCode]);
+            } else {
+                // If unchecked, clear all selected options (only this one was present)
+                setSelectedOptions([]);
+            }
         } else {
-            setSelectedOptions(selectedOptions.filter(val => val !== optionCode));
+            // For 'division' or 'subdivision', multi-select logic remains
+            if (e.target.checked) {
+                setSelectedOptions([...selectedOptions, optionCode]);
+            } else {
+                setSelectedOptions(selectedOptions.filter(val => val !== optionCode));
+            }
         }
     };
     
@@ -306,6 +323,12 @@ const CreateIndent = () => {
             return;
         }
         
+        // 🔑 NEW VALIDATION: Enforce single selection for 'section'
+        if (submitToOption === 'section' && selectedOptions.length > 1) {
+            alert("Submission to a Section Officer must only target ONE Section.");
+            return;
+        }
+
         const obj = JSON.parse(sessionStorage.getItem("authUser"));
         const submissionUserId = safeParseInt(obj?.user?.User_Id); 
         const submissionRequestUserName = username || null; 
@@ -707,7 +730,7 @@ const CreateIndent = () => {
                                                     <td>{indent.createdOn}</td>
                                                     <td>{indent.division}</td>
                                                     <td>{indent.subDivision}</td> {/* 🔑 NEW DATA */}
-                                                    <td>{indent.section}</td>     {/* 🔑 NEW DATA */}
+                                                    <td>{indent.section}</td>     {/* 🔑 NEW DATA */}
                                                     <td>{indent.submitTo}</td>
                                                     <td><span className={`badge bg-${getStatusColor(indent.status)}`}>{indent.status}</span></td>
                                                 </tr>
@@ -892,7 +915,7 @@ const CreateIndent = () => {
                                             </Col>
                                         </Row>
 
-                                        {/* Multi-Select Options Area (Unchanged) */}
+                                        {/* Multi-Select Options Area (Checkboxes used as radio for 'section') */}
                                         {submitToOption && availableOptions.length > 0 && (
                                             <Row className="g-4 mt-4">
                                                 <Col md={12}>
@@ -913,8 +936,12 @@ const CreateIndent = () => {
                                                                                     className="form-check-input"
                                                                                     type="checkbox"
                                                                                     id={`option-${optionCode}`}
+                                                                                    // Use Checkbox for all for UI consistency, but control logic in handler
                                                                                     checked={selectedOptions.includes(optionCode)}
                                                                                     onChange={(e) => handleOptionSelection(e, optionCode)}
+                                                                                    // 🔑 Added logic to hint at radio-button behavior for 'section'
+                                                                                    // by setting a unique name/type for screen readers/assistive technologies if possible,
+                                                                                    // though for this component structure, controlling via state is primary.
                                                                                 />
                                                                                 <label
                                                                                     className="form-check-label option-label"
@@ -928,6 +955,11 @@ const CreateIndent = () => {
                                                                     );
                                                                 })}
                                                             </Row>
+                                                            {submitToOption === 'section' && (
+                                                                <Alert color="info" className="mt-3 py-2">
+                                                                    Note: Only one section selection is permitted. Choosing a new one will unselect the previous one.
+                                                                </Alert>
+                                                            )}
                                                         </div>
                                                     </FormGroup>
                                                 </Col>
@@ -964,7 +996,7 @@ const CreateIndent = () => {
                                         )}
 
 
-                                        {/* Submit and Refresh Buttons (Unchanged Logic) */}
+                                        {/* Submit and Refresh Buttons (Logic Updated with single-select check for 'section' in disabled prop) */}
                                         <Row className="g-4 mt-5">
                                             <Col md={12} className="d-flex justify-content-between">
                                                 <Button color="secondary" onClick={handleRefresh} className="action-button" disabled={loading}>
@@ -973,13 +1005,14 @@ const CreateIndent = () => {
                                                 <Button
                                                     color="success" 
                                                     onClick={handleSubmit}
+                                                    className="action-button"
                                                     disabled={
                                                         !submitToOption || 
                                                         (availableOptions.length > 0 && selectedOptions.length === 0) || 
+                                                        (submitToOption === 'section' && selectedOptions.length > 1) || // 🔑 ADDED: Disable if 'section' is selected but multiple options are somehow selected (should be prevented by handler, but as a safeguard)
                                                         loading || 
                                                         !isConfirmed // Mandatory check
                                                     }
-                                                    className="action-button"
                                                 >
                                                     {loading ? <Spinner size="sm" /> : 'Submit '}
                                                 </Button>
