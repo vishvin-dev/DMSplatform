@@ -5,7 +5,7 @@ import {
 } from 'reactstrap';
 import letterheadImg from './VishvinLetterHead.jpg';
 // Use the original helper name, ensuring all calls go to the correct route.
-import { IndentProjectHead } from '../../helpers/fakebackend_helper'; 
+import { IndentProjectHead } from '../../helpers/fakebackend_helper';
 
 // =================================================================
 // 1. CONSTANTS AND UTILITY FUNCTIONS
@@ -89,8 +89,9 @@ const renderAcknowledgementTemplate = (ackData) => {
                         {selectedOptionsWithQuantity.map((option, index) => (
                             <tr key={index}>
                                 <td>{index + 1}</td>
-                                <td>{option.divisionName || ackData.division}</td> 
-                                <td>{option.subDivisionName || ackData.subDivision}</td> 
+                                {/* FIX: Explicitly use divisionName/subDivisionName fields on the option object */}
+                                <td>{option.divisionName}</td> 
+                                <td>{option.subDivisionName}</td> 
                                 <td>{option.name}</td> 
                                 <td>{option.quantity}</td>
                             </tr>
@@ -217,8 +218,8 @@ const normalizeManagerIndentData = (apiData) => {
         
         // Determine the "Approved By" name. 
         const approvedBy = (status === 'Approved' || status === 'Acknowledged' || status === 'Resubmitted') 
-                            ? item.ApprovedByName || item.RequestUserName 
-                            : item.CreatedByName || item.RequestUserName;
+                                ? item.ApprovedByName || item.RequestUserName 
+                                : item.CreatedByName || item.RequestUserName;
 
         return {
             // General Display fields
@@ -513,7 +514,7 @@ const ManagerApprovalView = () => {
             // Fetch data for Flag 5
             fetchManagerAcknowledgedData(sessionData, setIndents, setIsLoading, setFetchError);
         }
-         else {
+           else {
             setIndents([]);
             setIsLoading(false);
         }
@@ -758,9 +759,9 @@ const ManagerApprovalView = () => {
                     code: item.code,
                     quantity: parseInt(item.quantity, 10), // This is the FinalApprovedQty for display
                     
-                    // CRITICAL FIX: Explicitly set division/subDivision names for the table rows
-                    divisionName: selectedIndent.division,
-                    subDivisionName: selectedIndent.subDivision,
+                    // CRITICAL FIX FOR THE BUG: Explicitly set division/subDivision names for the table rows in the final template preview
+                    divisionName: originalOption.divisionName || selectedIndent.division,
+                    subDivisionName: originalOption.subDivisionName || selectedIndent.subDivision,
                     
                     // Fields required for the final Flag 3 API payload
                     SectionQtyDetail_Id: originalOption.SectionQtyDetail_Id || 0,
@@ -1119,7 +1120,7 @@ const ManagerApprovalView = () => {
                     </ModalFooter>
                 </Modal>
 
-                /* 3. Reject Indent Modal */
+                {/* 3. Reject Indent Modal */}
                 <Modal isOpen={isRejectModalOpen} toggle={toggleRejectModal} centered>
                     <ModalHeader toggle={toggleRejectModal}>Reject Indent: {selectedIndent?.indentNumber}</ModalHeader>
                     <ModalBody>
@@ -1137,7 +1138,7 @@ const ManagerApprovalView = () => {
                     </ModalFooter>
                 </Modal>
                 
-                /* 4. Quantity Entry Modal (Manager's Final Check before Acknowledge) */
+                {/* 4. Quantity Entry Modal (Manager's Final Check before Acknowledge) */}
                 <Modal isOpen={isQuantityModalOpen} toggle={toggleQuantityModal} centered>
                     <ModalHeader toggle={toggleQuantityModal}>
                         Confirm Quantities for Final Acknowledgment: {selectedIndent?.indentNumber}
