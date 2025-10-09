@@ -89,9 +89,9 @@ const renderAcknowledgementTemplate = (ackData) => {
                         {selectedOptionsWithQuantity.map((option, index) => (
                             <tr key={index}>
                                 <td>{index + 1}</td>
-                                <td>{option.divisionName || ackData.division}</td> {/* Use per-row name if available */}
-                                <td>{option.subDivisionName || ackData.subDivision}</td> {/* Use per-row name if available */}
-                                <td>{option.name}</td> {/* Display only the specific section name */}
+                                <td>{option.divisionName || ackData.division}</td> 
+                                <td>{option.subDivisionName || ackData.subDivision}</td> 
+                                <td>{option.name}</td> 
                                 <td>{option.quantity}</td>
                             </tr>
                         ))}
@@ -129,7 +129,7 @@ const normalizeManagerIndentData = (apiData) => {
         const sectionQtyDetailId = item.SectionQtyDetail_Id || 0;
         const sectionOfficeCode = item.so_codes || item.sd_codes || '';
         
-        // Use the collective names from the primary object, as they define the context
+        // Use the collective names from the primary object
         const divisionNames = item.division_names || item.DivisionNames || 'N/A';
         const subDivisionNames = item.subdivision_names || item.SubDivisionNames || 'N/A';
         const sectionNames = item.section_names || item.SectionNames || 'N/A';
@@ -153,7 +153,7 @@ const normalizeManagerIndentData = (apiData) => {
                 // CRITICAL FIX: Use section_names from inside the section object 
                 const sectionName = section.section_names || section.so_code || 'N/A';
                 
-                // CRITICAL FIX: Extract Division/Subdivision names from the section object for per-row display
+                // CRITICAL FIX: Ensure Division/Subdivision names are captured per section from the best available source
                 const sectionDivisionName = section.division_names || divisionNames;
                 const sectionSubDivisionName = section.subdivision_names || subDivisionNames;
 
@@ -163,8 +163,8 @@ const normalizeManagerIndentData = (apiData) => {
                     quantity: quantityToDisplay,
                     
                     // Fields for row display in Modal
-                    divisionName: sectionDivisionName, // Pass to renderAcknowledgementTemplate
-                    subDivisionName: sectionSubDivisionName, // Pass to renderAcknowledgementTemplate
+                    divisionName: sectionDivisionName, 
+                    subDivisionName: sectionSubDivisionName, 
                     
                     // Fields required for the final Flag 3 API payload
                     SectionQtyDetail_Id: section.SectionQtyDetail_Id || 0,
@@ -195,9 +195,9 @@ const normalizeManagerIndentData = (apiData) => {
                     code: code,
                     quantity: finalQuantity, 
                     
-                    // Fields for row display in Modal (using parent object's collective names)
-                    divisionName: divisionNames,
-                    subDivisionName: subDivisionNames,
+                    // CRITICAL FIX: Fields for row display in Modal (using parent object's collective names)
+                    divisionName: divisionNames, // Use the collective division name
+                    subDivisionName: subDivisionNames, // Use the collective sub-division name
                     
                     // Fields required for the final Flag 3 API payload
                     SectionQtyDetail_Id: detailId,
@@ -228,7 +228,7 @@ const normalizeManagerIndentData = (apiData) => {
             createdOn: item.ApprovedOn || item.UploadedAt || item.IndentCreatedOn || new Date(), // Use ApprovedOn/UploadedAt for relevant date
             date: createdDate.toLocaleDateString('en-GB'),
             time: createdDate.toLocaleTimeString('en-US', { hour12: true }),
-            // Use the correct field names for Division/SubDivision display (these are often collective, but kept for non-section-based display)
+            // Use the correct field names for Division/SubDivision display (these are often collective)
             division: divisionNames,
             subDivision: subDivisionNames,
             divisionCode: item.div_codes || null,
@@ -746,6 +746,10 @@ const ManagerApprovalView = () => {
         const ackData = {
             ...selectedIndent,
             status: 'Acknowledged',
+            // CRITICAL FIX: Ensure top-level division/subDivision names are available for the modal header/rows
+            division: selectedIndent.division,
+            subDivision: selectedIndent.subDivision,
+            
             selectedOptions: sectionQuantities.map(item => {
                 const originalOption = selectedIndent.selectedOptions.find(opt => opt.code === item.code) || {};
                 
@@ -753,6 +757,10 @@ const ManagerApprovalView = () => {
                     name: item.name,
                     code: item.code,
                     quantity: parseInt(item.quantity, 10), // This is the FinalApprovedQty for display
+                    
+                    // CRITICAL FIX: Explicitly set division/subDivision names for the table rows
+                    divisionName: selectedIndent.division,
+                    subDivisionName: selectedIndent.subDivision,
                     
                     // Fields required for the final Flag 3 API payload
                     SectionQtyDetail_Id: originalOption.SectionQtyDetail_Id || 0,
