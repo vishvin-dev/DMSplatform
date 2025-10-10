@@ -4,7 +4,7 @@ import {
     Row, Col, Label, FormGroup, Collapse, Spinner, Form, Alert
 } from 'reactstrap';
 // Assuming both flags hit the same API route as requested
-import { getAllUserDropDownss , postcreateindent} from '../../helpers/fakebackend_helper'; 
+import { getAllUserDropDownss, postcreateindent } from '../../helpers/fakebackend_helper';
 import letterheadImg from './VishvinLetterHead.jpg';
 
 /**
@@ -45,12 +45,12 @@ const CreateIndent = () => {
     const [selectedOptions, setSelectedOptions] = useState([]);
     const [indentData, setIndentData] = useState(null);
     const [submissionStatus, setSubmissionStatus] = useState(null);
-    
+
     // NEW STATE for Confirmation Checkbox
-    const [isConfirmed, setIsConfirmed] = useState(false); 
-    
+    const [isConfirmed, setIsConfirmed] = useState(false);
+
     // To hold the result of the submission (Indent ID/No)
-    const [finalSubmissionData, setFinalSubmissionData] = useState(null); 
+    const [finalSubmissionData, setFinalSubmissionData] = useState(null);
 
     // --- NEW STATE FOR STATUS DASHBOARD (PAGINATION/SEARCH) ---
     const [submittedIndents, setSubmittedIndents] = useState([]);
@@ -58,18 +58,18 @@ const CreateIndent = () => {
     const [isStatusVisible, setIsStatusVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 5; 
+    const itemsPerPage = 5;
 
     // --- CORE API HELPER: FETCH DROPDOWN OPTIONS (FLAG 7, 1, 2, 3) ---
     const flagIdFunction = async (flagId, setState, requestUserName, div_code, sd_code, circle_code) => {
         setLoading(true);
         try {
-            const params = { 
-                flagId: flagId, 
+            const params = {
+                flagId: flagId,
                 requestUserName: requestUserName,
-                div_code: div_code || '',  
-                sd_code: sd_code || '',    
-                circle_code: circle_code || '', 
+                div_code: div_code || '',
+                sd_code: sd_code || '',
+                circle_code: circle_code || '',
             };
 
             const response = await getAllUserDropDownss(params);
@@ -93,27 +93,27 @@ const CreateIndent = () => {
         try {
             const payloadFlag3 = {
                 "flagId": 3,
-                "CreatedByUser_Id": safeParseInt(userId) || 0, 
+                "CreatedByUser_Id": safeParseInt(userId) || 0,
                 "RequestUserName": requestUserName,
             };
-            
-            const response = await postcreateindent(payloadFlag3); 
+
+            const response = await postcreateindent(payloadFlag3);
 
             if (response?.status === 'success' && Array.isArray(response.result)) {
                 const formattedIndents = response.result.map(indent => ({
                     indentNumber: `${IndentNoPrefix}${indent.Indent_No || indent.indent_no || 'N/A'}`,
                     createdOn: new Date(indent.CreatedOn).toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' }),
-                    
+
                     // 🔑 UPDATED MAPPING: Using the explicit name fields for dashboard display
-                    division: indent.division_names || 'N/A', 
+                    division: indent.division_names || 'N/A',
                     subDivision: indent.subdivision_names || 'N/A',
                     section: indent.section_names || 'N/A',
-                    
+
                     submitTo: indent.submitTo || 'Unknown Officer',
-                    status: indent.StatusName || 'Pending', 
+                    status: indent.StatusName || 'Pending',
                     divisionCode: indent.div_codes || 'N/A',
                 }));
-                
+
                 const sortedIndents = formattedIndents.sort((a, b) => new Date(b.createdOn) - new Date(a.createdOn));
 
                 setSubmittedIndents(sortedIndents);
@@ -149,34 +149,34 @@ const CreateIndent = () => {
             case 'Approved': return 'success';
             case 'Rejected': return 'danger';
             case 'Pending': return 'warning';
-            case 'Created': return 'info'; 
+            case 'Created': return 'info';
             default: return 'secondary';
         }
     };
-    
+
     // --- INITIALIZATION ---
     useEffect(() => {
         const obj = JSON.parse(sessionStorage.getItem("authUser"));
-        
-        const usernm = obj?.user?.Email; 
-        const userId = obj?.user?.User_Id; 
-        
+
+        const usernm = obj?.user?.Email;
+        const userId = obj?.user?.User_Id;
+
         if (usernm && userId) {
             setUserName(usernm);
             flagIdFunction(7, setCircles, usernm);
-            fetchUserIndents(usernm, userId); 
+            fetchUserIndents(usernm, userId);
         }
-    }, []); 
+    }, []);
 
     // --- FORM HANDLERS (Unchanged) ---
 
     const resetFormStates = () => {
-        setDivision(''); setSubDivision(''); setDivisionName([]); 
+        setDivision(''); setSubDivision(''); setDivisionName([]);
         setSubDivisions([]); setSectionOptions([]);
         setSubmitToOption(''); setAvailableOptions([]);
-        setSelectedOptions([]); setIndentData(null); 
+        setSelectedOptions([]); setIndentData(null);
         setSubmissionStatus(null);
-        setFinalSubmissionData(null); 
+        setFinalSubmissionData(null);
         // Reset confirmation checkbox
         setIsConfirmed(false);
     }
@@ -193,15 +193,15 @@ const CreateIndent = () => {
     const handleDivisionChange = async (e) => {
         const selectedDivCode = e.target.value;
         setDivision(selectedDivCode);
-        setSubDivision(''); setSubDivisions([]); 
-        setSectionOptions([]); 
+        setSubDivision(''); setSubDivisions([]);
+        setSectionOptions([]);
         setSubmitToOption(''); setAvailableOptions([]); setSelectedOptions([]);
         setIndentData(null); setSubmissionStatus(null); setFinalSubmissionData(null); setIsConfirmed(false);
 
         if (selectedDivCode && circle) {
             const subDivs = await flagIdFunction(2, setSubDivisions, username, selectedDivCode, '', circle);
             if (subDivs.length > 0) {
-                await flagIdFunction(3, setSectionOptions, username, selectedDivCode, '', circle); 
+                await flagIdFunction(3, setSectionOptions, username, selectedDivCode, '', circle);
             }
         }
     };
@@ -209,12 +209,12 @@ const CreateIndent = () => {
     const handleSubDivisionChange = async (e) => {
         const selectedSdCode = e.target.value;
         setSubDivision(selectedSdCode);
-        setSectionOptions([]); 
+        setSectionOptions([]);
         setSubmitToOption(''); setAvailableOptions([]);
         setSelectedOptions([]); setIndentData(null); setSubmissionStatus(null); setFinalSubmissionData(null); setIsConfirmed(false);
 
         if (selectedSdCode && division && circle) {
-            await flagIdFunction(3, setSectionOptions, username, division, selectedSdCode, circle); 
+            await flagIdFunction(3, setSectionOptions, username, division, selectedSdCode, circle);
         }
     };
 
@@ -233,55 +233,53 @@ const CreateIndent = () => {
             setAvailableOptions(allDivSections);
 
         } else if (option === 'subdivision' || option === 'section') {
-            const subDivSections = sectionOptions.map(opt => ({ 
-                ...opt, 
-                isSubDivision: false, 
-                code: opt.so_code, 
-                name: opt.section_office 
+            const subDivSections = sectionOptions.map(opt => ({
+                ...opt,
+                isSubDivision: false,
+                code: opt.so_code,
+                name: opt.section_office
             }));
             setAvailableOptions(subDivSections);
         }
     };
 
     /**
-     * 🔑 MODIFIED FUNCTION: handleOptionSelection
-     * Enforces single selection when submitToOption is 'section'.
+     * 🚀 MODIFIED LOGIC 🚀
+     * Changes selection handling based on 'submitToOption'.
+     * - 'section' (Section Officer) will only allow ONE section to be selected (radio-like behavior).
+     * - 'division'/'subdivision' allows multiple selection (checkbox behavior).
      */
     const handleOptionSelection = (e, optionCode) => {
         // Reset confirmation if options are changed
         setIsConfirmed(false);
-        
-        if (submitToOption === 'section') {
-            // For 'section' submission, only one selection is allowed
-            if (e.target.checked) {
-                // If checked, set THIS option as the ONLY selected option
-                setSelectedOptions([optionCode]);
-            } else {
-                // If unchecked, clear all selected options (only this one was present)
-                setSelectedOptions([]);
-            }
+        const isSelected = e.target.checked;
+        const isSingleSelectMode = submitToOption === 'section';
+
+        if (isSingleSelectMode) {
+            // For Section Officer, enforce single selection
+            setSelectedOptions(isSelected ? [optionCode] : []);
         } else {
-            // For 'division' or 'subdivision', multi-select logic remains
-            if (e.target.checked) {
+            // For Division/Subdivision, allow multiple selection
+            if (isSelected) {
                 setSelectedOptions([...selectedOptions, optionCode]);
             } else {
                 setSelectedOptions(selectedOptions.filter(val => val !== optionCode));
             }
         }
     };
-    
+
     const handleRefresh = () => {
-        setCircle(''); 
+        setCircle('');
         resetFormStates();
         setDivisionName([]); setSubDivisions([]); setSectionOptions([]);
-        
+
         const obj = JSON.parse(sessionStorage.getItem("authUser"));
-        const usernm = obj?.user?.Email; 
-        const userId = obj?.user?.User_Id; 
-        
+        const usernm = obj?.user?.Email;
+        const userId = obj?.user?.User_Id;
+
         if (usernm && userId) {
-             flagIdFunction(7, setCircles, usernm);
-             fetchUserIndents(usernm, userId);
+            flagIdFunction(7, setCircles, usernm);
+            fetchUserIndents(usernm, userId);
         }
     };
     // ----------------------------------------------------
@@ -289,7 +287,7 @@ const CreateIndent = () => {
     // --- DASHBOARD FILTERING AND PAGINATION LOGIC (Unchanged) ---
     const filteredAndSearchedIndents = useMemo(() => {
         if (!submittedIndents) return [];
-        return submittedIndents.filter(indent => 
+        return submittedIndents.filter(indent =>
             indent.indentNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
             indent.status.toLowerCase().includes(searchQuery.toLowerCase()) ||
             indent.division.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -312,7 +310,7 @@ const CreateIndent = () => {
             setCurrentPage(page);
         }
     };
-    
+
     /**
      * 🚀 --- SINGLE-STAGE SUBMISSION (FLAG 1 & FLAG 2) --- 🚀 (Unchanged logic)
      */
@@ -322,31 +320,25 @@ const CreateIndent = () => {
             alert("Please complete all required selections and confirm the inputs are correct before submitting.");
             return;
         }
-        
-        // 🔑 NEW VALIDATION: Enforce single selection for 'section'
-        if (submitToOption === 'section' && selectedOptions.length > 1) {
-            alert("Submission to a Section Officer must only target ONE Section.");
-            return;
-        }
 
         const obj = JSON.parse(sessionStorage.getItem("authUser"));
-        const submissionUserId = safeParseInt(obj?.user?.User_Id); 
-        const submissionRequestUserName = username || null; 
+        const submissionUserId = safeParseInt(obj?.user?.User_Id);
+        const submissionRequestUserName = username || null;
 
         let submissionRoleId;
         if (submitToOption === 'division') {
-            submissionRoleId = 5; 
+            submissionRoleId = 5;
         } else if (submitToOption === 'subdivision') {
-            submissionRoleId = 6; 
+            submissionRoleId = 6;
         } else if (submitToOption === 'section') {
-            submissionRoleId = 7; 
+            submissionRoleId = 7;
         } else {
             submissionRoleId = 4; // Fallback
         }
 
         const divCodeStr = division;
         const sdCodeStr = subDivision;
-        
+
         setLoading(true);
 
         const selectedCircle = circles.find(c => c.circle_code === circle);
@@ -357,27 +349,32 @@ const CreateIndent = () => {
             .filter(opt => selectedOptions.includes(opt.code));
 
         let designation = '';
-        let toCode = selectedSubDivision ? selectedSubDivision.sd_code : subDivision; 
+        let toCode = selectedSubDivision ? selectedSubDivision.sd_code : subDivision;
 
         if (submitToOption === 'division') {
             designation = 'Executive Engineer';
-            toCode = selectedDivision ? selectedDivision.div_code : division; 
+            toCode = selectedDivision ? selectedDivision.div_code : division;
         } else if (submitToOption === 'subdivision') {
             designation = 'Assistant Engineer';
         } else if (submitToOption === 'section') {
             designation = 'Section Officer';
+            // If submitToOption is 'section', actualSelectedOptions length is guaranteed to be 1 by handleOptionSelection
+            // The toCode should be the code of the *selected section office* (so_code)
+            if (actualSelectedOptions.length === 1) {
+                toCode = actualSelectedOptions[0].code;
+            }
         }
 
         // --- STAGE 1: API PAYLOAD (FLAG 1: CREATE INDENT) ---
         const apiPayloadFlag1 = {
-            flagId: 1, 
+            flagId: 1,
             CreatedByUser_Id: submissionUserId,
-            Role_Id: safeParseInt(submissionRoleId), 
-            RequestUserName: submissionRequestUserName, 
+            Role_Id: safeParseInt(submissionRoleId),
+            RequestUserName: submissionRequestUserName,
             zones: actualSelectedOptions.map(opt => ({
-                div_code: divCodeStr || null, 
-                sd_code: sdCodeStr || null, 
-                so_code: opt.code || null, 
+                div_code: divCodeStr || null,
+                sd_code: sdCodeStr || null,
+                so_code: opt.code || null,
             })),
         };
 
@@ -386,22 +383,22 @@ const CreateIndent = () => {
 
         try {
             // 1. Call API for Flag 1 (Create Indent)
-            const response1 = await postcreateindent(apiPayloadFlag1); 
+            const response1 = await postcreateindent(apiPayloadFlag1);
 
             if (response1 && response1.status === 'success' && response1.result && response1.result.length > 0) {
-                const resultObject = response1.result[0]; 
+                const resultObject = response1.result[0];
                 apiIndentNo = String(resultObject.Indent_No || resultObject.indent_no || 'N/A');
-                apiIndentId = safeParseInt(resultObject.Indent_Id || 0); 
-                
+                apiIndentId = safeParseInt(resultObject.Indent_Id || 0);
+
                 if (apiIndentId === 0 || apiIndentNo === 'N/A') {
                     throw new Error("Missing Indent ID or Number from Flag 1 response.");
                 }
 
                 const currentDate = new Date();
                 const formattedDate = currentDate.toLocaleDateString('en-GB');
-                
-                const fullIndentNo = `${IndentNoPrefix}${apiIndentNo}`; 
-                
+
+                const fullIndentNo = `${IndentNoPrefix}${apiIndentNo}`;
+
                 const finalIndentData = {
                     circle: selectedCircle ? selectedCircle.circle : '',
                     circleCode: circle,
@@ -416,34 +413,34 @@ const CreateIndent = () => {
                     designation,
                     date: formattedDate,
                     time: currentDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }),
-                    indentNumber: fullIndentNo, 
+                    indentNumber: fullIndentNo,
                 };
 
                 setFinalSubmissionData({
                     Indent_Id: apiIndentId,
-                    Indent_No: apiIndentNo, 
-                    Full_Indent_No: fullIndentNo, 
-                    division: finalIndentData.division, 
-                    divisionCode: finalIndentData.divisionCode, 
-                    designation: finalIndentData.designation, 
-                    date: finalIndentData.date, 
+                    Indent_No: apiIndentNo,
+                    Full_Indent_No: fullIndentNo,
+                    division: finalIndentData.division,
+                    divisionCode: finalIndentData.divisionCode,
+                    designation: finalIndentData.designation,
+                    date: finalIndentData.date,
                 });
 
                 setIndentData(finalIndentData);
-                
+
                 // 2. Call API for Flag 2 (Update Status to Pending)
                 const apiPayloadFlag2 = {
                     "flagId": 2,
                     "Indent_Id": apiIndentId,
-                    "Indent_No": apiIndentNo, 
+                    "Indent_No": apiIndentNo,
                     "Status_Id": 1, // 'Pending' status
                     "RequestUserName": submissionRequestUserName,
                 };
-                
-                const response2 = await postcreateindent(apiPayloadFlag2); 
+
+                const response2 = await postcreateindent(apiPayloadFlag2);
 
                 if (response2 && response2.status === 'success') {
-                    
+
                     // Final Success Message
                     setSubmissionStatus({
                         status: 'Pending',
@@ -459,8 +456,8 @@ const CreateIndent = () => {
                         division: finalIndentData.division,
                         // Note: Using the single selected/created values here. 
                         // If multiple sections are selected, this is a simplification for the dashboard.
-                        subDivision: finalIndentData.subDivision, 
-                        section: finalIndentData.selectedOptionNames, 
+                        subDivision: finalIndentData.subDivision,
+                        section: finalIndentData.selectedOptionNames,
                         divisionCode: finalIndentData.divisionCode,
                     };
                     setSubmittedIndents(prev => [newDashboardIndent, ...prev].sort((a, b) => new Date(b.createdOn) - new Date(a.createdOn)));
@@ -488,18 +485,54 @@ const CreateIndent = () => {
     // --- END SINGLE-STAGE SUBMISSION ---
 
     // --- RENDER FUNCTIONS (Print/Result/Dashboard) ---
-    
+
     // handlePrint and renderIndentContent remain logically the same
-    const handlePrint = () => { /* ... print logic ... */ };
+    const handlePrint = () => {
+        const printContent = document.getElementById("indent-print-area").innerHTML;
+        const originalTitle = document.title;
+        const popupWin = window.open('', '_blank', 'width=800,height=600');
+
+        popupWin.document.open();
+        popupWin.document.write(`
+            <html>
+                <head>
+                    <title>${indentData?.indentNumber || 'Indent Print'}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; font-size: 10pt; padding: 20px; }
+                        #indent-content-inner { max-width: 700px; margin: 0 auto; padding: 15px; border: 1px solid #000; }
+                        .letterhead-img { width: 100%; height: auto; margin-bottom: 20px; }
+                        .indent-info, .to-section, .subject, .signature { margin-bottom: 15px; }
+                        .indent-info div, .to-section p { line-height: 1.4; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                        table, th, td { border: 1px solid #000; }
+                        th, td { padding: 8px; text-align: left; vertical-align: top; }
+                        .no-print { display: none; }
+                    </style>
+                </head>
+                <body>
+                    <img src="${letterheadImg}" class="letterhead-img" />
+                    ${printContent}
+                </body>
+            </html>
+        `);
+        popupWin.document.close();
+        popupWin.focus();
+        setTimeout(() => {
+            popupWin.print();
+            popupWin.close();
+        }, 500);
+        document.title = originalTitle; // Restore original title
+    };
+
     const renderIndentContent = () => {
         if (!indentData) return null;
 
         const isDivisionSubmit = indentData.submitTo === 'division';
-        const requiresSubDivisionColumn = true; 
-        const requiresSectionColumn = true; 
+        const requiresSubDivisionColumn = true;
+        const requiresSectionColumn = true;
 
-        const titleForSelection = indentData.selectedOptions.length > 1 
-            ? 'multiple locations' 
+        const titleForSelection = indentData.selectedOptions.length > 1
+            ? 'multiple locations'
             : indentData.selectedOptions[0]?.name || '';
 
         const getParentSubDivisionName = (sectionCode) => {
@@ -550,16 +583,16 @@ const CreateIndent = () => {
                     </thead>
                     <tbody>
                         {indentData.selectedOptions.map((option, index) => {
-                            const subDivisionName = isDivisionSubmit 
+                            const subDivisionName = isDivisionSubmit
                                 ? getParentSubDivisionName(option.code)
                                 : indentData.subDivision;
-                                
+
                             return (
                                 <tr key={index}>
                                     <td>{index + 1}</td>
                                     <td>{indentData.circle}</td>
                                     <td>{indentData.division}</td>
-                                    
+
                                     {/* Sub-Division Column */}
                                     {requiresSubDivisionColumn && (
                                         <td>
@@ -593,24 +626,24 @@ const CreateIndent = () => {
             </div>
         );
     };
-    
+
     const renderSubmissionResult = () => { /* ... result rendering logic ... */
         if (!submissionStatus || !indentData) return null;
 
         const statusColor = submissionStatus.status === 'Pending' ? 'success' : 'warning';
         const headerText = 'Indent Submitted Successfully';
-        
+
         return (
             <Card className="mb-4 text-center">
                 <CardHeader className={`bg-${statusColor} text-white p-3`}>
                     <h4 className="mb-0 text-white" style={{ fontSize: '22px' }}>{headerText}</h4>
                 </CardHeader>
                 <CardBody className="py-5">
-                    <i className={`ri-checkbox-circle-fill text-${statusColor}`} style={{ fontSize: '5rem'}}></i>
-                    
+                    <i className={`ri-checkbox-circle-fill text-${statusColor}`} style={{ fontSize: '5rem' }}></i>
+
                     <h5 className={`mt-3 mb-4 text-${statusColor}`}>Success!</h5>
                     <p className="lead">
-                        <strong className="text-primary">{indentData.indentNumber}</strong> 
+                        <strong className="text-primary">{indentData.indentNumber}</strong>
                         : {submissionStatus.message}
                     </p>
 
@@ -621,31 +654,31 @@ const CreateIndent = () => {
                     )}
 
                     <hr className='my-4' />
-                    
+
                     <Card className="shadow-lg" style={{ textAlign: 'left', border: '2px solid #0d6efd', backgroundColor: '#e9f3ff' }}>
                         <CardHeader className='bg-light'>
-                           <h5 className='mb-0 text-primary'>Generated Indent Letter Preview (Ready for Print)</h5>
+                            <h5 className='mb-0 text-primary'>Generated Indent Letter Preview (Ready for Print)</h5>
                         </CardHeader>
                         <CardBody className='p-4'>
-                           <div style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #ccc', padding: '15px', backgroundColor: '#fff' }}>
-                               {renderIndentContent()}
-                           </div>
+                            <div style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #ccc', padding: '15px', backgroundColor: '#fff' }}>
+                                {renderIndentContent()}
+                            </div>
                         </CardBody>
                     </Card>
 
                     <div className="mt-5 d-flex justify-content-center">
-                        <Button 
-                            color="secondary" 
-                            onClick={() => { setIndentData(null); setSubmissionStatus(null); handleRefresh(); }} 
+                        <Button
+                            color="secondary"
+                            onClick={() => { setIndentData(null); setSubmissionStatus(null); handleRefresh(); }}
                             className="me-3 action-button"
                             disabled={loading}
                         >
                             Create New Indent
                         </Button>
 
-                        <Button 
-                            color="primary" 
-                            onClick={handlePrint} 
+                        <Button
+                            color="primary"
+                            onClick={handlePrint}
                             className="me-3 action-button"
                         >
                             Print Indent 🖨️
@@ -662,8 +695,8 @@ const CreateIndent = () => {
      */
     const renderStatusDashboard = () => (
         <Card className="mb-4">
-            
-            <CardHeader 
+
+            <CardHeader
                 className="bg-primary text-white p-3 d-flex justify-content-between align-items-center"
                 style={{ cursor: 'pointer' }}
                 onClick={() => setIsStatusVisible(!isStatusVisible)}
@@ -674,11 +707,11 @@ const CreateIndent = () => {
                         {isStatusVisible ? 'Click to Collapse' : 'Click to View'}
                     </span>
                     <span style={{ fontSize: '20px', transition: 'transform 0.3s', transform: isStatusVisible ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-                        &#9660; 
+                        &#9660;
                     </span>
                 </div>
             </CardHeader>
-            
+
             <Collapse isOpen={isStatusVisible}>
                 <CardBody>
                     <Row className="mb-3 align-items-center">
@@ -689,7 +722,7 @@ const CreateIndent = () => {
                                 value={searchQuery}
                                 onChange={(e) => {
                                     setSearchQuery(e.target.value);
-                                    setCurrentPage(1); 
+                                    setCurrentPage(1);
                                 }}
                             />
                         </Col>
@@ -743,7 +776,7 @@ const CreateIndent = () => {
                                     </tbody>
                                 </Table>
                             </div>
-                            
+
                             {/* Pagination Controls */}
                             {totalPages > 1 && (
                                 <div className="d-flex justify-content-center mt-3">
@@ -775,22 +808,73 @@ const CreateIndent = () => {
         </Card>
     );
 
+    /**
+     * 🚀 MODIFIED RENDER: renderSectionSelection
+     * Renders either a single-select radio group (for 'section' officer) or a multi-select checkbox group.
+     */
+    const renderSectionSelection = () => {
+        const isSingleSelectMode = submitToOption === 'section';
+        const inputType = isSingleSelectMode ? 'radio' : 'checkbox';
+        const inputName = isSingleSelectMode ? 'single-section-select' : `option-${inputType}`;
+
+        return (
+            <Row className="g-4 mt-4">
+                <Col md={12}>
+                    <FormGroup className="mb-4">
+                        <Label className="form-label">
+                            Select Section{isSingleSelectMode ? ' (Only one allowed)' : 's'} for Indent <span className="text-danger">*</span>
+                        </Label>
+                        <div className="border p-4 mt-2" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                            <Row>
+                                {availableOptions.map(option => {
+                                    const optionCode = option.code;
+                                    const optionName = option.name;
+                                    const isSubDivision = option.isSubDivision || false;
+                                    return (
+                                        <Col md={6} key={optionCode}>
+                                            <div className="form-check mb-3">
+                                                <input
+                                                    className="form-check-input"
+                                                    type={inputType} // Dynamically set to 'radio' or 'checkbox'
+                                                    id={`option-${optionCode}`}
+                                                    name={inputName} // Use a common name for radios to enforce single selection
+                                                    checked={selectedOptions.includes(optionCode)}
+                                                    onChange={(e) => handleOptionSelection(e, optionCode)}
+                                                />
+                                                <label
+                                                    className="form-check-label option-label"
+                                                    htmlFor={`option-${optionCode}`}
+                                                >
+                                                    {optionName} {isSubDivision ? ' (Sub-Division)' : ' (Section)'}
+                                                </label>
+                                            </div>
+                                        </Col>
+                                    );
+                                })}
+                            </Row>
+                        </div>
+                    </FormGroup>
+                </Col>
+            </Row>
+        );
+    }
+
 
     return (
         <div className="page-content">
             <Container fluid>
-                
+
                 {renderStatusDashboard()}
-                
+
                 <Card className="mb-4">
                     <CardHeader className="bg-primary text-white p-3">
                         <h4 className="mb-0 text-white" style={{ fontSize: '22px' }}>Create Indent Request</h4>
                     </CardHeader>
 
                     {loading && !submissionStatus && <div className="text-center py-5"><Spinner /> <p>Processing Submission...</p></div>}
-                    
+
                     {submissionStatus ? (
-                        renderSubmissionResult() 
+                        renderSubmissionResult()
                     ) : (
                         <CardBody>
                             <Form>
@@ -808,9 +892,9 @@ const CreateIndent = () => {
                                             >
                                                 <option value="">Select Circle</option>
                                                 {getUniqueCircles(circles).map(circle => (
-                                                <option key={circle.circle_code} value={circle.circle_code}>
-                                                    {circle.circle}
-                                                </option>
+                                                    <option key={circle.circle_code} value={circle.circle_code}>
+                                                        {circle.circle}
+                                                    </option>
                                                 ))}
                                             </Input>
                                             {loading && circles.length === 0 && <Spinner size="sm" className="mt-2" />}
@@ -829,9 +913,9 @@ const CreateIndent = () => {
                                             >
                                                 <option value="">Select Division</option>
                                                 {divisionName.map(div => (
-                                                <option key={div.div_code} value={div.div_code}>
-                                                    {div.division}
-                                                </option>
+                                                    <option key={div.div_code} value={div.div_code}>
+                                                        {div.division}
+                                                    </option>
                                                 ))}
                                             </Input>
                                             {loading && circle && divisionName.length === 0 && <Spinner size="sm" className="mt-2" />}
@@ -850,9 +934,9 @@ const CreateIndent = () => {
                                             >
                                                 <option value="">Select Sub Division</option>
                                                 {subDivisions.map(subDiv => (
-                                                <option key={subDiv.sd_code} value={subDiv.sd_code}>
-                                                    {subDiv.sub_division}
-                                                </option>
+                                                    <option key={subDiv.sd_code} value={subDiv.sd_code}>
+                                                        {subDiv.sub_division}
+                                                    </option>
                                                 ))}
                                             </Input>
                                             {loading && division && subDivisions.length === 0 && <Spinner size="sm" className="mt-2" />}
@@ -915,56 +999,8 @@ const CreateIndent = () => {
                                             </Col>
                                         </Row>
 
-                                        {/* Multi-Select Options Area (Checkboxes used as radio for 'section') */}
-                                        {submitToOption && availableOptions.length > 0 && (
-                                            <Row className="g-4 mt-4">
-                                                <Col md={12}>
-                                                    <FormGroup className="mb-4">
-                                                        <Label className="form-label">
-                                                            Select **Sections** for Indent <span className="text-danger">*</span>
-                                                        </Label>
-                                                        <div className="border p-4 mt-2" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                                                            <Row>
-                                                                {availableOptions.map(option => {
-                                                                    const optionCode = option.code; 
-                                                                    const optionName = option.name;
-                                                                    const isSubDivision = option.isSubDivision || false; 
-                                                                    return (
-                                                                        <Col md={6} key={optionCode}>
-                                                                            <div className="form-check mb-3">
-                                                                                <input
-                                                                                    className="form-check-input"
-                                                                                    type="checkbox"
-                                                                                    id={`option-${optionCode}`}
-                                                                                    // Use Checkbox for all for UI consistency, but control logic in handler
-                                                                                    checked={selectedOptions.includes(optionCode)}
-                                                                                    onChange={(e) => handleOptionSelection(e, optionCode)}
-                                                                                    // 🔑 Added logic to hint at radio-button behavior for 'section'
-                                                                                    // by setting a unique name/type for screen readers/assistive technologies if possible,
-                                                                                    // though for this component structure, controlling via state is primary.
-                                                                                />
-                                                                                <label
-                                                                                    className="form-check-label option-label"
-                                                                                    
-                                                                                    htmlFor={`option-${optionCode}`}
-                                                                                >
-                                                                                    {optionName} {isSubDivision ? ' (Sub-Division)' : ' (Section)'}
-                                                                                </label>
-                                                                            </div>
-                                                                        </Col>
-                                                                    );
-                                                                })}
-                                                            </Row>
-                                                            {submitToOption === 'section' && (
-                                                                <Alert color="info" className="mt-3 py-2">
-                                                                    Note: Only one section selection is permitted. Choosing a new one will unselect the previous one.
-                                                                </Alert>
-                                                            )}
-                                                        </div>
-                                                    </FormGroup>
-                                                </Col>
-                                            </Row>
-                                        )}
+                                        {/* 🚀 UPDATED: Multi/Single-Select Options Area */}
+                                        {submitToOption && availableOptions.length > 0 && renderSectionSelection()}
 
                                         {/* Error Message (Unchanged) */}
                                         {submitToOption && availableOptions.length === 0 && !loading && (
@@ -974,7 +1010,7 @@ const CreateIndent = () => {
                                                 </Col>
                                             </Row>
                                         )}
-                                        
+
                                         {/* CONFIRMATION CHECKBOX (Unchanged) */}
                                         {selectedOptions.length > 0 && (
                                             <Row className="mt-4">
@@ -996,23 +1032,22 @@ const CreateIndent = () => {
                                         )}
 
 
-                                        {/* Submit and Refresh Buttons (Logic Updated with single-select check for 'section' in disabled prop) */}
+                                        {/* Submit and Refresh Buttons (Unchanged Logic) */}
                                         <Row className="g-4 mt-5">
                                             <Col md={12} className="d-flex justify-content-between">
                                                 <Button color="secondary" onClick={handleRefresh} className="action-button" disabled={loading}>
                                                     Refresh
                                                 </Button>
                                                 <Button
-                                                    color="success" 
+                                                    color="success"
                                                     onClick={handleSubmit}
-                                                    className="action-button"
                                                     disabled={
-                                                        !submitToOption || 
-                                                        (availableOptions.length > 0 && selectedOptions.length === 0) || 
-                                                        (submitToOption === 'section' && selectedOptions.length > 1) || // 🔑 ADDED: Disable if 'section' is selected but multiple options are somehow selected (should be prevented by handler, but as a safeguard)
-                                                        loading || 
+                                                        !submitToOption ||
+                                                        (availableOptions.length > 0 && selectedOptions.length === 0) ||
+                                                        loading ||
                                                         !isConfirmed // Mandatory check
                                                     }
+                                                    className="action-button"
                                                 >
                                                     {loading ? <Spinner size="sm" /> : 'Submit '}
                                                 </Button>
@@ -1026,30 +1061,31 @@ const CreateIndent = () => {
                 </Card>
 
                 {/* Print Content Container (Hidden, used by handlePrint) */}
-                <div style={{ display: 'none' }}>
+                <div id="indent-print-area" style={{ display: 'none' }}>
                     {indentData && renderIndentContent()}
                 </div>
 
                 {/* CSS Styles (Unchanged) */}
                 <style>
                     {`
-                        .form-label { font-size: 17px; font-weight: 600; margin-bottom: 10px; color: #495057; }
-                        .custom-dropdown { background-color: #f8f9fa; border: 2px solid #ced4da; border-radius: 8px; padding: 12px 16px; font-size: 17px; color: #495057; transition: all 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); height: 50px; }
-                        .custom-dropdown:focus { border-color: #80bdff; outline: 0; box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25); background-color: #fff; }
-                        .custom-dropdown:hover { border-color: #adb5bd; background-color: #e9ecef; }
-                        .custom-dropdown:disabled { background-color: #e9ecef; opacity: 0.7; cursor: not-allowed; }
-                        .submit-to-container { background-color: #f8f9fa; border-radius: 10px; padding: 20px; border: 1px solid #e9ecef; }
-                        .submit-to-label { font-weight: 700; color: #495057; margin-bottom: 15px; font-size: 18px; }
-                        .submit-to-options { gap: 25px; }
-                        .custom-radio { margin-bottom: 0; }
-                        .custom-radio .form-check-input { width: 20px; height: 20px; margin-top: 0.2rem; }
-                        .custom-radio .form-check-input:checked { background-color: #0d6efd; border-color: #0d6efd; }
-                        .custom-radio-label { font-weight: 600; color: #495057; padding-left: 10px; cursor: pointer; transition: color 0.2s; font-size: 17px; }
-                        .custom-radio:hover .custom-radio-label { color: #0d6efd; }
-                        .option-label { font-size: 16px; padding-left: 8px; }
-                        .action-button { padding: 12px 24px; font-size: 17px; font-weight: 600; border-radius: 8px; }
-                        .table-responsive { max-height: 400px; overflow-y: auto; } /* Scrollbar applied here */
-                        .table-nowrap th { position: sticky; top: 0; background-color: #fff; z-index: 10; }
+                    /* ... (CSS Styles remain here) ... */
+                    .form-label { font-size: 17px; font-weight: 600; margin-bottom: 10px; color: #495057; }
+                    .custom-dropdown { background-color: #f8f9fa; border: 2px solid #ced4da; border-radius: 8px; padding: 12px 16px; font-size: 17px; color: #495057; transition: all 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); height: 50px; }
+                    .custom-dropdown:focus { border-color: #80bdff; outline: 0; box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25); background-color: #fff; }
+                    .custom-dropdown:hover { border-color: #adb5bd; background-color: #e9ecef; }
+                    .custom-dropdown:disabled { background-color: #e9ecef; opacity: 0.7; cursor: not-allowed; }
+                    .submit-to-container { background-color: #f8f9fa; border-radius: 10px; padding: 20px; border: 1px solid #e9ecef; }
+                    .submit-to-label { font-weight: 700; color: #495057; margin-bottom: 15px; font-size: 18px; }
+                    .submit-to-options { gap: 25px; }
+                    .custom-radio { margin-bottom: 0; }
+                    .custom-radio .form-check-input { width: 20px; height: 20px; margin-top: 0.2rem; }
+                    .custom-radio .form-check-input:checked { background-color: #0d6efd; border-color: #0d6efd; }
+                    .custom-radio-label { font-weight: 600; color: #495057; padding-left: 10px; cursor: pointer; transition: color 0.2s; font-size: 17px; }
+                    .custom-radio:hover .custom-radio-label { color: #0d6efd; }
+                    .option-label { font-size: 16px; padding-left: 8px; }
+                    .action-button { padding: 12px 24px; font-size: 17px; font-weight: 600; border-radius: 8px; }
+                    .table-responsive { max-height: 400px; overflow-y: auto; } /* Scrollbar applied here */
+                    .table-nowrap th { position: sticky; top: 0; background-color: #fff; z-index: 10; }
                     `}
                 </style>
             </Container>
