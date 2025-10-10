@@ -996,10 +996,10 @@ const ManageUser = () => {
                             >
                                 <option value="">Select Marital Status</option>
                                 {maritalStatusName.map(opt => (
-                                    <option key={opt.maritalStatusId} value={opt.maritalStatusId}>
-                                        {opt.maritalStatusName}
-                                    </option>
-                                ))}
+    <option key={opt.maritalStatusName} value={opt.maritalStatusName}>
+        {opt.maritalStatusCode}  
+    </option>
+))}
                             </Input>
                         </FormGroup>
                       </Col>
