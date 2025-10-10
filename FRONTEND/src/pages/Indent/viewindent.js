@@ -30,7 +30,6 @@ const formatSelectedOptions = (names) => {
 
 /**
  * Fetches the main list of indents from the API (Flags 2, 4, or 6).
- * Uses resubmittedindent for Flag 2, and postcreateindent for Flag 4/6.
  */
 const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, setIndents, setIsLoading, setError) => {
     setIsLoading(true);
@@ -39,21 +38,21 @@ const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, 
 
     let payload;
     let flagId;
-    // Determine which API function to use
     let apiFunction = postcreateindent; 
     const filterStatus = VIEW_STATUS_MAP[viewStatus];
 
     if (viewStatus === 'approved') {
         flagId = 6;
+        // Flag 6 uses Role_Id (original payload structure)
         payload = { "flagId": flagId, "Role_Id": roleId, "RequestUserName": requestUserName };
     } else if (viewStatus === 'resubmitted_queue') {
-        // *** DEDICATED API FOR FLAG 2 (Data Load) ***
+        // *** FLAG 2: DEDICATED API (resubmittedindent) with DO_Role_Id ***
         flagId = 2; 
         apiFunction = resubmittedindent; 
-        payload = { "flagId": flagId, "Role_Id": roleId, "RequestUserName": requestUserName };
+        payload = { "flagId": flagId, "DO_Role_Id": roleId, "RequestUserName": requestUserName }; 
     } 
     else {
-        // Flags 4 (used for general queue, which is then filtered)
+        // *** FLAG 4: Pending Approval Data (uses postcreateindent) with Role_Id ***
         flagId = 4;
         payload = { "flagId": flagId, "Role_Id": roleId, "RequestUserName": requestUserName };
     }
@@ -61,71 +60,125 @@ const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, 
     try {
         const response = await apiFunction(payload); 
 
-        if (response && response.status === 'success' && response.result) {
-            const apiData = Array.isArray(response.result) ? response.result : [];
+        let apiData = [];
+        let statusCheck = response && response.status === 'success';
 
-            // --- Grouping and Aggregation Logic (unchanged) ---
-            const groupedDataMap = apiData.reduce((acc, item) => {
-                const indentId = item.Indent_Id;
-                const sectionNamesString = item.section_names || item.SectionOfficeName || '';
-                const soCodesString = item.so_codes || item.so_code || '';
-                const enteredQtyString = item.EnteredQty || ''; 
+        // 1. Handle nested response for Flag 2 (Resubmitted Queue)
+        if (flagId === 2 && statusCheck && Array.isArray(response.result) && response.result.length > 0 && Array.isArray(response.result[0].result)) {
+             apiData = response.result[0].result;
+        } else if (statusCheck && response.result) {
+            // 2. Handle standard response for other flags (4, 6, etc.)
+            apiData = Array.isArray(response.result) ? response.result : [];
+        } else if (!statusCheck) {
+            setError(response.message || `Failed to fetch indents (Flag ${flagId}). API Status: ${response.status || 'Unknown'}.`);
+            setIsLoading(false);
+            return;
+        }
+        
+        // --- Grouping and Aggregation Logic ---
+        const groupedDataMap = apiData.reduce((acc, item) => {
+            const indentId = item.Indent_Id;
+            const sectionsArray = item.sections; 
 
-                if (!acc[indentId]) {
-                    const createdDate = new Date(item.IndentCreatedOn || item.UpdatedOn || new Date());
-                    const statusFromApi = item.StatusName || STATUS_MAP[item.Status_Id] || 'To Be Approved'; 
+            // Define these variables here to resolve ReferenceError
+            const sectionNamesString = item.section_names || item.SectionOfficeName || '';
+            const soCodesString = item.so_codes || item.so_code || '';
+            const enteredQtyString = item.EnteredQty || ''; 
 
-                    acc[indentId] = {
-                        indentNumber: indentId,
-                        displayIndentNo: item.fullIndentNo || item.Indent_No || item.Indent_Id,
-                        createdOn: item.IndentCreatedOn || item.UpdatedOn,
-                        date: createdDate.toLocaleDateString('en-GB'),
-                        time: createdDate.toLocaleTimeString('en-US', { hour12: true }),
-                        division: item.division_names || item.DivisionName || 'N/A', 
-                        subDivision: item.subdivision_names || item.SubDivisionName || 'N/A', 
-                        divisionCode: item.div_codes || item.div_code || null,
-                        subDivisionCode: item.sd_codes || item.sd_code || null,
-                        status: statusFromApi,
-                        rejectionReason: item.RejectionReason || item.comment || null,
-                        createdBy: item.CreatedByName || item.RequestUserName || 'N/A',
-                        createdByUserId: item.CreatedByIndent || item.CreatedByUser_Id || null,
-                        selectedOptions: [], 
-                    };
+            if (!acc[indentId]) {
+                const createdDate = new Date(item.IndentCreatedOn || item.UpdatedOn || new Date());
+                const statusFromApi = item.IndentStatusName === "ResubmittedToOfficers" ? "To Be Approved" : (item.StatusName || STATUS_MAP[item.IndentStatus_Id || item.Status_Id] || 'To Be Approved'); 
+                
+                // Get initial Division/Sub-Division details
+                let divisionName = item.division_names || item.DivisionName || 'N/A';
+                let subDivisionName = item.subdivision_names || item.SubDivisionName || 'N/A';
+
+                // *** FIX FOR FLAG 2: Check nested sections for Division/Sub-Division names ***
+                // This ensures location names are pulled from the nested structure if missing at the root level.
+                if (flagId === 2 && (divisionName === 'N/A' || subDivisionName === 'N/A') && Array.isArray(sectionsArray) && sectionsArray.length > 0) {
+                    divisionName = sectionsArray[0].DivisionName || sectionsArray[0].division_names || divisionName;
+                    subDivisionName = sectionsArray[0].SubDivisionName || sectionsArray[0].subdivision_names || subDivisionName;
                 }
+                // *****************************************************************************
+                
+                acc[indentId] = {
+                    indentNumber: indentId,
+                    displayIndentNo: item.fullIndentNo || item.Indent_No || item.Indent_Id,
+                    createdOn: item.IndentCreatedOn || item.UpdatedOn,
+                    date: createdDate.toLocaleDateString('en-GB'),
+                    time: createdDate.toLocaleTimeString('en-US', { hour12: true }),
+                    division: divisionName, // Use resolved name
+                    subDivision: subDivisionName, // Use resolved name
+                    divisionCode: item.div_codes || item.div_code || null,
+                    subDivisionCode: item.sd_codes || item.sd_code || null,
+                    status: statusFromApi,
+                    rejectionReason: item.RejectionReason || item.ApprovalHistoryComment || item.comment || null, 
+                    createdByUserId: item.CreatedByIndent || item.ActionByUser_Id || null, 
+                    createdBy: item.CreatedByName || item.RequestUserName || 'N/A',
+                    selectedOptions: [], 
+                };
+            }
 
-                const currentIndent = acc[indentId];
-                const names = sectionNamesString.split(',').map(s => s.trim()).filter(s => s);
-                const codes = soCodesString.split(',').map(s => s.trim()).filter(s => s);
-                const quantities = enteredQtyString.split(',').map(s => parseInt(s.trim(), 10));
-
-                names.forEach((name, index) => {
-                    const code = codes[index] || null;
-                    const qty = quantities.length > index && !isNaN(quantities[index]) ? quantities[index] : 0;
+            const currentIndent = acc[indentId];
+            
+            if (Array.isArray(sectionsArray) && sectionsArray.length > 0) {
+                // --- LOGIC FOR NESTED SECTIONS (Flag 2) ---
+                sectionsArray.forEach(section => {
+                    // Use the most granular section name/code for the selectedOptions list
+                    const name = section.section_names || section.SubDivisionName || section.subdivision_names || 'N/A';
+                    const code = section.so_code || null;
+                    const qty = parseInt(section.PMQty, 10) || 0; 
+                    
                     if (name && name !== 'N/A' && !currentIndent.selectedOptions.some(o => o.name === name && o.code === code)) {
                         currentIndent.selectedOptions.push({ name, code, quantity: qty });
                     }
                 });
-                return acc;
-            }, {});
+            } else {
+                // --- LOGIC FOR AGGREGATED STRINGS (Flag 4 and others) ---
+                const names = sectionNamesString.split(',').map(s => s.trim()).filter(s => s);
+                const codes = soCodesString.split(',').map(s => s.trim()).filter(s => s);
+                const quantities = enteredQtyString.split(',').map(s => parseInt(s.trim(), 10));
 
-            let finalResults = Object.values(groupedDataMap).map(indent => {
-                const uniqueNames = [...new Set(indent.selectedOptions.map(o => o.name).filter(n => n && n !== 'N/A'))];
-                indent.selectedOptionNames = uniqueNames.join(', ');
-                return indent;
-            });
-
-            if (flagId === 4 && filterStatus) {
-                finalResults = finalResults.filter(indent => indent.status === filterStatus);
+                if (names.length > 0) {
+                    names.forEach((name, index) => {
+                        const code = codes[index] || null;
+                        const qty = quantities.length > index && !isNaN(quantities[index]) ? quantities[index] : 0;
+                        if (name && name !== 'N/A' && !currentIndent.selectedOptions.some(o => o.name === name && o.code === code)) {
+                            currentIndent.selectedOptions.push({ name, code, quantity: qty });
+                        }
+                    });
+                }
+                
+                // Fallback for single item if selectedOptions is still empty
+                if (currentIndent.selectedOptions.length === 0 && currentIndent.subDivision && currentIndent.subDivision !== 'N/A') {
+                    // Prioritize section_names/so_codes if they exist, otherwise use subdivision fields.
+                    const nameToUse = (sectionNamesString && sectionNamesString !== '') ? sectionNamesString : currentIndent.subDivision;
+                    const codeToUse = (soCodesString && soCodesString !== '') ? soCodesString : currentIndent.subDivisionCode;
+                    
+                    currentIndent.selectedOptions.push({
+                         name: nameToUse,
+                         code: codeToUse,
+                         quantity: quantities[0] || 0
+                    });
+                }
             }
-            
-            setIndents(finalResults);
 
-        } else if (response && response.status === 'success' && (response.count === 0 || !response.result)) {
-            setIndents([]);
-            setError(null);
-        } else {
-            setError(response.message || `Failed to fetch indents (Flag ${flagId}). API Status: ${response.status || 'Unknown'}.`);
+            return acc;
+        }, {});
+
+        let finalResults = Object.values(groupedDataMap).map(indent => {
+            const uniqueNames = [...new Set(indent.selectedOptions.map(o => o.name).filter(n => n && n !== 'N/A'))];
+            indent.selectedOptionNames = uniqueNames.join(', ');
+            return indent;
+        });
+
+        if (flagId === 4 && filterStatus) {
+            finalResults = finalResults.filter(indent => indent.status === filterStatus);
         }
+        
+        setIndents(finalResults);
+        setError(null); 
+
     } catch (err) {
         console.error("API Fetch Error:", err);
         setError('An unexpected network or server error occurred. Check the network connection or API setup.');
@@ -136,24 +189,38 @@ const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, 
 
 /**
  * Fetches an explicit count for a given flag (Flags 1, 7, or 8).
- * Uses resubmittedindent for Flag 1, and postcreateindent for Flag 7/8.
  */
 const fetchIndentCount = async (flagId, roleId, requestUserName, setIsLoading, setCount) => {
     setIsLoading(true);
-    const countPayload = { "flagId": flagId, "Role_Id": roleId, "RequestUserName": requestUserName };
     
-    // Determine which API function to use
     let apiFunction = postcreateindent; 
-    if (flagId === 1) { // *** DEDICATED API FOR FLAG 1 (Count) ***
+    let countPayload;
+
+    if (flagId === 1) { 
+        // *** FLAG 1: DEDICATED API (resubmittedindent) with DO_Role_Id ***
         apiFunction = resubmittedindent; 
-    } 
+        countPayload = { "flagId": flagId, "DO_Role_Id": roleId, "RequestUserName": requestUserName };
+    } else {
+        // Flags 7, 8 use general API with original "Role_Id" key
+        countPayload = { "flagId": flagId, "Role_Id": roleId, "RequestUserName": requestUserName };
+    }
 
     try {
         const response = await apiFunction(countPayload); 
 
         if (response && response.status === 'success') {
             let count = 0;
-            if (typeof response.result === 'number') {
+            
+            // 1. Check for deeply nested object structure (Flag 1 count, as per your last response)
+            if (flagId === 1 && response.result && typeof response.result === 'object' && response.result.count !== undefined) {
+                 count = response.result.count;
+            }
+            // 2. Check for nested array structure (Flag 1 previous attempt)
+            else if (flagId === 1 && Array.isArray(response.result) && response.result.length > 0 && response.result[0].count !== undefined) {
+                 count = response.result[0].count;
+            }
+            // 3. Check for direct number or array length (Flags 7, 8)
+            else if (typeof response.result === 'number') {
                 count = response.result;
             } else if (Array.isArray(response.result)) {
                 count = response.result.length;
@@ -370,22 +437,24 @@ const ViewIndent = () => {
         setFetchError(null);
         setPage(0);
 
+        const { userId, roleId, requestUserName } = sessionData;
+
         fetchIndentsFromAPI(
             viewStatus,
-            sessionData.userId,
-            sessionData.roleId,
-            sessionData.requestUserName,
+            userId,
+            roleId,
+            requestUserName,
             setIndents,
             setIsLoading,
             setFetchError
         );
 
-        // General API calls (Flags 7, 8)
-        fetchIndentCount(7, sessionData.roleId, sessionData.requestUserName, setIsCountLoading, setPendingApprovalCount);
-        fetchIndentCount(8, sessionData.roleId, sessionData.requestUserName, setIsApprovedCountLoading, setApprovedCount);
+        // General API calls (Flags 7, 8) use original Role_Id key
+        fetchIndentCount(7, roleId, requestUserName, setIsCountLoading, setPendingApprovalCount);
+        fetchIndentCount(8, roleId, requestUserName, setIsApprovedCountLoading, setApprovedCount);
         
-        // Dedicated API call for Flag 1
-        fetchIndentCount(1, sessionData.roleId, sessionData.requestUserName, setIsResubmittedCountLoading, setResubmittedCount);
+        // Dedicated API call for Flag 1 uses DO_Role_Id key
+        fetchIndentCount(1, roleId, requestUserName, setIsResubmittedCountLoading, setResubmittedCount);
 
     }, [viewStatus, sessionData.roleId, sessionData.requestUserName, sessionData.userId]);
 
@@ -463,15 +532,17 @@ const ViewIndent = () => {
         setFormError('');
 
         try {
-            // Rejection Payload (Flag ID 3) - uses postcreateindent 
+            // Rejection Payload (Flag ID 3) - uses postcreateindent. Action payloads use Role_Id.
             const finalRejectPayload = {
                 "flagId": 3,
                 "Indent_Id": selectedIndent.indentNumber,
                 "UploadedByUser_Id": sessionData.userId,
-                "Role_Id": sessionData.roleId,
+                "Role_Id": sessionData.roleId, // Retain Role_Id for action payload
                 "Status_Id": 4, // Status ID for 'Returned for Revision'
                 "comment": rejectionReason.trim(),
-                "CreatedByUser_Id": selectedIndent.createdByUserId,
+                "CreatedByUser_Id": selectedIndent.createdByUserId, // Ensure CreatedByUser_Id is used
+                "div_codes": selectedIndent.divisionCode || null, // Included division code
+                "sd_codes": selectedIndent.subDivisionCode || null, // Included subdivision code
                 "sections": selectedIndent.selectedOptions.map(o => ({ 
                     "sd_code": selectedIndent.subDivisionCode || null,
                     "so_code": o.code || null,
@@ -544,6 +615,23 @@ const ViewIndent = () => {
             };
         });
 
+        // Simulating the API payload for Flag 9
+        const finalResubmitPayload = {
+            "flagId": 9, // Assuming Flag 9 for PM Resubmit
+            "Indent_Id": selectedIndent.indentNumber,
+            "UploadedByUser_Id": sessionData.userId,
+            "Role_Id": sessionData.roleId, 
+            "Status_Id": 1, // Moving back to 'To Be Approved'
+            "CreatedByUser_Id": selectedIndent.createdByUserId, // Ensure CreatedByUser_Id is used (e.g., 6)
+            "div_codes": selectedIndent.divisionCode || null, // Included division code
+            "sd_codes": selectedIndent.subDivisionCode || null, // Included subdivision code
+            "sections": updatedSelectedOptions.map(o => ({ 
+                "sd_code": selectedIndent.subDivisionCode || null,
+                "so_code": o.code || null,
+                "EnteredQty": o.quantity ? o.quantity.toString() : "0"
+            }))
+        };
+        
         // Simulate successful resubmit by moving item back to 'To Be Approved'
         setIndents(prev => prev.map(i => i.indentNumber === selectedIndent.indentNumber ? {
             ...i,
@@ -589,9 +677,10 @@ const ViewIndent = () => {
                     "sd_code": selectedIndent.subDivisionCode || null,
                     "so_code": original.code || null,
                     "EnteredQty": enteredQty.toString(),
+                    // Include div_code and comment in the section payload if applicable, matching your backend structure
+                    "div_code": selectedIndent.divisionCode || null, 
+                    "comment": finalComment || null 
                 };
-                if (selectedIndent.divisionCode) { sectionObject.div_code = selectedIndent.divisionCode; }
-                if (finalComment) { sectionObject.comment = finalComment; }
                 return sectionObject;
             });
 
@@ -600,9 +689,11 @@ const ViewIndent = () => {
                 "flagId": 5,
                 "Indent_Id": selectedIndent.indentNumber,
                 "UploadedByUser_Id": sessionData.userId,
-                "Role_Id": sessionData.roleId,
+                "Role_Id": sessionData.roleId, // Retain Role_Id for action payload
                 "Status_Id": 2, // 'Approved'
-                "CreatedByUser_Id": selectedIndent.createdByUserId,
+                "CreatedByUser_Id": selectedIndent.createdByUserId, // Ensure CreatedByUser_Id is used (e.g., 6)
+                "div_codes": selectedIndent.divisionCode || null, // Included division code
+                "sd_codes": selectedIndent.subDivisionCode || null, // Included subdivision code
                 "sections": sectionsPayload
             };
 
