@@ -59,12 +59,6 @@ export const fetchApprovedIndentForProjectHeads = async (CreatedByUser_Id) => {
           SubmitToRole: row.SubmitToRole,
           VersionLabel: row.VersionLabel,
           UploadedAt: row.UploadedAt,
-          //   div_codes: row.div_code,
-          //   sd_codes: row.sd_code,
-          //   so_codes: row.so_code,
-          //   division_names: row.division,
-          //   subdivision_names: row.sub_division,
-          //   section_names: row.section_office,
           sections: []
         };
       }
@@ -96,7 +90,6 @@ export const fetchApprovedIndentForProjectHeads = async (CreatedByUser_Id) => {
     throw error;
   }
 };
-
 
 //============//THIS IS THE FETCHING THE APPROVED DOCUMENTS FOR THE PROJECT HEAD HIS CREATED INDENTS ALSO THIS OK (IF WE SEPRATE THE CREATOR OF THE INDENT THEN IT IS CHANGE OK )
 export const fetchApprovedIndentForProjectHeadCount = async (CreatedByUser_Id) => {

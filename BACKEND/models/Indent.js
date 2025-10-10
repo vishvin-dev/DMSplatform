@@ -4,7 +4,7 @@ import { getFullIndentNo } from "../utils/IndentPrefix/indent.js";
 //===================THE FLAGID(1,2,3) IS THE FOR FIRST INDENT SCREEN(2Screen) =======================================
 // Step 1️ Insert basic Indent (Draft)
 export const insertIndentCreation = async (data) => {
-    const { CreatedByUser_Id, Role_Id,  zones, Status_Id, RequestUserName } = data;
+    const { CreatedByUser_Id, Role_Id, zones, Status_Id, RequestUserName } = data;
 
     // Generate next Indent_No
     const [rows] = await pool.execute(`SELECT MAX(CAST(Indent_No AS UNSIGNED)) AS maxIndent FROM Indent`);
@@ -20,7 +20,7 @@ export const insertIndentCreation = async (data) => {
         INSERT INTO Indent
         (Indent_No, CreatedByUser_Id, Role_Id, Status_Id, CreatedOn, RequestUserName)
         VALUES (?, ?, ?, ?, NOW(), ?)
-    `, [formattedIndentNo, CreatedByUser_Id, Role_Id,  Status_Id || null, RequestUserName]); // Status_Id = 1 (Draft)
+    `, [formattedIndentNo, CreatedByUser_Id, Role_Id, Status_Id || null, RequestUserName]); // Status_Id = 1 (Draft)
 
     const indentId = result.insertId;
 
@@ -38,7 +38,7 @@ export const insertIndentCreation = async (data) => {
 }
 // Step 2️ Submit Indent (update details + change status to Submitted)
 export const submitIndent = async (data) => {
-    const { Indent_No,  Status_Id, RequestUserName } = data;
+    const { Indent_No, Status_Id, RequestUserName } = data;
 
     // Find internal ID from Indent_No
     const [rows] = await pool.execute(
@@ -58,7 +58,7 @@ export const submitIndent = async (data) => {
             UpdatedOn = NOW(),
             RequestUserName = ?
         WHERE Indent_Id = ?
-    `, [ Status_Id || 2, RequestUserName, indentId]);
+    `, [Status_Id || 2, RequestUserName, indentId]);
 
     return { Indent_No, Status_Id: Status_Id || 2, message: "Indent submitted successfully" };
 };
@@ -223,27 +223,34 @@ export const submitOfficerApproveIndent = async (data) => {
         throw new Error("Required data missing");
     }
 
-    // 1️ Determine the next version label
-    const [versions] = await pool.execute(
-        `SELECT VersionLabel FROM IndentSectionQtyDetail WHERE Indent_Id = ? ORDER BY SectionQtyDetail_Id DESC`,
+    // Step 1️: Check if any version already exists
+    const [existingVersions] = await pool.execute(
+        `SELECT VersionLabel 
+         FROM IndentSectionQtyDetail 
+         WHERE Indent_Id = ? 
+         ORDER BY SectionQtyDetail_Id DESC`,
         [Indent_Id]
     );
 
     let nextVersion = "v1";
-    if (versions.length > 0) {
-        const lastVersion = versions[0].VersionLabel;
-        const versionNumber = parseInt(lastVersion.replace("v", ""));
+    let isResubmission = false;
+
+    if (existingVersions.length > 0) {
+        const lastVersion = existingVersions[0].VersionLabel;
+        const versionNumber = parseInt(lastVersion.replace("v", "")) || 1;
         nextVersion = `v${versionNumber + 1}`;
+        isResubmission = true; // means DO is submitting again (second or further time)
     }
 
-    // 2️ Insert each section
+    // Step 2️: Insert new section records
     const insertedRows = [];
     for (const s of sections) {
         const { div_code, sd_code, so_code, EnteredQty, comment } = s;
+
         const [result] = await pool.execute(
             `INSERT INTO IndentSectionQtyDetail 
             (Indent_Id, VersionLabel, UploadedByUser_Id, UploadedAt, Role_Id, div_code, sd_code, so_code, EnteredQty, Status_Id, comment, CreatedByUser_Id)
-            VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)`,
             [Indent_Id, nextVersion, UploadedByUser_Id, Role_Id, div_code, sd_code, so_code, EnteredQty, Status_Id, comment || null, CreatedByUser_Id]
         );
 
@@ -259,21 +266,37 @@ export const submitOfficerApproveIndent = async (data) => {
             comment
         });
     }
-    // 3️ Update the main Indent status
-   // Hardcode ApprovedByDO status id = 2
-        const approvedByDOStatus = 2;
 
+    // Step 3️: Update main Indent status (ApprovedByDO = 2)
+    const approvedByDOStatus = 2;
+    await pool.execute(
+        `UPDATE Indent
+         SET Status_Id = ?
+         WHERE Indent_Id = ?`,
+        [approvedByDOStatus, Indent_Id]
+    );
+
+    // Step 4️: If resubmission (v2 or later), update IndentApprovalHistory status to 4
+    if (isResubmission) {
+        const resubmittedStatus = 2; // Status_Id = 4 → ResubmittedByDO
         await pool.execute(
-            `UPDATE Indent
-            SET Status_Id = ?
-            WHERE Indent_Id = ?`,
-            [approvedByDOStatus, Indent_Id]
+            `UPDATE IndentApprovalHistory
+             SET Status_Id = ?, 
+                 ActionOn = NOW()
+             WHERE Indent_Id = ?`,
+            [resubmittedStatus, Indent_Id]
         );
+    }
 
-
-
-    return insertedRows;
+    return {
+        message: isResubmission
+            ? "Indent resubmitted successfully (Version " + nextVersion + ")"
+            : "Indent approved by DO successfully (Version v1)",
+        status: "success",
+        result: insertedRows
+    };
 };
+
 //============================================================================
 
 // THIS IS THE FETHCING THE APPOROVED INDENT FOR HIS BASED ON THE ROLE_ID OF THE OFFICERS 
@@ -385,9 +408,9 @@ export const fetchOfficerApproveIndentCount = async (Role_Id) => {
 //==================================================================================
 //  THIS IS THE INDENT RSUBMITTED SCREEN OK (OFFCIERS SCREEN)
 //THIS IS THE INDENT RESUBMITTED INDENT COUNT FETCHED HERE OK FOR THE OFFICERS SCREEN OK 
- export const fetchingResubmittedIndentsCountByDORole=async(DO_Role_Id)=>{
-   try {
-    const [rows] = await pool.execute(`
+export const fetchingResubmittedIndentsCountByDORole = async (DO_Role_Id) => {
+    try {
+        const [rows] = await pool.execute(`
       SELECT COUNT(DISTINCT ah.Indent_Id) AS totalResubmittedIndents
       FROM IndentApprovalHistory ah
       JOIN IndentSectionQtyDetail s 
@@ -396,22 +419,22 @@ export const fetchOfficerApproveIndentCount = async (Role_Id) => {
         AND ah.DO_Role_Id = ?
     `, [DO_Role_Id]);
 
-    return {
-      message: "Resubmitted Indent count fetched successfully",
-      status: "success",
-      count: rows[0].totalResubmittedIndents
-    };
+        return {
+            message: "Resubmitted Indent count fetched successfully",
+            status: "success",
+            count: rows[0].totalResubmittedIndents
+        };
 
-  } catch (error) {
-    console.log("Error while fetching resubmitted indent count:", error);
-    throw error;
-  }
+    } catch (error) {
+        console.log("Error while fetching resubmitted indent count:", error);
+        throw error;
+    }
 };
 
 //THIS IS THE INDENT RESUBMITTED INDENTINFORMATION FETCHED HERE OK FOR THE OFFICERS SCREEN OK 
 export const fetchingResubmittedIndentsByDORole = async (DO_Role_Id) => {
-  try {
-    const [rows] = await pool.execute(`
+    try {
+        const [rows] = await pool.execute(`
       SELECT 
         ah.ApprovalHistory_Id,
         ah.Indent_Id,
@@ -452,53 +475,53 @@ export const fetchingResubmittedIndentsByDORole = async (DO_Role_Id) => {
       ORDER BY ah.Indent_Id, ah.ApprovalHistory_Id
     `, [DO_Role_Id]);
 
-    // Group by Indent_Id
-    const indentsMap = {};
-    rows.forEach(row => {
-      if (!indentsMap[row.Indent_Id]) {
-        indentsMap[row.Indent_Id] = {
-          Indent_Id: row.Indent_Id,
-          Indent_No: row.Indent_No,
-          fullIndentNo: getFullIndentNo(row.Indent_No),
-          IndentStatus_Id: row.IndentStatus_Id,
-          IndentStatusName: row.IndentStatusName,
-          RequestUserName: row.RequestUserName,
-          CreatedByUser_Id: row.CreatedByUser_Id,
-          CreatedByName: row.CreatedByName,
-          SubmitToRole: row.SubmitToRole,
-          sections: []
+        // Group by Indent_Id
+        const indentsMap = {};
+        rows.forEach(row => {
+            if (!indentsMap[row.Indent_Id]) {
+                indentsMap[row.Indent_Id] = {
+                    Indent_Id: row.Indent_Id,
+                    Indent_No: row.Indent_No,
+                    fullIndentNo: getFullIndentNo(row.Indent_No),
+                    IndentStatus_Id: row.IndentStatus_Id,
+                    IndentStatusName: row.IndentStatusName,
+                    RequestUserName: row.RequestUserName,
+                    CreatedByUser_Id: row.CreatedByUser_Id,
+                    CreatedByName: row.CreatedByName,
+                    SubmitToRole: row.SubmitToRole,
+                    sections: []
+                };
+            }
+
+            indentsMap[row.Indent_Id].sections.push({
+                SectionQtyDetail_Id: row.SectionQtyDetail_Id,
+                PMQty: row.PMQty,
+                OOQty: row.OOQty,
+                ApprovalHistoryComment: row.ApprovalHistoryComment,
+                ActionByUser_Id: row.ActionByUser_Id,
+                ActionRole_Id: row.ActionRole_Id,
+                DO_Role_Id: row.DO_Role_Id,
+                ActionOn: row.ActionOn,
+                div_code: row.div_code,
+                sd_code: row.sd_code,
+                so_code: row.so_code,
+                division_names: row.division,
+                subdivision_names: row.sub_division,
+                section_names: row.section_office
+            });
+        });
+
+        return {
+            message: "Resubmitted indents fetched successfully",
+            status: "success",
+            count: Object.keys(indentsMap).length,
+            result: Object.values(indentsMap)
         };
-      }
 
-      indentsMap[row.Indent_Id].sections.push({
-        SectionQtyDetail_Id: row.SectionQtyDetail_Id,
-        PMQty: row.PMQty,
-        OOQty: row.OOQty,
-        ApprovalHistoryComment: row.ApprovalHistoryComment,
-        ActionByUser_Id: row.ActionByUser_Id,
-        ActionRole_Id: row.ActionRole_Id,
-        DO_Role_Id: row.DO_Role_Id,
-        ActionOn: row.ActionOn,
-        div_code: row.div_code,
-        sd_code: row.sd_code,
-        so_code: row.so_code,
-        division_names: row.division,
-        subdivision_names: row.sub_division,
-        section_names: row.section_office
-      });
-    });
-
-    return {
-      message: "Resubmitted indents fetched successfully",
-      status: "success",
-      count: Object.keys(indentsMap).length,
-      result: Object.values(indentsMap)
-    };
-
-  } catch (error) {
-    console.error("Error fetching resubmitted indents:", error);
-    throw error;
-  }
+    } catch (error) {
+        console.error("Error fetching resubmitted indents:", error);
+        throw error;
+    }
 };
 //==================================================================================
 //==================================================================================
