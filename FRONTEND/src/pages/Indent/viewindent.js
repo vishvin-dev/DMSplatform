@@ -12,6 +12,7 @@ import { postcreateindent, resubmittedindent } from '../../helpers/fakebackend_h
 // =================================================================
 
 const INITIAL_INDENTS = [];
+// Status IDs: 1: To Be Approved, 4: Returned for Revision, 2: Approved, 3: Rejected
 const STATUS_MAP = { 1: 'To Be Approved', 4: 'Returned for Revision', 2: 'Approved', 3: 'Rejected' };
 const VIEW_STATUS_MAP = {
     'to_approve': 'To Be Approved',
@@ -85,36 +86,68 @@ const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, 
             const soCodesString = item.so_codes || item.so_code || '';
             const enteredQtyString = item.EnteredQty || ''; 
 
+            // Determine the correct 'Created On' date/time
+            const sourceDate = (flagId === 2 && item.ActionOn) ? item.ActionOn : (item.IndentCreatedOn || item.UpdatedOn || new Date());
+            const createdDate = new Date(sourceDate);
+
             if (!acc[indentId]) {
-                const createdDate = new Date(item.IndentCreatedOn || item.UpdatedOn || new Date());
-                const statusFromApi = item.IndentStatusName === "ResubmittedToOfficers" ? "To Be Approved" : (item.StatusName || STATUS_MAP[item.IndentStatus_Id || item.Status_Id] || 'To Be Approved'); 
                 
+                // CRITICAL FIX FOR STATUS NAME (Resubmitted Queue) 
+                let statusFromApi = item.StatusName || STATUS_MAP[item.IndentStatus_Id || item.Status_Id] || 'To Be Approved';
+                if (item.IndentStatusName === "ResubmittedToOfficers") {
+                     statusFromApi = "Resubmitted Indents"; // Correctly display the status
+                }
+
                 // Get initial Division/Sub-Division details
                 let divisionName = item.division_names || item.DivisionName || 'N/A';
                 let subDivisionName = item.subdivision_names || item.SubDivisionName || 'N/A';
-
-                // *** FIX FOR FLAG 2: Check nested sections for Division/Sub-Division names ***
-                // This ensures location names are pulled from the nested structure if missing at the root level.
-                if (flagId === 2 && (divisionName === 'N/A' || subDivisionName === 'N/A') && Array.isArray(sectionsArray) && sectionsArray.length > 0) {
-                    divisionName = sectionsArray[0].DivisionName || sectionsArray[0].division_names || divisionName;
-                    subDivisionName = sectionsArray[0].SubDivisionName || sectionsArray[0].subdivision_names || subDivisionName;
-                }
-                // *****************************************************************************
+                let divisionCode = item.div_codes || item.div_code || null;
+                let subDivisionCode = item.sd_codes || item.sd_code || null;
+                let createdByUserId = item.CreatedByIndent || item.ActionByUser_Id || null;
+                let createdByName = item.CreatedByName || item.RequestUserName || 'N/A';
                 
+                
+                // *** AGGRESSIVE LOCATION DATA EXTRACTION ***
+                // Check nested sections first (common for Flag 2)
+                if (Array.isArray(sectionsArray) && sectionsArray.length > 0) {
+                    const firstSection = sectionsArray[0];
+                    
+                    divisionName = divisionName === 'N/A' ? (firstSection.division_names || firstSection.DivisionName || 'N/A') : divisionName;
+                    subDivisionName = subDivisionName === 'N/A' ? (firstSection.subdivision_names || firstSection.SubDivisionName || 'N/A') : subDivisionName;
+                    divisionCode = divisionCode || firstSection.div_code || null;
+                    subDivisionCode = subDivisionCode || firstSection.sd_code || null;
+                    createdByUserId = createdByUserId || firstSection.ActionByUser_Id || null;
+                }
+                
+                // FIX: Fallback for CreatedByName if main fields are null but RequestUserName/UploadedByName is present
+                createdByName = createdByName === 'N/A' ? (item.RequestUserName || item.UploadedByName || 'N/A') : createdByName;
+                
+                // FIX: Ensure division/subdivision is populated if it exists via the aggregated strings 
+                // but was null in the root fields (common for approved data)
+                if ((divisionName === 'N/A' || subDivisionName === 'N/A') && (sectionNamesString || soCodesString)) {
+                    // Try to extract from first non-null available location information
+                    if (item.DivisionName) divisionName = item.DivisionName;
+                    if (item.SubDivisionName) subDivisionName = item.SubDivisionName;
+                    if (item.div_code) divisionCode = item.div_code;
+                    if (item.sd_code) subDivisionCode = item.sd_code;
+                }
+                // ********************************************
+
                 acc[indentId] = {
                     indentNumber: indentId,
                     displayIndentNo: item.fullIndentNo || item.Indent_No || item.Indent_Id,
-                    createdOn: item.IndentCreatedOn || item.UpdatedOn,
+                    createdOn: sourceDate, // Store the raw date string/timestamp
                     date: createdDate.toLocaleDateString('en-GB'),
                     time: createdDate.toLocaleTimeString('en-US', { hour12: true }),
                     division: divisionName, // Use resolved name
                     subDivision: subDivisionName, // Use resolved name
-                    divisionCode: item.div_codes || item.div_code || null,
-                    subDivisionCode: item.sd_codes || item.sd_code || null,
+                    divisionCode: divisionCode, // Use resolved code
+                    subDivisionCode: subDivisionCode, // Use resolved code
                     status: statusFromApi,
+                    submitToRole: item.SubmitToRole || null, // Store SubmitToRole
                     rejectionReason: item.RejectionReason || item.ApprovalHistoryComment || item.comment || null, 
-                    createdByUserId: item.CreatedByIndent || item.ActionByUser_Id || null, 
-                    createdBy: item.CreatedByName || item.RequestUserName || 'N/A',
+                    createdByUserId: createdByUserId, // Use the extracted ID
+                    createdBy: createdByName, // Use the extracted Name
                     selectedOptions: [], 
                 };
             }
@@ -134,7 +167,7 @@ const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, 
                     }
                 });
             } else {
-                // --- LOGIC FOR AGGREGATED STRINGS (Flag 4 and others) ---
+                // --- LOGIC FOR AGGREGATED STRINGS (Flag 4/6) ---
                 const names = sectionNamesString.split(',').map(s => s.trim()).filter(s => s);
                 const codes = soCodesString.split(',').map(s => s.trim()).filter(s => s);
                 const quantities = enteredQtyString.split(',').map(s => parseInt(s.trim(), 10));
@@ -151,7 +184,6 @@ const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, 
                 
                 // Fallback for single item if selectedOptions is still empty
                 if (currentIndent.selectedOptions.length === 0 && currentIndent.subDivision && currentIndent.subDivision !== 'N/A') {
-                    // Prioritize section_names/so_codes if they exist, otherwise use subdivision fields.
                     const nameToUse = (sectionNamesString && sectionNamesString !== '') ? sectionNamesString : currentIndent.subDivision;
                     const codeToUse = (soCodesString && soCodesString !== '') ? soCodesString : currentIndent.subDivisionCode;
                     
@@ -247,6 +279,8 @@ const renderIndentTemplate = (indentData) => {
     const selectedOptions = indentData.selectedOptions || [];
     const isReturned = indentData.status === 'Returned for Revision';
 
+    // Determine the recipient for the "To" field
+    const recipientName = indentData.submitToRole || 'The Officer';
     const getToCode = () => indentData.subDivisionCode || 'N/A';
     const formattedOptionNames = indentData.selectedOptionNames || 'N/A'; 
 
@@ -265,7 +299,15 @@ const renderIndentTemplate = (indentData) => {
                     </div>
                 )}
 
-                <div><p>To,</p><p>The Officer</p><p>{getToCode()}</p></div>
+                {/* --- Updated To: section --- */}
+                <div>
+                    <p>To,</p>
+                    <p>{recipientName}</p>
+                    {/* Only show the code if the recipient is the general "The Officer" default name */}
+                    {recipientName === 'The Officer' && <p>{getToCode()}</p>}
+                </div>
+                {/* ----------------------------- */}
+
                 <div style={{ fontWeight: 'bold', marginBottom: '20px' }}><p>Subject: Request for physical records of Gescom Consumer of {formatSelectedOptions(formattedOptionNames)}</p><p>DWA No: 14,42,53,250</p></div>
                 <div><p>Dear Sir/Madam,</p><p>With reference to the above DWA no and subject, we request for the physical available consumer records of the below listed location(s).</p></div>
 
@@ -540,7 +582,7 @@ const ViewIndent = () => {
                 "Role_Id": sessionData.roleId, // Retain Role_Id for action payload
                 "Status_Id": 4, // Status ID for 'Returned for Revision'
                 "comment": rejectionReason.trim(),
-                "CreatedByUser_Id": selectedIndent.createdByUserId, // Ensure CreatedByUser_Id is used
+                "CreatedByUser_Id": selectedIndent.createdByUserId, // Ensure CreatedByUser_Id is used (e.g., 6)
                 "div_codes": selectedIndent.divisionCode || null, // Included division code
                 "sd_codes": selectedIndent.subDivisionCode || null, // Included subdivision code
                 "sections": selectedIndent.selectedOptions.map(o => ({ 
@@ -674,6 +716,7 @@ const ViewIndent = () => {
                 const enteredQty = enteredItem ? parseInt(enteredItem.quantity, 10) : 0;
 
                 const sectionObject = {
+                    // Ensure section level codes are populated from selectedIndent
                     "sd_code": selectedIndent.subDivisionCode || null,
                     "so_code": original.code || null,
                     "EnteredQty": enteredQty.toString(),
@@ -812,13 +855,13 @@ const ViewIndent = () => {
                                 <Button color="success" size="sm" onClick={() => handleOpenPmResubmit(indent)}>Resubmit</Button>
                             )}
 
-                            {/* Officer Action: Available if status is 'To Be Approved' */}
-                            {indent.status === 'To Be Approved' && (<>
+                            {/* Officer Action: Available if status is 'To Be Approved' or Resubmitted Indents */}
+                            {(indent.status === 'To Be Approved' || indent.status === 'Resubmitted Indents') && (<>
                                 <Button color="success" size="sm" onClick={() => handleOpenApprove(indent)}>Approve</Button>
                                 <Button color="danger" size="sm" onClick={() => handleOpenReject(indent)}>Reject</Button>
                             </>)}
                             
-                            {(indent.status !== 'Returned for Revision' && indent.status !== 'To Be Approved') && (
+                            {(indent.status !== 'Returned for Revision' && indent.status !== 'To Be Approved' && indent.status !== 'Resubmitted Indents') && (
                                 <span className="text-muted" style={{ fontSize: '0.8rem' }}>N/A</span>
                             )}
                         </div>
