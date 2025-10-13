@@ -435,6 +435,7 @@ export const getRoles = data => api.get(url.ROLES_URL_GET_DELETE + '/' + data);
 export const postcreateindent = data => api.create(url.POST_CREATE_INDENT, data);
 export const IndentProjectHead = data => api.create(url.INDENT_PROJECT_HEAD, data);
 export const resubmittedindent = data => api.create(url.RE_SUBMITTED_INDENT, data);
+export const rejected = data => api.create(url.REJECTED, data);
 
 
 
