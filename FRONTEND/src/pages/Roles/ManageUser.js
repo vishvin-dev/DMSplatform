@@ -155,6 +155,7 @@ const ManageUser = () => {
   const [roleName, setRoleName] = useState([]);
   const [genderName, setGenderName] = useState([]);
   const [maritalStatusName, setMaritalStatusName] = useState([]);
+  const [maritalStatusCode, setMaritalStatusCode] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // State for all zoneAccess records in the modal
@@ -997,7 +998,7 @@ const ManageUser = () => {
                                 <option value="">Select Marital Status</option>
                                 {maritalStatusName.map(opt => (
                                     <option key={opt.maritalStatusId} value={opt.maritalStatusId}>
-                                        {opt.maritalStatusName}
+                                        {opt.maritalStatusCode}
                                     </option>
                                 ))}
                             </Input>
