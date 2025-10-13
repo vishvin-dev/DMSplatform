@@ -329,6 +329,7 @@ export const GET_QC_DOCUMENT = "/backend-service/qcUpload";
 export const POST_CREATE_INDENT = "/backend-service/indent";
 export const INDENT_PROJECT_HEAD = "/backend-service/indent/IndentProjectHead";
 export const RE_SUBMITTED_INDENT = "/backend-service/indent/resubmittedindent";
+export const REJECTED = "/backend-service/indent/rejected";
 //**************** */
 
 

@@ -60,6 +60,15 @@ const CreateIndent = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 5; 
 
+    // Get User Info from Session
+    const authUser = useMemo(() => {
+        const obj = sessionStorage.getItem("authUser");
+        return obj ? JSON.parse(obj) : {};
+    }, []);
+
+    const userId = useMemo(() => safeParseInt(authUser?.user?.User_Id) || 0, [authUser]);
+    const requestUserName = useMemo(() => authUser?.user?.Email || '', [authUser]);
+
     // --- CORE API HELPER: FETCH DROPDOWN OPTIONS (FLAG 7, 1, 2, 3) ---
     const flagIdFunction = async (flagId, setState, requestUserName, div_code, sd_code, circle_code) => {
         setLoading(true);
@@ -86,9 +95,6 @@ const CreateIndent = () => {
 
     /**
      * 🚀 MODIFIED FUNCTION: FETCH USER'S INDENTS (FLAG 3 for dashboard list) 🚀
-     * Updated to use explicit name fields from the API response (division_names, etc.)
-     * NOTE: The API's 'submitTo' field is assumed to contain the Officer's Name/Role (like Executive Engineer).
-     * If the API returns the Office name, no change is needed here. Assuming it returns Officer name/role.
      */
     const fetchUserIndents = async (requestUserName, userId) => {
         setLoadingStatus(true);
@@ -99,6 +105,7 @@ const CreateIndent = () => {
                 "RequestUserName": requestUserName,
             };
             
+            // This is the API call for flagId 3 that needs to run after successful submission (Flag 1 & 2)
             const response = await postcreateindent(payloadFlag3); 
 
             if (response?.status === 'success' && Array.isArray(response.result)) {
@@ -172,17 +179,13 @@ const CreateIndent = () => {
     
     // --- INITIALIZATION ---
     useEffect(() => {
-        const obj = JSON.parse(sessionStorage.getItem("authUser"));
-        
-        const usernm = obj?.user?.Email; 
-        const userId = obj?.user?.User_Id; 
-        
-        if (usernm && userId) {
-            setUserName(usernm);
-            flagIdFunction(7, setCircles, usernm);
-            fetchUserIndents(usernm, userId); 
+        if (requestUserName && userId) {
+            setUserName(requestUserName);
+            flagIdFunction(7, setCircles, requestUserName);
+            // Call fetchUserIndents here to load the initial dashboard status
+            fetchUserIndents(requestUserName, userId); 
         }
-    }, []); 
+    }, [requestUserName, userId]); // Dependency array includes derived values from sessionStorage
 
     // --- FORM HANDLERS (Unchanged) ---
 
@@ -259,13 +262,28 @@ const CreateIndent = () => {
         }
     };
 
+    /**
+     * 🚀 MODIFIED: Enforce single selection when submitted to 'section' officer.
+     */
     const handleOptionSelection = (e, optionCode) => {
         // Reset confirmation if options are changed
         setIsConfirmed(false);
-        if (e.target.checked) {
-            setSelectedOptions([...selectedOptions, optionCode]);
+
+        if (submitToOption === 'section') {
+            // ENFORCE SINGLE SELECTION: If the option is checked, make it the ONLY selection.
+            if (e.target.checked) {
+                setSelectedOptions([optionCode]);
+            } else {
+                // If the single checked item is unchecked, clear all selections.
+                setSelectedOptions([]);
+            }
         } else {
-            setSelectedOptions(selectedOptions.filter(val => val !== optionCode));
+            // Allow MULTIPLE SELECTION for 'division' and 'subdivision'
+            if (e.target.checked) {
+                setSelectedOptions([...selectedOptions, optionCode]);
+            } else {
+                setSelectedOptions(selectedOptions.filter(val => val !== optionCode));
+            }
         }
     };
     
@@ -274,13 +292,9 @@ const CreateIndent = () => {
         resetFormStates();
         setDivisionName([]); setSubDivisions([]); setSectionOptions([]);
         
-        const obj = JSON.parse(sessionStorage.getItem("authUser"));
-        const usernm = obj?.user?.Email; 
-        const userId = obj?.user?.User_Id; 
-        
-        if (usernm && userId) {
-             flagIdFunction(7, setCircles, usernm);
-             fetchUserIndents(usernm, userId);
+        if (requestUserName && userId) {
+            flagIdFunction(7, setCircles, requestUserName);
+            fetchUserIndents(requestUserName, userId);
         }
     };
     // ----------------------------------------------------
@@ -313,7 +327,7 @@ const CreateIndent = () => {
     };
     
     /**
-     * 🚀 --- SINGLE-STAGE SUBMISSION (FLAG 1 & FLAG 2) --- 🚀
+     * 🚀 MODIFIED FUNCTION: SINGLE-STAGE SUBMISSION (FLAG 1 & FLAG 2) 🚀
      */
     const handleSubmit = async () => {
         // Combined validation checks
@@ -322,9 +336,8 @@ const CreateIndent = () => {
             return;
         }
         
-        const obj = JSON.parse(sessionStorage.getItem("authUser"));
-        const submissionUserId = safeParseInt(obj?.user?.User_Id); 
-        const submissionRequestUserName = username || null; 
+        const submissionUserId = userId; 
+        const submissionRequestUserName = requestUserName; 
 
         let submissionRoleId;
         let designation = ''; // Officer title for the printout/API
@@ -448,22 +461,8 @@ const CreateIndent = () => {
                         message: `Your Indent (${fullIndentNo}) has been successfully created and forwarded to the concerned officer. It is now Pending for Approval.`
                     });
 
-                    // Update Dashboard
-                    const newDashboardIndent = {
-                        indentNumber: fullIndentNo,
-                        createdOn: formattedDate,
-                        
-                        // 🔑 FIX: Use the calculated office name for the dashboard display
-                        submitTo: dashboardSubmitTo, 
-                        
-                        status: 'Pending',
-                        division: finalIndentData.division,
-                        subDivision: finalIndentData.subDivision, 
-                        section: finalIndentData.selectedOptionNames, 
-                        divisionCode: finalIndentData.divisionCode,
-                    };
-                    // Ensure the new indent is added at the top and sorted.
-                    setSubmittedIndents(prev => [newDashboardIndent, ...prev].sort((a, b) => new Date(b.createdOn) - new Date(a.createdOn)));
+                    // Action to refresh the dashboard immediately: Call fetchUserIndents (Flag 3)
+                    await fetchUserIndents(submissionRequestUserName, submissionUserId);
 
                 } else {
                     // Failed at Stage 2
@@ -487,7 +486,7 @@ const CreateIndent = () => {
     };
     // --- END SINGLE-STAGE SUBMISSION ---
 
-    // --- RENDER FUNCTIONS (Print/Result/Dashboard) ---
+    // --- RENDER FUNCTIONS (Print/Result/Dashboard) (Unchanged logic) ---
     
     const handlePrint = () => { 
         const printWindow = window.open('', '', 'height=600,width=800');
@@ -959,13 +958,14 @@ const CreateIndent = () => {
                                             </Col>
                                         </Row>
 
-                                        {/* Multi-Select Options Area (Unchanged) */}
+                                        {/* Multi-Select Options Area (LOGIC MODIFIED IN handler for single select) */}
                                         {submitToOption && availableOptions.length > 0 && (
                                             <Row className="g-4 mt-4">
                                                 <Col md={12}>
                                                     <FormGroup className="mb-4">
                                                         <Label className="form-label">
                                                             Select **Sections** for Indent <span className="text-danger">*</span>
+                                                            {submitToOption === 'section' && <span className="text-info ms-2">(Single Selection Only)</span>}
                                                         </Label>
                                                         <div className="border p-4 mt-2" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                                                             <Row>
@@ -978,7 +978,7 @@ const CreateIndent = () => {
                                                                             <div className="form-check mb-3">
                                                                                 <input
                                                                                     className="form-check-input"
-                                                                                    type="checkbox"
+                                                                                    type="checkbox" // Keep as checkbox for visual, but control selection via handler
                                                                                     id={`option-${optionCode}`}
                                                                                     checked={selectedOptions.includes(optionCode)}
                                                                                     onChange={(e) => handleOptionSelection(e, optionCode)}
