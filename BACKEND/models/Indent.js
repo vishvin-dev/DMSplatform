@@ -1,6 +1,7 @@
 
 import { pool } from "../Config/db.js"
 import { getFullIndentNo } from "../utils/IndentPrefix/indent.js";
+import { resetAttempts } from "./userModel.js";
 //===================THE FLAGID(1,2,3) IS THE FOR FIRST INDENT SCREEN(2Screen) =======================================
 // Step 1️ Insert basic Indent (Draft)
 export const insertIndentCreation = async (data) => {
@@ -525,3 +526,146 @@ export const fetchingResubmittedIndentsByDORole = async (DO_Role_Id) => {
 };
 //==================================================================================
 //==================================================================================
+
+
+//=====================================================================================================================================================================
+//==================================================THIS IS THE REJECTED INDENT FROM THE OFFICERS OK means submitting the indents it is ok====================================================
+export const RejectedIndentByOfficer = async (data) => {
+            const {
+                Indent_Id,
+                RejectedByRole_Id,
+                UploadedByUser_Id,
+                Status_Id,
+                RejectedComment,
+                RequestUserName
+            } = data;
+    try {
+        const [result] = await pool.execute(
+            `
+                INSERT INTO rejectedindent (
+                Indent_Id,
+                RejectedByRole_Id,
+                UploadedByUser_Id,
+                Status_Id,
+                RejectedComment,
+                RequestUserName,
+                RejectedOn,
+                CreatedOn,
+                UpdatedOn
+            )
+            VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW(), NOW())
+            `, [
+            Indent_Id,
+            RejectedByRole_Id,
+            UploadedByUser_Id,
+            Status_Id,
+            RejectedComment || null,
+            RequestUserName || null
+        ]
+        );
+
+         // Step 2: Update Indent status to 5 (Rejected)
+        await pool.execute(
+            `
+            UPDATE indent
+            SET Status_Id = 5,
+                UpdatedOn = NOW()
+            WHERE Indent_Id = ?
+            `,
+            [Indent_Id]
+        );
+
+        await pool.execute(
+            `
+            UPDATE indentsectionqtydetail
+            SET Status_Id = 5,
+                UploadedAt = NOW()
+            WHERE Indent_Id = ?
+            `,
+            [Indent_Id]
+        )
+
+            
+            await pool.execute(
+            `
+            UPDATE indentapprovalhistory
+            SET Status_Id = 5,
+                UpdatedOn = NOW()
+            WHERE Indent_Id = ?
+            `,
+            [Indent_Id]
+        );
+        return result
+    } catch (error) {
+        console.error("Error fetching resubmitted indents:", error);
+        throw error;
+    }
+}
+
+// =============THIS IS THE FETCHING THE REJECTED INDENTCount OK FOR OFFICER AND HE REJECTED THIS OK 
+export const fetchingRejectedIndentCountByOfficer=async(Role_Id)=>{
+    try {
+        const [result]=await pool.execute(`
+            
+            SELECT 
+                COUNT(*) AS RejectedIndentCount
+            FROM rejectedindent r
+            LEFT JOIN indent i ON r.Indent_Id = i.Indent_Id
+            LEFT JOIN indentzoneMapping iz ON r.Indent_Id = iz.Indent_Id
+            LEFT JOIN zone_codes z ON iz.div_code = z.div_code 
+                                  AND iz.sd_code = z.sd_code 
+                                  AND iz.so_code = z.so_code
+            WHERE r.RejectedByRole_Id = ?
+           
+            `,[Role_Id])
+            return result
+    } catch (error) {
+        console.error("Error fetching Rejected indents Counts:", error);
+        throw error;
+    }
+}
+// =============THIS IS THE FETCHING THE REJECTED INDENT OK FOR OFFICER AND HE REJECTED THIS OK 
+export const fetchingRejectedIndentByOfficer=async(Role_Id)=>{
+    try {
+        const [result]=await pool.execute(`
+            
+            SELECT 
+                r.RejectionIndent_Id,
+                r.Indent_Id,
+                i.Indent_No,
+                r.RejectedByRole_Id,
+                rb.RoleName AS RejectedByRoleName,
+                r.UploadedByUser_Id,
+                u.FirstName AS UploadedByFirstName,
+                u.LastName AS UploadedByLastName,
+                r.Status_Id,
+                s.StatusName AS StatusName,
+                r.RejectedComment,
+                r.RequestUserName,
+                r.RejectedOn,
+                r.CreatedOn,
+                r.UpdatedOn,
+                z.division AS DivisionName,
+                z.sub_division AS SubDivisionName,
+                z.section_office AS SectionOfficeName
+            FROM rejectedindent r
+            LEFT JOIN indent i ON r.Indent_Id = i.Indent_Id
+            LEFT JOIN roles rb ON r.RejectedByRole_Id = rb.Role_Id
+            LEFT JOIN user u ON r.UploadedByUser_Id = u.User_Id
+            LEFT JOIN indentstatusmaster s ON r.Status_Id = s.Status_Id
+            LEFT JOIN indentzoneMapping iz ON r.Indent_Id = iz.Indent_Id
+            LEFT JOIN zone_codes z ON iz.div_code = z.div_code 
+                                  AND iz.sd_code = z.sd_code 
+                                  AND iz.so_code = z.so_code
+            WHERE r.RejectedByRole_Id = ?
+            ORDER BY r.RejectedOn ASC 
+            
+            `,[Role_Id])
+            return result
+    } catch (error) {
+        console.error("Error fetching Rejected indents:", error);
+        throw error;
+    }
+}
+// ====================================================================================================================
+// ====================================================================================================================
