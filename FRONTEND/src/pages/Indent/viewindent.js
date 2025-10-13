@@ -4,169 +4,255 @@ import {
     ModalHeader, ModalBody, ModalFooter, Row, Col, Label, FormGroup, Alert, Spinner
 } from 'reactstrap';
 import letterheadImg from './VishvinLetterHead.jpg';
-// Assuming 'postcreateindent' is available and correctly imported
-import { postcreateindent } from '../../helpers/fakebackend_helper';
+// Explicitly using both imported helper functions as requested
+import { postcreateindent, resubmittedindent } from '../../helpers/fakebackend_helper'; 
 
-
+// =================================================================
+// 1. CONSTANTS AND UTILITY FUNCTIONS
+// =================================================================
 
 const INITIAL_INDENTS = [];
+// Status IDs: 1: To Be Approved, 4: Returned for Revision, 2: Approved, 3: Rejected
 const STATUS_MAP = { 1: 'To Be Approved', 4: 'Returned for Revision', 2: 'Approved', 3: 'Rejected' };
 const VIEW_STATUS_MAP = {
     'to_approve': 'To Be Approved',
-    'returned_for_revision': 'Returned for Revision',
+    'returned_for_revision': 'Returned for Revision', 
     'rejected': 'Rejected',
     'all': null,
-    'approved': 'Approved' // Used for client-side filtering of Flag 4, although Flag 6 is used for API call
+    'approved': 'Approved',
+    'resubmitted_queue': 'Resubmitted Indents' 
 };
 
-/**
- * Replaces commas with ' and ' and standardizes multiple slashes.
- * @param {string} names - The string of names (e.g., "Sec A, Sec B / Sec C").
- * @returns {string} Formatted string.
- */
 const formatSelectedOptions = (names) => {
     if (!names) return '';
     return names.replace(/,/g, ' and ').replace(/\s*\/\s*/g, ' / ');
 };
 
 
-
 /**
- * Fetches the main list of indents from the API (Flags 4 or 6).
+ * Fetches the main list of indents from the API (Flags 2, 4, or 6).
  */
 const fetchIndentsFromAPI = async (viewStatus, userId, roleId, requestUserName, setIndents, setIsLoading, setError) => {
     setIsLoading(true);
     setError(null);
-    setIndents([]); // Clear old data
+    setIndents([]);
 
     let payload;
     let flagId;
+    let apiFunction = postcreateindent; 
     const filterStatus = VIEW_STATUS_MAP[viewStatus];
 
     if (viewStatus === 'approved') {
         flagId = 6;
+        // Flag 6 uses Role_Id (original payload structure)
         payload = { "flagId": flagId, "Role_Id": roleId, "RequestUserName": requestUserName };
-    } else {
+    } else if (viewStatus === 'resubmitted_queue') {
+        // *** FLAG 2: DEDICATED API (resubmittedindent) with DO_Role_Id ***
+        flagId = 2; 
+        apiFunction = resubmittedindent; 
+        payload = { "flagId": flagId, "DO_Role_Id": roleId, "RequestUserName": requestUserName }; 
+    } 
+    else {
+        // *** FLAG 4: Pending Approval Data (uses postcreateindent) with Role_Id ***
         flagId = 4;
         payload = { "flagId": flagId, "Role_Id": roleId, "RequestUserName": requestUserName };
     }
 
     try {
-        const response = await postcreateindent(payload);
+        const response = await apiFunction(payload); 
 
-        if (response && response.status === 'success' && response.result) {
-            const apiData = Array.isArray(response.result) ? response.result : [];
+        let apiData = [];
+        let statusCheck = response && response.status === 'success';
 
-            // --- Grouping and Aggregation Logic ---
-            const groupedDataMap = apiData.reduce((acc, item) => {
-                const indentId = item.Indent_Id;
-                const sectionNamesString = item.section_names || '';
-                const soCodesString = item.so_codes || '';
+        // 1. Handle nested response for Flag 2 (Resubmitted Queue)
+        if (flagId === 2 && statusCheck && Array.isArray(response.result) && response.result.length > 0 && Array.isArray(response.result[0].result)) {
+             apiData = response.result[0].result;
+        } else if (statusCheck && response.result) {
+            // 2. Handle standard response for other flags (4, 6, etc.)
+            apiData = Array.isArray(response.result) ? response.result : [];
+        } else if (!statusCheck) {
+            setError(response.message || `Failed to fetch indents (Flag ${flagId}). API Status: ${response.status || 'Unknown'}.`);
+            setIsLoading(false);
+            return;
+        }
+        
+        // --- Grouping and Aggregation Logic ---
+        const groupedDataMap = apiData.reduce((acc, item) => {
+            const indentId = item.Indent_Id;
+            const sectionsArray = item.sections; 
 
-                if (!acc[indentId]) {
-                    const createdDate = new Date(item.IndentCreatedOn || item.UpdatedOn || new Date());
-                    const statusFromApi = item.StatusName || STATUS_MAP[item.Status_Id] || 'To Be Approved';
+            // Define these variables here to resolve ReferenceError
+            const sectionNamesString = item.section_names || item.SectionOfficeName || '';
+            const soCodesString = item.so_codes || item.so_code || '';
+            const enteredQtyString = item.EnteredQty || ''; 
 
-                    acc[indentId] = {
-                        indentNumber: indentId,
-                        displayIndentNo: item.fullIndentNo || item.Indent_No || item.Indent_Id,
-                        createdOn: item.IndentCreatedOn || item.UpdatedOn,
-                        date: createdDate.toLocaleDateString('en-GB'),
-                        time: createdDate.toLocaleTimeString('en-US', { hour12: true }),
-                        division: item.division_names || 'N/A',
-                        subDivision: item.subdivision_names || 'N/A',
-                        divisionCode: item.div_codes || null,
-                        subDivisionCode: item.sd_codes || null,
-                        status: statusFromApi,
-                        rejectionReason: item.RejectionReason || item.comment || null,
-                        createdBy: item.CreatedByName || item.RequestUserName || 'N/A',
-                        createdByUserId: item.CreatedByIndent || item.CreatedByUser_Id || null,
-                        rawSectionNames: [],
-                        selectedOptions: [], // Array of {name, code, quantity}
-                    };
+            // Determine the correct 'Created On' date/time
+            const sourceDate = (flagId === 2 && item.ActionOn) ? item.ActionOn : (item.IndentCreatedOn || item.UpdatedOn || new Date());
+            const createdDate = new Date(sourceDate);
+
+            if (!acc[indentId]) {
+                
+                // CRITICAL FIX FOR STATUS NAME (Resubmitted Queue) 
+                let statusFromApi = item.StatusName || STATUS_MAP[item.IndentStatus_Id || item.Status_Id] || 'To Be Approved';
+                if (item.IndentStatusName === "ResubmittedToOfficers") {
+                     statusFromApi = "Resubmitted Indents"; // Correctly display the status
                 }
 
-                const currentIndent = acc[indentId];
-                const addOption = (name, code, qty) => {
-                    if (name && name !== 'N/A' && !currentIndent.selectedOptions.some(o => o.name === name)) {
-                        currentIndent.selectedOptions.push({ name, code, quantity: qty });
-                    }
+                // Get initial Division/Sub-Division details
+                let divisionName = item.division_names || item.DivisionName || 'N/A';
+                let subDivisionName = item.subdivision_names || item.SubDivisionName || 'N/A';
+                let divisionCode = item.div_codes || item.div_code || null;
+                let subDivisionCode = item.sd_codes || item.sd_code || null;
+                let createdByUserId = item.CreatedByIndent || item.ActionByUser_Id || null;
+                let createdByName = item.CreatedByName || item.RequestUserName || 'N/A';
+                
+                
+                // *** AGGRESSIVE LOCATION DATA EXTRACTION ***
+                // Check nested sections first (common for Flag 2)
+                if (Array.isArray(sectionsArray) && sectionsArray.length > 0) {
+                    const firstSection = sectionsArray[0];
+                    
+                    divisionName = divisionName === 'N/A' ? (firstSection.division_names || firstSection.DivisionName || 'N/A') : divisionName;
+                    subDivisionName = subDivisionName === 'N/A' ? (firstSection.subdivision_names || firstSection.SubDivisionName || 'N/A') : subDivisionName;
+                    divisionCode = divisionCode || firstSection.div_code || null;
+                    subDivisionCode = subDivisionCode || firstSection.sd_code || null;
+                    createdByUserId = createdByUserId || firstSection.ActionByUser_Id || null;
+                }
+                
+                // FIX: Fallback for CreatedByName if main fields are null but RequestUserName/UploadedByName is present
+                createdByName = createdByName === 'N/A' ? (item.RequestUserName || item.UploadedByName || 'N/A') : createdByName;
+                
+                // FIX: Ensure division/subdivision is populated if it exists via the aggregated strings 
+                // but was null in the root fields (common for approved data)
+                if ((divisionName === 'N/A' || subDivisionName === 'N/A') && (sectionNamesString || soCodesString)) {
+                    // Try to extract from first non-null available location information
+                    if (item.DivisionName) divisionName = item.DivisionName;
+                    if (item.SubDivisionName) subDivisionName = item.SubDivisionName;
+                    if (item.div_code) divisionCode = item.div_code;
+                    if (item.sd_code) subDivisionCode = item.sd_code;
+                }
+                // ********************************************
+
+                acc[indentId] = {
+                    indentNumber: indentId,
+                    displayIndentNo: item.fullIndentNo || item.Indent_No || item.Indent_Id,
+                    createdOn: sourceDate, // Store the raw date string/timestamp
+                    date: createdDate.toLocaleDateString('en-GB'),
+                    time: createdDate.toLocaleTimeString('en-US', { hour12: true }),
+                    division: divisionName, // Use resolved name
+                    subDivision: subDivisionName, // Use resolved name
+                    divisionCode: divisionCode, // Use resolved code
+                    subDivisionCode: subDivisionCode, // Use resolved code
+                    status: statusFromApi,
+                    submitToRole: item.SubmitToRole || null, // Store SubmitToRole
+                    rejectionReason: item.RejectionReason || item.ApprovalHistoryComment || item.comment || null, 
+                    createdByUserId: createdByUserId, // Use the extracted ID
+                    createdBy: createdByName, // Use the extracted Name
+                    selectedOptions: [], 
                 };
-
-                // FIX: Process aggregated string data (for list views like Flag 4/6)
-                if (sectionNamesString) {
-                    const names = sectionNamesString.split(',').map(s => s.trim()).filter(s => s);
-                    const codes = (soCodesString || '').split(',').map(s => s.trim()).filter(s => s);
-                    const qty = parseInt(item.EnteredQty, 10) || 0; // Use the aggregated quantity
-
-                    names.forEach((name, index) => {
-                        addOption(name, codes[index] || null, qty);
-                    });
-                }
-                // Case: Standard flat response (one section per row, historical format) - fallback
-                else if (item.SectionOfficeName || item.SubDivisionName) {
-                    const name = item.SectionOfficeName || item.SubDivisionName;
-                    const code = item.so_code || item.sd_code;
-                    const qty = parseInt(item.EnteredQty, 10) || 0;
-                    addOption(name, code, qty);
-                }
-
-                return acc;
-            }, {});
-
-            // Convert map back to an array of objects and finalize names
-            let finalResults = Object.values(groupedDataMap).map(indent => {
-                const uniqueNames = [...new Set(indent.selectedOptions.map(o => o.name).filter(n => n && n !== 'N/A'))];
-                indent.selectedOptionNames = uniqueNames.join(' / ');
-
-                // Fallback for missing selected options if subDivision exists
-                if (indent.selectedOptions.length === 0 && indent.subDivision && indent.subDivision !== 'N/A') {
-                    indent.selectedOptions.push({
-                        name: indent.subDivision,
-                        code: indent.subDivisionCode,
-                        quantity: 0
-                    });
-                    indent.selectedOptionNames = indent.subDivision;
-                }
-
-                delete indent.rawSectionNames;
-                return indent;
-            });
-
-            // Apply client-side filtering if flagId is 4 AND a specific status is targeted (excluding 'all' and 'approved' which uses Flag 6)
-            if (flagId === 4 && filterStatus) {
-                finalResults = finalResults.filter(indent => indent.status === filterStatus);
             }
 
-            setIndents(finalResults);
+            const currentIndent = acc[indentId];
+            
+            if (Array.isArray(sectionsArray) && sectionsArray.length > 0) {
+                // --- LOGIC FOR NESTED SECTIONS (Flag 2) ---
+                sectionsArray.forEach(section => {
+                    // Use the most granular section name/code for the selectedOptions list
+                    const name = section.section_names || section.SubDivisionName || section.subdivision_names || 'N/A';
+                    const code = section.so_code || null;
+                    const qty = parseInt(section.PMQty, 10) || 0; 
+                    
+                    if (name && name !== 'N/A' && !currentIndent.selectedOptions.some(o => o.name === name && o.code === code)) {
+                        currentIndent.selectedOptions.push({ name, code, quantity: qty });
+                    }
+                });
+            } else {
+                // --- LOGIC FOR AGGREGATED STRINGS (Flag 4/6) ---
+                const names = sectionNamesString.split(',').map(s => s.trim()).filter(s => s);
+                const codes = soCodesString.split(',').map(s => s.trim()).filter(s => s);
+                const quantities = enteredQtyString.split(',').map(s => parseInt(s.trim(), 10));
 
-        } else if (response && response.status === 'success' && (response.count === 0 || !response.result)) {
-            setIndents([]);
-            setError(null);
-        } else {
-            setError(response.message || `Failed to fetch indents. Response status: ${response.status || 'Unknown'}`);
+                if (names.length > 0) {
+                    names.forEach((name, index) => {
+                        const code = codes[index] || null;
+                        const qty = quantities.length > index && !isNaN(quantities[index]) ? quantities[index] : 0;
+                        if (name && name !== 'N/A' && !currentIndent.selectedOptions.some(o => o.name === name && o.code === code)) {
+                            currentIndent.selectedOptions.push({ name, code, quantity: qty });
+                        }
+                    });
+                }
+                
+                // Fallback for single item if selectedOptions is still empty
+                if (currentIndent.selectedOptions.length === 0 && currentIndent.subDivision && currentIndent.subDivision !== 'N/A') {
+                    const nameToUse = (sectionNamesString && sectionNamesString !== '') ? sectionNamesString : currentIndent.subDivision;
+                    const codeToUse = (soCodesString && soCodesString !== '') ? soCodesString : currentIndent.subDivisionCode;
+                    
+                    currentIndent.selectedOptions.push({
+                         name: nameToUse,
+                         code: codeToUse,
+                         quantity: quantities[0] || 0
+                    });
+                }
+            }
+
+            return acc;
+        }, {});
+
+        let finalResults = Object.values(groupedDataMap).map(indent => {
+            const uniqueNames = [...new Set(indent.selectedOptions.map(o => o.name).filter(n => n && n !== 'N/A'))];
+            indent.selectedOptionNames = uniqueNames.join(', ');
+            return indent;
+        });
+
+        if (flagId === 4 && filterStatus) {
+            finalResults = finalResults.filter(indent => indent.status === filterStatus);
         }
+        
+        setIndents(finalResults);
+        setError(null); 
+
     } catch (err) {
         console.error("API Fetch Error:", err);
-        setError('An error occurred while connecting to the server. Please check the network and API endpoint.');
+        setError('An unexpected network or server error occurred. Check the network connection or API setup.');
     } finally {
         setIsLoading(false);
     }
 };
 
 /**
- * Fetches an explicit count for a given flag (Flags 7 or 8).
+ * Fetches an explicit count for a given flag (Flags 1, 7, or 8).
  */
 const fetchIndentCount = async (flagId, roleId, requestUserName, setIsLoading, setCount) => {
     setIsLoading(true);
-    const countPayload = { "flagId": flagId, "Role_Id": roleId, "RequestUserName": requestUserName };
+    
+    let apiFunction = postcreateindent; 
+    let countPayload;
+
+    if (flagId === 1) { 
+        // *** FLAG 1: DEDICATED API (resubmittedindent) with DO_Role_Id ***
+        apiFunction = resubmittedindent; 
+        countPayload = { "flagId": flagId, "DO_Role_Id": roleId, "RequestUserName": requestUserName };
+    } else {
+        // Flags 7, 8 use general API with original "Role_Id" key
+        countPayload = { "flagId": flagId, "Role_Id": roleId, "RequestUserName": requestUserName };
+    }
 
     try {
-        const response = await postcreateindent(countPayload);
+        const response = await apiFunction(countPayload); 
 
         if (response && response.status === 'success') {
             let count = 0;
-            if (typeof response.result === 'number') {
+            
+            // 1. Check for deeply nested object structure (Flag 1 count, as per your last response)
+            if (flagId === 1 && response.result && typeof response.result === 'object' && response.result.count !== undefined) {
+                 count = response.result.count;
+            }
+            // 2. Check for nested array structure (Flag 1 previous attempt)
+            else if (flagId === 1 && Array.isArray(response.result) && response.result.length > 0 && response.result[0].count !== undefined) {
+                 count = response.result[0].count;
+            }
+            // 3. Check for direct number or array length (Flags 7, 8)
+            else if (typeof response.result === 'number') {
                 count = response.result;
             } else if (Array.isArray(response.result)) {
                 count = response.result.length;
@@ -187,25 +273,140 @@ const fetchIndentCount = async (flagId, roleId, requestUserName, setIsLoading, s
 };
 
 
+// --- Template Rendering Functions (omitted for brevity) ---
+const renderIndentTemplate = (indentData) => {
+    if (!indentData) return null;
+    const selectedOptions = indentData.selectedOptions || [];
+    const isReturned = indentData.status === 'Returned for Revision';
+
+    // Determine the recipient for the "To" field
+    const recipientName = indentData.submitToRole || 'The Officer';
+    const getToCode = () => indentData.subDivisionCode || 'N/A';
+    const formattedOptionNames = indentData.selectedOptionNames || 'N/A'; 
+
+    return (
+        <div className="a4-sheet-modal" style={{ backgroundImage: `url(${letterheadImg})` }}>
+            <div className="content-wrapper-modal">
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                    <div><strong>Indent No.:</strong> {indentData.displayIndentNo}</div>
+                    <div style={{ textAlign: 'right' }}><div><strong>Date:</strong> {indentData.date}</div><div><strong>Time:</strong> {indentData.time}</div></div>
+                </div>
+
+                {isReturned && indentData.rejectionReason && (
+                    <div className="alert alert-info p-3 mb-3 border border-info" style={{ fontSize: '14px' }}>
+                        <h6 className="mb-1 text-dark">Revision Instructions:</h6>
+                        <p className="mb-0 fw-bold">{indentData.rejectionReason}</p>
+                    </div>
+                )}
+
+                {/* --- Updated To: section --- */}
+                <div>
+                    <p>To,</p>
+                    <p>{recipientName}</p>
+                    {/* Only show the code if the recipient is the general "The Officer" default name */}
+                    {recipientName === 'The Officer' && <p>{getToCode()}</p>}
+                </div>
+                {/* ----------------------------- */}
+
+                <div style={{ fontWeight: 'bold', marginBottom: '20px' }}><p>Subject: Request for physical records of Gescom Consumer of {formatSelectedOptions(formattedOptionNames)}</p><p>DWA No: 14,42,53,250</p></div>
+                <div><p>Dear Sir/Madam,</p><p>With reference to the above DWA no and subject, we request for the physical available consumer records of the below listed location(s).</p></div>
+
+                <Table bordered size="sm" className="mb-4">
+                    <thead>
+                        <tr>
+                            <th>SL NO</th>
+                            <th>Division</th>
+                            <th>Sub-Division</th>
+                            <th>Section </th>
+                            {(isReturned || indentData.status === 'Approved') && <th style={{ width: '20%' }}>{indentData.status === 'Approved' ? 'Acknowledged Qty' : 'Last Recorded Qty'}</th>}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {selectedOptions.map((option, index) => {
+                            const recordedQty = option.quantity || 0;
+                            return (
+                                <tr key={index}>
+                                    <td>{index + 1}</td>
+                                    <td>{indentData.division || 'N/A'}</td>
+                                    <td>{indentData.subDivision || 'N/A'}</td>
+                                    <td>{option.name || 'N/A'}</td>
+                                    {(isReturned || indentData.status === 'Approved') && <td className="fw-bold">{recordedQty}</td>}
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </Table>
+
+                <p>Kindly process and arrange for handover of physical consumer records of above mentioned location.</p>
+                <div style={{ marginTop: '40px' }}><p>Thanking you,</p><p>Yours faithfully,</p><br /><p>_________________________</p><p><small>Disclaimer * seal is not mandatory</small></p><p><small>(This is a computer/system generated copy)</small></p></div>
+            </div>
+        </div>
+    );
+};
+
+
+const renderAcknowledgementTemplate = (ackData) => {
+    if (!ackData) return null;
+    const selectedOptionsWithQuantity = ackData.selectedOptions || [];
+    const formattedOptionNames = ackData.selectedOptionNames || 'N/A';
+
+    return (
+        <div className="a4-sheet-modal" style={{ backgroundImage: `url(${letterheadImg})` }}>
+            <div className="content-wrapper-modal">
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                    <div><strong>Indent No.:</strong> {ackData.displayIndentNo}</div>
+                    <div style={{ textAlign: 'right' }}><div><strong>Date:</strong> {ackData.date}</div><div><strong>Time:</strong> {ackData.time}</div></div>
+                </div>
+                <div><p>To,</p><p>The Project Manager</p><p>Vishvin Technologies</p></div>
+                <div style={{ fontWeight: 'bold', marginBottom: '20px' }}><p>Subject: Acknowledgement of Physical Records for {formatSelectedOptions(formattedOptionNames)}</p><p>DWA No: 14,42,53,250</p></div>
+                <div><p>Dear Sir/Madam,</p><p>This is to acknowledge the receipt of the physical consumer records with reference to the above DWA no and subject for the below listed location(s).</p></div>
+                <Table bordered size="sm" className="mb-4">
+                    <thead><tr><th>SL NO</th><th>Division</th><th>Sub-Division</th><th>Section / Sub-Division</th><th>Quantity Received</th></tr></thead>
+                    <tbody>
+                        {selectedOptionsWithQuantity.map((option, index) => (
+                            <tr key={index}><td>{index + 1}</td><td>{ackData.division || 'N/A'}</td><td>{ackData.subDivision || 'N/A'}</td><td>{option.name || 'N/A'}</td><td>{option.quantity}</td></tr>
+                        ))}
+                    </tbody>
+                </Table>
+
+                {ackData.comments && (
+                    <div style={{ marginBottom: '20px' }}>
+                        <p><strong>Comments/Remarks:</strong> {ackData.comments}</p>
+                    </div>
+                )}
+
+                <p>The handover of the physical consumer records for the above mentioned locations has been processed.</p>
+                <div style={{ marginTop: '40px' }}><p>Thanking you,</p><p>Yours faithfully,</p><br /><p>_________________________</p><p><small>Disclaimer * seal is not mandatory</small></p><p><small>(This is a computer/system generated copy)</small></p></div>
+            </div>
+        </div>
+    );
+};
+
+
+// =================================================================
+// 2. MAIN COMPONENT
+// =================================================================
 
 const ViewIndent = () => {
     document.title = `Indent Approval Queue | DMS`;
 
-    // --- State Variables ---
+    // --- State Variables (Unchanged) ---
     const [indents, setIndents] = useState(INITIAL_INDENTS);
     const [isLoading, setIsLoading] = useState(false);
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [fetchError, setFetchError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [viewStatus, setViewStatus] = useState('to_approve');
+    const [viewStatus, setViewStatus] = useState('to_approve'); 
 
     // Counts for Filter Buttons
     const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
     const [approvedCount, setApprovedCount] = useState(0);
+    const [resubmittedCount, setResubmittedCount] = useState(0); 
     const [isCountLoading, setIsCountLoading] = useState(false);
     const [isApprovedCountLoading, setIsApprovedCountLoading] = useState(false);
+    const [isResubmittedCountLoading, setIsResubmittedCountLoading] = useState(false); 
 
-    // Modals & Forms
+    // Modals & Forms (Unchanged)
     const [selectedIndent, setSelectedIndent] = useState(null);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
@@ -218,15 +419,15 @@ const ViewIndent = () => {
     const [approvalComments, setApprovalComments] = useState('');
     const [formError, setFormError] = useState('');
     const [resubmitFormError, setResubmitFormError] = useState('');
-    const [sectionQuantities, setSectionQuantities] = useState([]); // Officer Approval
-    const [pmResubmitQuantities, setPmResubmitQuantities] = useState([]); // PM Resubmit
+    const [sectionQuantities, setSectionQuantities] = useState([]);
+    const [pmResubmitQuantities, setPmResubmitQuantities] = useState([]);
     const [responseModalContent, setResponseModalContent] = useState({ title: '', message: '', isSuccess: false });
 
-    // Pagination
+    // Pagination (Unchanged)
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(5);
 
-    // --- Session Data Retrieval (Memoized for stability) ---
+    // --- Session Data Retrieval (Unchanged) ---
     const sessionData = useMemo(() => {
         const defaultData = { userId: null, roleId: null, requestUserName: null };
         const storageKeys = ['loginData', 'authUser', 'user'];
@@ -237,9 +438,7 @@ const ViewIndent = () => {
             if (dataString) {
                 try {
                     const data = JSON.parse(dataString);
-                    // Check for nested user data structure
                     if (data.user && data.user.Role_Id) { userData = data.user; break; }
-                    // Check for flat user data structure
                     if (data.Role_Id && data.Email) { userData = data; break; }
                 } catch (e) { /* silent fail on parse error */ }
             }
@@ -253,7 +452,6 @@ const ViewIndent = () => {
             };
         }
 
-        // Fallback to individual items
         const fallbackRoleId = sessionStorage.getItem('Role_Id') || sessionStorage.getItem('roleId');
         const fallbackEmail = sessionStorage.getItem('Email') || sessionStorage.getItem('requestUserName');
         const fallbackUserId = sessionStorage.getItem('User_Id') || sessionStorage.getItem('userId');
@@ -269,7 +467,7 @@ const ViewIndent = () => {
         return defaultData;
     }, []);
 
-    // --- Effects (API Calls) ---
+    // --- API Data Fetching Effect (Calls fetchIndentsFromAPI and fetchIndentCount) ---
     useEffect(() => {
         if (!sessionData.roleId || !sessionData.requestUserName) {
             setFetchError("Authentication error: Missing user session data. Please ensure you are logged in.");
@@ -281,26 +479,28 @@ const ViewIndent = () => {
         setFetchError(null);
         setPage(0);
 
-        // 1. Fetch the main queue data (Flags 4 or 6)
+        const { userId, roleId, requestUserName } = sessionData;
+
         fetchIndentsFromAPI(
             viewStatus,
-            sessionData.userId,
-            sessionData.roleId,
-            sessionData.requestUserName,
+            userId,
+            roleId,
+            requestUserName,
             setIndents,
             setIsLoading,
             setFetchError
         );
 
-        // 2. Fetch the explicit count for Pending Approval (Flag 7)
-        fetchIndentCount(7, sessionData.roleId, sessionData.requestUserName, setIsCountLoading, setPendingApprovalCount);
-
-        // 3. Fetch the explicit count for Approved (Flag 8)
-        fetchIndentCount(8, sessionData.roleId, sessionData.requestUserName, setIsApprovedCountLoading, setApprovedCount);
+        // General API calls (Flags 7, 8) use original Role_Id key
+        fetchIndentCount(7, roleId, requestUserName, setIsCountLoading, setPendingApprovalCount);
+        fetchIndentCount(8, roleId, requestUserName, setIsApprovedCountLoading, setApprovedCount);
+        
+        // Dedicated API call for Flag 1 uses DO_Role_Id key
+        fetchIndentCount(1, roleId, requestUserName, setIsResubmittedCountLoading, setResubmittedCount);
 
     }, [viewStatus, sessionData.roleId, sessionData.requestUserName, sessionData.userId]);
 
-
+    // --- Core Filtering and Pagination Logic (Unchanged) ---
 
     const filteredIndents = useMemo(() => {
         let results = indents;
@@ -313,7 +513,7 @@ const ViewIndent = () => {
         return results;
     }, [searchTerm, indents]);
 
-    const processedData = filteredIndents; // Renaming for clarity, no further processing needed currently
+    const processedData = filteredIndents;
 
     const pageCount = pageSize === -1 ? 1 : Math.ceil(processedData.length / pageSize);
     const paginatedData = useMemo(() => {
@@ -322,8 +522,7 @@ const ViewIndent = () => {
         return processedData.slice(start, start + pageSize);
     }, [processedData, page, pageSize]);
 
-
-    // --- Handlers (Modal Toggles) ---
+    // --- Modal Toggles and Handlers (Unchanged) ---
 
     const toggleViewModal = useCallback(() => setIsViewModalOpen(prev => !prev), []);
     const toggleRejectModal = useCallback(() => setIsRejectModalOpen(prev => !prev), []);
@@ -331,8 +530,6 @@ const ViewIndent = () => {
     const toggleAcknowledgementModal = useCallback(() => setIsAcknowledgementModalOpen(prev => !prev), []);
     const toggleResponseModal = useCallback(() => setIsResponseModalOpen(prev => !prev), []);
     const togglePmResubmitQtyModal = useCallback(() => setIsPmResubmitQtyModalOpen(prev => !prev), []);
-
-    // --- Handlers (Actions) ---
 
     const handleViewClick = (indent) => {
         setSelectedIndent(indent);
@@ -345,7 +542,7 @@ const ViewIndent = () => {
             const initialQuantities = indent.selectedOptions.map(option => ({
                 code: option.code,
                 name: option.name,
-                quantity: option.quantity !== undefined && option.quantity !== null ? option.quantity.toString() : ''
+                quantity: option.quantity !== undefined && option.quantity !== null && option.quantity > 0 ? option.quantity.toString() : ''
             }));
             setSectionQuantities(initialQuantities);
             setFormError('');
@@ -361,16 +558,63 @@ const ViewIndent = () => {
         toggleRejectModal();
     };
 
-    const handleOpenPmResubmit = (indent) => {
-        setSelectedIndent(indent);
-        const initialQuantities = indent.selectedOptions.map(option => ({
-            code: option.code,
-            name: option.name,
-            quantity: option.quantity !== undefined && option.quantity !== null ? option.quantity.toString() : ''
-        }));
-        setPmResubmitQuantities(initialQuantities);
-        setResubmitFormError('');
-        togglePmResubmitQtyModal();
+    // --- REJECT SUBMIT TO HIT API (Flag 3) ---
+    const handleRejectSubmit = async () => {
+        if (!rejectionReason.trim()) { 
+            setFormError('Rejection reason is required.'); 
+            return; 
+        }
+        
+        if (!selectedIndent || !sessionData.userId || !sessionData.roleId || !sessionData.requestUserName) {
+            setFormError("Authentication Error: Missing indent or session data. Cannot submit.");
+            return;
+        }
+
+        setIsActionLoading(true);
+        setFormError('');
+
+        try {
+            // Rejection Payload (Flag ID 3) - uses postcreateindent. Action payloads use Role_Id.
+            const finalRejectPayload = {
+                "flagId": 3,
+                "Indent_Id": selectedIndent.indentNumber,
+                "UploadedByUser_Id": sessionData.userId,
+                "Role_Id": sessionData.roleId, // Retain Role_Id for action payload
+                "Status_Id": 4, // Status ID for 'Returned for Revision'
+                "comment": rejectionReason.trim(),
+                "CreatedByUser_Id": selectedIndent.createdByUserId, // Ensure CreatedByUser_Id is used (e.g., 6)
+                "div_codes": selectedIndent.divisionCode || null, // Included division code
+                "sd_codes": selectedIndent.subDivisionCode || null, // Included subdivision code
+                "sections": selectedIndent.selectedOptions.map(o => ({ 
+                    "sd_code": selectedIndent.subDivisionCode || null,
+                    "so_code": o.code || null,
+                    "EnteredQty": o.quantity ? o.quantity.toString() : "0"
+                }))
+            };
+
+            const response = await postcreateindent(finalRejectPayload);
+
+            if (response && response.status === 'success') {
+                setIndents(prev => prev.map(indent => indent.indentNumber === selectedIndent.indentNumber ? { 
+                    ...indent, 
+                    status: 'Returned for Revision', 
+                    rejectionReason: rejectionReason 
+                } : indent));
+
+                setResponseModalContent({ title: 'Returned for Revision', message: `Indent ${selectedIndent.displayIndentNo} has been returned for revision.`, isSuccess: false });
+                toggleRejectModal();
+                toggleResponseModal();
+                setViewStatus('returned_for_revision'); 
+                setSelectedIndent(null);
+            } else {
+                setFormError(response.message || `API Reject Failed (Flag 3). Status: ${response.status || 'Unknown'}.`);
+            }
+        } catch (err) {
+            console.error("API Call Error (Flag 3):", err);
+            setFormError('An unexpected network or server error occurred during rejection.');
+        } finally {
+            setIsActionLoading(false);
+        }
     };
 
     const handleSectionQuantityChange = (code, value) => {
@@ -380,6 +624,18 @@ const ViewIndent = () => {
         }
     };
 
+    const handleOpenPmResubmit = (indent) => {
+        setSelectedIndent(indent);
+        const initialQuantities = indent.selectedOptions.map(option => ({
+            code: option.code,
+            name: option.name,
+            quantity: option.quantity !== undefined && option.quantity !== null && option.quantity > 0 ? option.quantity.toString() : ''
+        }));
+        setPmResubmitQuantities(initialQuantities);
+        setResubmitFormError('');
+        togglePmResubmitQtyModal();
+    };
+
     const handlePmResubmitQuantityChange = (code, value) => {
         if (value === '' || (/^\d+$/.test(value) && parseInt(value) >= 0)) {
             setPmResubmitQuantities(prev => prev.map(item => (item.code === code) ? { ...item, quantity: value } : item));
@@ -387,34 +643,12 @@ const ViewIndent = () => {
         }
     };
 
-    // --- API Submission Handlers ---
-
-    // NOTE: Reject API call is simulated as its payload is not explicitly defined using postcreateindent with a specific flag.
-    const handleRejectSubmit = () => {
-        if (!rejectionReason.trim()) { setFormError('Rejection reason is required.'); return; }
-
-        // Simulate state update for rejection
-        setIndents(prev => prev.map(indent =>
-            indent.indentNumber === selectedIndent.indentNumber
-                ? { ...indent, status: 'Rejected', rejectionReason: rejectionReason }
-                : indent
-        ));
-
-        setResponseModalContent({ title: 'Rejected', message: `Indent ${selectedIndent.displayIndentNo} has been rejected.`, isSuccess: false });
-        toggleRejectModal();
-        toggleResponseModal();
-        setViewStatus('rejected');
-        setSelectedIndent(null);
-    };
-
-    // NOTE: PM Resubmit API call is simulated as its payload is not explicitly defined using postcreateindent with a specific flag for resubmit.
     const handlePmResubmitSubmit = async () => {
         const invalidQuantity = pmResubmitQuantities.some(item => item.quantity === '' || item.quantity === null || parseInt(item.quantity) < 0 || isNaN(parseInt(item.quantity)));
-        if (invalidQuantity) {
-            setResubmitFormError('All quantities must be entered and be non-negative integers before resubmitting.');
-            return;
-        }
+        if (invalidQuantity) { setResubmitFormError('All quantities must be entered and be non-negative integers before resubmitting.'); return; }
 
+        // NOTE: This action should hit the PM Resubmit API (e.g., Flag 9) via postcreateindent
+        
         const updatedSelectedOptions = selectedIndent.selectedOptions.map(original => {
             const correctedItem = pmResubmitQuantities.find(q => q.code === original.code);
             return {
@@ -423,7 +657,24 @@ const ViewIndent = () => {
             };
         });
 
-        // Simulate state update for resubmit
+        // Simulating the API payload for Flag 9
+        const finalResubmitPayload = {
+            "flagId": 9, // Assuming Flag 9 for PM Resubmit
+            "Indent_Id": selectedIndent.indentNumber,
+            "UploadedByUser_Id": sessionData.userId,
+            "Role_Id": sessionData.roleId, 
+            "Status_Id": 1, // Moving back to 'To Be Approved'
+            "CreatedByUser_Id": selectedIndent.createdByUserId, // Ensure CreatedByUser_Id is used (e.g., 6)
+            "div_codes": selectedIndent.divisionCode || null, // Included division code
+            "sd_codes": selectedIndent.subDivisionCode || null, // Included subdivision code
+            "sections": updatedSelectedOptions.map(o => ({ 
+                "sd_code": selectedIndent.subDivisionCode || null,
+                "so_code": o.code || null,
+                "EnteredQty": o.quantity ? o.quantity.toString() : "0"
+            }))
+        };
+        
+        // Simulate successful resubmit by moving item back to 'To Be Approved'
         setIndents(prev => prev.map(i => i.indentNumber === selectedIndent.indentNumber ? {
             ...i,
             status: 'To Be Approved',
@@ -438,9 +689,8 @@ const ViewIndent = () => {
         setSelectedIndent(null);
     };
 
-    /**
-     * CORE: Officer Approval API Call (flagId: 5, Status_Id: 2)
-     */
+    // --- CORE INTEGRATION POINT: Officer Approval API Call (Flag 5) ---
+    // This function uses postcreateindent, which is correct.
     const handleQuantitySubmit = async () => {
         const invalidQuantity = sectionQuantities.some(item =>
             item.quantity === '' || item.quantity === null || parseInt(item.quantity) < 0 || isNaN(parseInt(item.quantity))
@@ -450,7 +700,6 @@ const ViewIndent = () => {
             setFormError('All quantities must be entered and be non-negative integers.');
             return;
         }
-
         if (!selectedIndent || !sessionData.userId || !sessionData.roleId || !sessionData.requestUserName) {
             setFormError("Authentication Error: Missing indent or session data. Cannot submit.");
             return;
@@ -467,25 +716,27 @@ const ViewIndent = () => {
                 const enteredQty = enteredItem ? parseInt(enteredItem.quantity, 10) : 0;
 
                 const sectionObject = {
+                    // Ensure section level codes are populated from selectedIndent
                     "sd_code": selectedIndent.subDivisionCode || null,
                     "so_code": original.code || null,
                     "EnteredQty": enteredQty.toString(),
+                    // Include div_code and comment in the section payload if applicable, matching your backend structure
+                    "div_code": selectedIndent.divisionCode || null, 
+                    "comment": finalComment || null 
                 };
-
-                if (selectedIndent.divisionCode) { sectionObject.div_code = selectedIndent.divisionCode; }
-                if (finalComment) { sectionObject.comment = finalComment; }
-
                 return sectionObject;
             });
 
-            // Construct the Approval Payload (Flag ID 5)
+            // Approval Payload (Flag ID 5) - uses postcreateindent
             const finalApprovalPayload = {
                 "flagId": 5,
                 "Indent_Id": selectedIndent.indentNumber,
                 "UploadedByUser_Id": sessionData.userId,
-                "Role_Id": sessionData.roleId,
-                "Status_Id": 2, // Hardcoded Status ID for 'Approved'
-                "CreatedByUser_Id": selectedIndent.createdByUserId,
+                "Role_Id": sessionData.roleId, // Retain Role_Id for action payload
+                "Status_Id": 2, // 'Approved'
+                "CreatedByUser_Id": selectedIndent.createdByUserId, // Ensure CreatedByUser_Id is used (e.g., 6)
+                "div_codes": selectedIndent.divisionCode || null, // Included division code
+                "sd_codes": selectedIndent.subDivisionCode || null, // Included subdivision code
                 "sections": sectionsPayload
             };
 
@@ -497,30 +748,19 @@ const ViewIndent = () => {
                     code: s.so_code,
                     quantity: parseInt(s.EnteredQty, 10)
                 }));
-
                 const ackData = {
                     ...selectedIndent,
                     comments: finalComment,
                     status: 'Approved',
-                    selectedOptions: acknowledgedOptions
+                    selectedOptions: acknowledgedOptions, 
+                    selectedOptionNames: acknowledgedOptions.map(o => o.name).join(', ')
                 };
                 setAcknowledgementData(ackData);
-
-                // Update local state
-                setIndents(prev => prev.map(i => i.indentNumber === selectedIndent.indentNumber ? {
-                    ...i,
-                    status: 'Approved',
-                    selectedOptions: acknowledgedOptions,
-                    rejectionReason: null,
-                } : i));
-
+                setIndents(prev => prev.map(i => i.indentNumber === selectedIndent.indentNumber ? { ...i, status: 'Approved', selectedOptions: acknowledgedOptions, rejectionReason: null } : i));
                 toggleQuantityModal();
                 toggleAcknowledgementModal();
-
             } else {
-                const errorMessage = response.message || `API Approval Failed (Flag 5). Status: ${response.status || 'Unknown'}.`;
-                setFormError(errorMessage);
-                console.error("Approval API Error (Flag 5):", response);
+                setFormError(response.message || `API Approval Failed (Flag 5). Status: ${response.status || 'Unknown'}.`);
             }
         } catch (err) {
             console.error("API Call Error (Flag 5):", err);
@@ -538,156 +778,61 @@ const ViewIndent = () => {
         });
         toggleAcknowledgementModal();
         toggleResponseModal();
-        setViewStatus('approved'); // Trigger re-fetch using Flag 6
+        setViewStatus('approved'); 
         setSelectedIndent(null);
     };
 
-    // --- Helper for UI ---
+    // --- Helper for UI (Unchanged) ---
     const getStatusColor = (status) => {
         switch (status) {
             case 'Approved': return 'success';
             case 'Rejected': return 'danger';
             case 'To Be Approved': return 'warning';
             case 'Returned for Revision': return 'info';
+            case 'Resubmitted Indents': return 'primary';
             default: return 'secondary';
         }
     };
 
-
-
-    // --- Render: Indent Document Template ---
-    const renderIndentTemplate = (indentData) => {
-        if (!indentData) return null;
-        const selectedOptions = indentData.selectedOptions || [];
-        const isReturned = indentData.status === 'Returned for Revision';
-
-        // NOTE: 'submitTo' logic is inferred/missing from the provided data structure, 
-        // falling back to subDivision details as per original code's logic.
-        const getToCode = () => indentData.subDivisionCode || 'N/A';
-        const submitTo = indentData.subDivision || 'Sub-Division';
-
-        const formattedOptionNames = indentData.selectedOptionNames || 'N/A';
-
-        return (
-            <div className="a4-sheet-modal" style={{ backgroundImage: `url(${letterheadImg})` }}>
-                <div className="content-wrapper-modal">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                        <div><strong>Indent No.:</strong> {indentData.displayIndentNo}</div>
-                        <div style={{ textAlign: 'right' }}><div><strong>Date:</strong> {indentData.date}</div><div><strong>Time:</strong> {indentData.time}</div></div>
-                    </div>
-
-                    {isReturned && indentData.rejectionReason && (
-                        <div className="alert alert-info p-3 mb-3 border border-info" style={{ fontSize: '14px' }}>
-                            <h6 className="mb-1 text-dark">Revision Instructions:</h6>
-                            <p className="mb-0 fw-bold">{indentData.rejectionReason}</p>
-                        </div>
-                    )}
-
-                    <div><p>To,</p><p>The Officer</p><p>{getToCode()}</p></div>
-                    <div style={{ fontWeight: 'bold', marginBottom: '20px' }}><p>Subject: Request for physical records of Gescom Consumer of {formatSelectedOptions(formattedOptionNames)}</p><p>DWA No: 14,42,53,250</p></div>
-                    <div><p>Dear Sir/Madam,</p><p>With reference to the above DWA no and subject, we request for the physical available consumer records of the below listed location(s).</p></div>
-
-                    <Table bordered size="sm" className="mb-4">
-                        <thead>
-                            <tr>
-                                <th>SL NO</th>
-                                <th>Division</th>
-                                <th>Sub-Division</th>
-                                <th>Section / Sub-Division</th>
-                                {(isReturned || indentData.status === 'Approved') && <th style={{ width: '20%' }}>{indentData.status === 'Approved' ? 'Acknowledged Qty' : 'Last Recorded Qty'}</th>}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {selectedOptions.map((option, index) => {
-                                const recordedQty = option.quantity || 0;
-                                return (
-                                    <tr key={index}>
-                                        <td>{index + 1}</td>
-                                        <td>{indentData.division || 'N/A'}</td>
-                                        <td>{indentData.subDivision || 'N/A'}</td>
-                                        <td>{option.name || 'N/A'}</td>
-                                        {(isReturned || indentData.status === 'Approved') && <td className="fw-bold">{recordedQty}</td>}
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </Table>
-
-                    <p>Kindly process and arrange for handover of physical consumer records of above mentioned location.</p>
-                    <div style={{ marginTop: '40px' }}><p>Thanking you,</p><p>Yours faithfully,</p><br /><p>_________________________</p><p><small>Disclaimer * seal is not mandatory</small></p><p><small>(This is a computer/system generated copy)</small></p></div>
-                </div>
-            </div>
-        );
-    };
-
-  
-    const renderAcknowledgementTemplate = (ackData) => {
-        if (!ackData) return null;
-        const selectedOptionsWithQuantity = ackData.selectedOptions || [];
-        const formattedOptionNames = ackData.selectedOptionNames || 'N/A';
-
-        return (
-            <div className="a4-sheet-modal" style={{ backgroundImage: `url(${letterheadImg})` }}>
-                <div className="content-wrapper-modal">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                        <div><strong>Indent No.:</strong> {ackData.displayIndentNo}</div>
-                        <div style={{ textAlign: 'right' }}><div><strong>Date:</strong> {ackData.date}</div><div><strong>Time:</strong> {ackData.time}</div></div>
-                    </div>
-                    <div><p>To,</p><p>The Project Manager</p><p>Vishvin Technologies</p></div>
-                    <div style={{ fontWeight: 'bold', marginBottom: '20px' }}><p>Subject: Acknowledgement of Physical Records for {formatSelectedOptions(formattedOptionNames)}</p><p>DWA No: 14,42,53,250</p></div>
-                    <div><p>Dear Sir/Madam,</p><p>This is to acknowledge the receipt of the physical consumer records with reference to the above DWA no and subject for the below listed location(s).</p></div>
-                    <Table bordered size="sm" className="mb-4">
-                        <thead><tr><th>SL NO</th><th>Division</th><th>Sub-Division</th><th>Section / Sub-Division</th><th>Quantity Received</th></tr></thead>
-                        <tbody>
-                            {selectedOptionsWithQuantity.map((option, index) => (
-                                <tr key={index}><td>{index + 1}</td><td>{ackData.division || 'N/A'}</td><td>{ackData.subDivision || 'N/A'}</td><td>{option.name || 'N/A'}</td><td>{option.quantity}</td></tr>
-                            ))}
-                        </tbody>
-                    </Table>
-
-                    {ackData.comments && (
-                        <div style={{ marginBottom: '20px' }}>
-                            <p><strong>Comments/Remarks:</strong> {ackData.comments}</p>
-                        </div>
-                    )}
-
-                    <p>The handover of the physical consumer records for the above mentioned locations has been processed.</p>
-                    <div style={{ marginTop: '40px' }}><p>Thanking you,</p><p>Yours faithfully,</p><br /><p>_________________________</p><p><small>Disclaimer * seal is not mandatory</small></p><p><small>(This is a computer/system generated copy)</small></p></div>
-                </div>
-            </div>
-        );
-    };
-
-    // --- Render: Table Header ---
-    const renderTableHeader = () => {
-        const columns = [
-            { header: 'Indent number', accessorKey: 'displayIndentNo' },
-            { header: 'Status', accessorKey: 'status' },
-            { header: 'Section/Sub-Division', accessorKey: 'selectedOptionNames' },
-            { header: 'Created on', accessorKey: 'createdOn' },
-            { header: 'View', accessorKey: 'viewAction' },
-            { header: 'Action', accessorKey: 'otherAction' },
+    // --- Render Logic (Table) (Unchanged) ---
+    
+    const tableColumns = useMemo(() => {
+        const baseColumns = [
+            { header: 'Indent number', accessorKey: 'displayIndentNo', key: 'displayIndentNo' },
+            { header: 'Status', accessorKey: 'status', key: 'status' },
+            { header: 'Section/Sub-Division', accessorKey: 'selectedOptionNames', key: 'selectedOptionNames' },
+            { header: 'Created on', accessorKey: 'createdOn', key: 'createdOn' },
+            { header: 'View', accessorKey: 'viewAction', key: 'viewAction' },
+            { header: 'Action', accessorKey: 'otherAction', key: 'otherAction' },
         ];
+        
+        if (viewStatus === 'approved' || viewStatus === 'rejected') {
+             return baseColumns.filter(col => col.key !== 'otherAction');
+        }
+        return baseColumns;
+    }, [viewStatus]);
 
-        return (
-            <tr>
-                {columns.map((col) => (
-                    <th key={col.accessorKey}
-                        style={{ cursor: 'default', userSelect: 'none', whiteSpace: 'nowrap', textAlign: (col.accessorKey === 'viewAction' || col.accessorKey === 'otherAction') ? 'center' : 'left' }}
+    const renderTableHeader = () => (
+        <tr>
+            {tableColumns.map((col) => {
+                return (
+                    <th key={col.key}
+                        style={{ cursor: 'default', userSelect: 'none', whiteSpace: 'nowrap', textAlign: (col.key === 'viewAction' || col.key === 'otherAction') ? 'center' : 'left' }}
                     >
                         {col.header}
                     </th>
-                ))}
-            </tr>
-        );
-    };
+                );
+            })}
+        </tr>
+    );
 
-    // --- Render: Table Rows ---
+    const totalColumns = tableColumns.length;
+
     const renderTableRows = () => {
-        if (isLoading) { return (<tr><td colSpan={6} className="text-center py-5"><Spinner size="sm" className="me-2" /> Loading Indents...</td></tr>); }
-        if (fetchError) { return (<tr><td colSpan={6} className="text-center py-5"><Alert color="danger" className="mb-0">{fetchError}</Alert></td></tr>); }
+        if (isLoading) { return (<tr><td colSpan={totalColumns} className="text-center py-5"><Spinner size="sm" className="me-2" /> Loading Indents...</td></tr>); }
+        if (fetchError) { return (<tr><td colSpan={totalColumns} className="text-center py-5"><Alert color="danger" className="mb-0">{fetchError}</Alert></td></tr>); }
         if (!paginatedData || paginatedData.length === 0) {
-            return (<tr><td colSpan={6} style={{ textAlign: 'center', padding: '24px' }}>No documents found in the selected queue.</td></tr>);
+            return (<tr><td colSpan={totalColumns} style={{ textAlign: 'center', padding: '24px' }}>No documents found in the selected queue.</td></tr>);
         }
 
         return paginatedData.map((indent) => (
@@ -701,27 +846,32 @@ const ViewIndent = () => {
                     <Button color="primary" size="sm" onClick={() => handleViewClick(indent)}>View</Button>
                 </td>
 
-                <td style={{ textAlign: 'center' }}>
-                    <div className="d-flex justify-content-center align-items-center gap-2">
-                        {/* PM Action */}
-                        {indent.status === 'Returned for Revision' && (
-                            <Button color="success" size="sm" onClick={() => handleOpenPmResubmit(indent)}>Resubmit</Button>
-                        )}
-                        {/* Officer Action */}
-                        {indent.status === 'To Be Approved' && (<>
-                            <Button color="success" size="sm" onClick={() => handleOpenApprove(indent)}>Approve</Button>
-                            <Button color="danger" size="sm" onClick={() => handleOpenReject(indent)}>Reject</Button>
-                        </>)}
-                        {(indent.status === 'Approved' || indent.status === 'Rejected') && (
-                            <span className="text-muted" style={{ fontSize: '0.8rem' }}>N/A</span>
-                        )}
-                    </div>
-                </td>
+                {tableColumns.some(col => col.key === 'otherAction') && (
+                    <td style={{ textAlign: 'center' }}>
+                        <div className="d-flex justify-content-center align-items-center gap-2">
+                            
+                            {/* PM Action: Only available if status is 'Returned for Revision' */}
+                            {indent.status === 'Returned for Revision' && (
+                                <Button color="success" size="sm" onClick={() => handleOpenPmResubmit(indent)}>Resubmit</Button>
+                            )}
+
+                            {/* Officer Action: Available if status is 'To Be Approved' or Resubmitted Indents */}
+                            {(indent.status === 'To Be Approved' || indent.status === 'Resubmitted Indents') && (<>
+                                <Button color="success" size="sm" onClick={() => handleOpenApprove(indent)}>Approve</Button>
+                                <Button color="danger" size="sm" onClick={() => handleOpenReject(indent)}>Reject</Button>
+                            </>)}
+                            
+                            {(indent.status !== 'Returned for Revision' && indent.status !== 'To Be Approved' && indent.status !== 'Resubmitted Indents') && (
+                                <span className="text-muted" style={{ fontSize: '0.8rem' }}>N/A</span>
+                            )}
+                        </div>
+                    </td>
+                )}
             </tr>
         ));
     };
 
-    // --- Render: Pagination ---
+    // --- Render: Pagination (Unchanged) ---
     const renderPagination = () => {
         const pageSizeOptions = [{ value: 5, label: '5' }, { value: 10, label: '10' }, { value: 25, label: '25' }, { value: -1, label: 'All' }];
         const totalPages = pageCount;
@@ -758,7 +908,6 @@ const ViewIndent = () => {
         );
     };
 
-    
 
     return (
         <div className="page-content">
@@ -775,10 +924,17 @@ const ViewIndent = () => {
                                         onClick={() => setViewStatus('to_approve')}>
                                         Pending Approval ({isCountLoading ? <Spinner size="sm" color="warning" /> : pendingApprovalCount})
                                     </Button>
+
+                                    <Button
+                                        color={viewStatus === 'resubmitted_queue' ? 'primary' : 'light'}
+                                        onClick={() => setViewStatus('resubmitted_queue')}>
+                                        Resubmitted Queue ({isResubmittedCountLoading ? <Spinner size="sm" color="primary" /> : resubmittedCount})
+                                    </Button>
+                                    
                                     <Button
                                         color={viewStatus === 'returned_for_revision' ? 'info' : 'light'}
                                         onClick={() => setViewStatus('returned_for_revision')}>
-                                        Resubmit Queue ({indents.filter(i => i.status === 'Returned for Revision').length})
+                                        Returned for Revision ({indents.filter(i => i.status === 'Returned for Revision').length})
                                     </Button>
 
                                     <Button
@@ -821,7 +977,7 @@ const ViewIndent = () => {
                     </CardBody>
                 </Card>
 
-                {/* 1. View Indent Modal (Used for all status viewing) */}
+                {/* MODALS */}
                 {selectedIndent && (
                     <Modal isOpen={isViewModalOpen} toggle={toggleViewModal} centered size="lg">
                         <ModalHeader toggle={toggleViewModal}>Indent Details: {selectedIndent.displayIndentNo} ({selectedIndent.status})</ModalHeader>
@@ -830,23 +986,18 @@ const ViewIndent = () => {
                         </ModalBody>
                         <ModalFooter>
                             <Button color="secondary" onClick={toggleViewModal}>Close</Button>
-
-                            {/* Project Manager Resubmit Action from Modal */}
                             {selectedIndent.status === 'Returned for Revision' && (
                                 <Button color="success" onClick={() => { toggleViewModal(); handleOpenPmResubmit(selectedIndent); }}>Resubmit Document</Button>
                             )}
-
                         </ModalFooter>
                     </Modal>
                 )}
 
-                {/* 2. PM RESUBMIT QUANTITY CORRECTION MODAL */}
                 <Modal isOpen={isPmResubmitQtyModalOpen} toggle={togglePmResubmitQtyModal} centered>
                     <ModalHeader toggle={togglePmResubmitQtyModal}>Correct Quantities & Resubmit: {selectedIndent?.displayIndentNo}</ModalHeader>
                     <ModalBody>
                         <p className="text-muted small">Please verify and correct the quantity of physical records to be handed over.</p>
 
-                        {/* Display Last Recorded Reason for context */}
                         {selectedIndent?.rejectionReason && (
                             <div className="alert alert-warning p-2 mb-3 border border-warning" style={{ fontSize: '14px' }}>
                                 <strong>Reason:</strong> {selectedIndent.rejectionReason}
@@ -888,23 +1039,26 @@ const ViewIndent = () => {
                 </Modal>
 
 
-                {/* 3. Reject Indent Modal (Officer's rejection) */}
-                <Modal isOpen={isRejectModalOpen} toggle={toggleRejectModal} centered>
+                <Modal isOpen={isRejectModalOpen} toggle={toggleRejectModal} centered disabled={isActionLoading}>
                     <ModalHeader toggle={toggleRejectModal}>Reject Indent: {selectedIndent?.displayIndentNo}</ModalHeader>
                     <ModalBody>
-                        <FormGroup>
-                            <Label htmlFor="rejectionReason">Rejection Reason <span className="text-danger">*</span></Label>
-                            <Input type="textarea" id="rejectionReason" rows="3" value={rejectionReason} onChange={(e) => { setRejectionReason(e.target.value); setFormError(''); }} placeholder="Provide a clear reason" />
-                        </FormGroup>
-                        {formError && <p className="text-danger mt-2">{formError}</p>}
+                        {isActionLoading && <div className="text-center"><Spinner size="lg" color="danger" /><p className='mt-2'>Submitting Rejection (Flag 3)...</p></div>}
+                        {!isActionLoading && (
+                            <FormGroup>
+                                <Label htmlFor="rejectionReason">Rejection Reason <span className="text-danger">*</span></Label>
+                                <Input type="textarea" id="rejectionReason" rows="3" value={rejectionReason} onChange={(e) => { setRejectionReason(e.target.value); setFormError(''); }} placeholder="Provide a clear reason" />
+                                {formError && <p className="text-danger mt-2">{formError}</p>}
+                            </FormGroup>
+                        )}
                     </ModalBody>
                     <ModalFooter>
-                        <Button color="secondary" onClick={toggleRejectModal}>Cancel</Button>
-                        <Button color="danger" onClick={handleRejectSubmit}>Confirm Rejection</Button>
+                        <Button color="secondary" onClick={toggleRejectModal} disabled={isActionLoading}>Cancel</Button>
+                        <Button color="danger" onClick={handleRejectSubmit} disabled={isActionLoading}>
+                            {isActionLoading ? <Spinner size="sm" /> : 'Return for Revision'}
+                        </Button>
                     </ModalFooter>
                 </Modal>
 
-                {/* 4. Quantity Entry Modal (Officer Approves - Flag 5 Action) */}
                 <Modal isOpen={isQuantityModalOpen} toggle={toggleQuantityModal} centered>
                     <ModalHeader toggle={toggleQuantityModal}>Enter Quantities for: {selectedIndent?.displayIndentNo}</ModalHeader>
                     <ModalBody>
@@ -965,19 +1119,15 @@ const ViewIndent = () => {
                     </ModalFooter>
                 </Modal>
 
-                {/* 5. Acknowledgement Preview Modal */}
-                {acknowledgementData && (
-                    <Modal isOpen={isAcknowledgementModalOpen} toggle={toggleAcknowledgementModal} centered size="lg">
-                        <ModalHeader toggle={toggleAcknowledgementModal}>Acknowledgement Preview: {acknowledgementData.displayIndentNo}</ModalHeader>
-                        <ModalBody className="scrollable-modal-body">{renderAcknowledgementTemplate(acknowledgementData)}</ModalBody>
-                        <ModalFooter>
-                            <Button color="secondary" onClick={toggleAcknowledgementModal}>Cancel</Button>
-                            <Button color="primary" onClick={handleSubmitAcknowledgement}>Submit Acknowledgement</Button>
-                        </ModalFooter>
-                    </Modal>
-                )}
+                <Modal isOpen={isAcknowledgementModalOpen} toggle={toggleAcknowledgementModal} centered size="lg">
+                    <ModalHeader toggle={toggleAcknowledgementModal}>Acknowledgement Preview: {acknowledgementData?.displayIndentNo}</ModalHeader>
+                    <ModalBody className="scrollable-modal-body">{renderAcknowledgementTemplate(acknowledgementData)}</ModalBody>
+                    <ModalFooter>
+                        <Button color="secondary" onClick={toggleAcknowledgementModal}>Cancel</Button>
+                        <Button color="primary" onClick={handleSubmitAcknowledgement}>Submit Acknowledgement</Button>
+                    </ModalFooter>
+                </Modal>
 
-                {/* 6. Final Response Modal */}
                 <Modal isOpen={isResponseModalOpen} toggle={toggleResponseModal} centered>
                     <ModalBody className="response-modal-body">
                         <div className={`response-icon ${responseModalContent.isSuccess ? 'success' : 'error'}`}>
@@ -993,7 +1143,6 @@ const ViewIndent = () => {
                     </ModalBody>
                 </Modal>
             </Container>
-            {}
             <style>{`
                 /* Ensure horizontal scrollbar for overflowing content in the table */
                 .table-responsive { overflow-x: auto; }

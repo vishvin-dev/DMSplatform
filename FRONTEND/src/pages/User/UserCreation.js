@@ -2084,7 +2084,7 @@ const UserCreation = () => {
                                                     </Col>
                                                     <Col md={4}>
                                                         <FormGroup className="mb-3">
-                                                            <Label>Marital Status</Label>
+                                                            <Label>Marital Status<span className="text-danger">*</span></Label>
                                                             <Input
                                                                 type="select"
                                                                 name="maritalStatus"

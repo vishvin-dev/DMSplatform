@@ -7,7 +7,9 @@ import {
     submitOfficerApproveIndent,
     fetchOfficerApproveIndent,
     fetchOfficersAssignedIndentCount,
-    fetchOfficerApproveIndentCount
+    fetchOfficerApproveIndentCount,
+    fetchingResubmittedIndentsCountByDORole,
+    fetchingResubmittedIndentsByDORole
 } from "../../models/Indent.js";
 
 export const Indent = async (req, res) => {
@@ -91,7 +93,7 @@ export const Indent = async (req, res) => {
         }
 
 
-        // ==========================THIS IS THE APPROVED IDENT IS FETCHED BASED ON THE USERID OK 
+        // ==========================THIS IS THE APPROVED IDENT IS FETCHED BASED ON THE USERID OK FOR THE OFFICERS========================
 
          else if (Number(flagId) === 6) {
             const result = await fetchOfficerApproveIndent(data.Role_Id);
@@ -112,6 +114,56 @@ export const Indent = async (req, res) => {
                 result
             });
         }
+        else {
+            return res.status(400).json({
+                status: "failed",
+                message: "Invalid flagId"
+            });
+        }
+    } catch (err) {
+        console.error("Indent Controller Error:", err);
+        return res.status(500).json({
+            status: "failed",
+            message: "Server error in Indent controller",
+            error: err.message
+        });
+    }
+};
+
+
+//THIS IS THE RESBMITTED INDENT THINGS OK(OFFICERS SCREEN)
+export const IndentrResubmitted = async (req, res) => {
+    const { flagId, ...data } = req.body;
+
+    try {
+        if (!flagId) {
+            return res.status(400).json({
+                status: "failed",
+                message: "flagId is required"
+            });
+        }
+        //===================THis IS THE RESUBMITTED INDNET TO THE OFFCIERS MEANS IT IS THE OFFICER SCREEN OK  =======================================
+        
+        if (Number(flagId) === 1) {
+            const result = await fetchingResubmittedIndentsCountByDORole(data.DO_Role_Id);
+            return res.status(200).json({
+                message: " ResubmittedCount Indent Fetched successfully",
+                status: "success",
+                result
+            });
+        }
+
+        // submit that indent_No with satusid to update ok 
+        else if (Number(flagId) === 2) {
+            const result = await fetchingResubmittedIndentsByDORole(data.DO_Role_Id);
+            return res.status(200).json({
+                message: " Resubmitted Indent Fetched successfully",
+                status: "success",
+                result:[result]
+            });
+        }
+// ============================================================================================
+// ============================================================================================
         else {
             return res.status(400).json({
                 status: "failed",

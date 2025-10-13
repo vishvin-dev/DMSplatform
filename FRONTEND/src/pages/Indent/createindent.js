@@ -67,8 +67,8 @@ const CreateIndent = () => {
             const params = { 
                 flagId: flagId, 
                 requestUserName: requestUserName,
-                div_code: div_code || '',  
-                sd_code: sd_code || '',    
+                div_code: div_code || '', 
+                sd_code: sd_code || '', 
                 circle_code: circle_code || '', 
             };
 
@@ -87,6 +87,8 @@ const CreateIndent = () => {
     /**
      * 🚀 MODIFIED FUNCTION: FETCH USER'S INDENTS (FLAG 3 for dashboard list) 🚀
      * Updated to use explicit name fields from the API response (division_names, etc.)
+     * NOTE: The API's 'submitTo' field is assumed to contain the Officer's Name/Role (like Executive Engineer).
+     * If the API returns the Office name, no change is needed here. Assuming it returns Officer name/role.
      */
     const fetchUserIndents = async (requestUserName, userId) => {
         setLoadingStatus(true);
@@ -100,19 +102,33 @@ const CreateIndent = () => {
             const response = await postcreateindent(payloadFlag3); 
 
             if (response?.status === 'success' && Array.isArray(response.result)) {
-                const formattedIndents = response.result.map(indent => ({
-                    indentNumber: `${IndentNoPrefix}${indent.Indent_No || indent.indent_no || 'N/A'}`,
-                    createdOn: new Date(indent.CreatedOn).toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' }),
+                const formattedIndents = response.result.map(indent => {
                     
-                    // 🔑 UPDATED MAPPING: Using the explicit name fields for dashboard display
-                    division: indent.division_names || 'N/A', 
-                    subDivision: indent.subdivision_names || 'N/A',
-                    section: indent.section_names || 'N/A',
+                    // Determine the display name for the dashboard from API data
+                    let submitToDisplay = indent.submitTo || 'Unknown Officer';
                     
-                    submitTo: indent.submitTo || 'Unknown Officer',
-                    status: indent.StatusName || 'Pending', 
-                    divisionCode: indent.div_codes || 'N/A',
-                }));
+                    // 🔑 UPDATE: Logic to change Officer Designation to Office Name for dashboard (based on assumption)
+                    // If the API returns the designation (e.g., 'Executive Engineer'), we map it to the Office Name.
+                    if (submitToDisplay.toLowerCase().includes('executive engineer')) {
+                        submitToDisplay = 'Division Office';
+                    } else if (submitToDisplay.toLowerCase().includes('assistant engineer')) {
+                        submitToDisplay = 'SubDivision Office';
+                    } else if (submitToDisplay.toLowerCase().includes('section officer')) {
+                        submitToDisplay = 'Section Officer';
+                    }
+                    // End UPDATE
+
+                    return ({
+                        indentNumber: `${IndentNoPrefix}${indent.Indent_No || indent.indent_no || 'N/A'}`,
+                        createdOn: new Date(indent.CreatedOn).toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' }),
+                        division: indent.division_names || 'N/A', 
+                        subDivision: indent.subdivision_names || 'N/A',
+                        section: indent.section_names || 'N/A',
+                        submitTo: submitToDisplay, // Use the updated display name
+                        status: indent.StatusName || 'Pending', 
+                        divisionCode: indent.div_codes || 'N/A',
+                    })
+                });
                 
                 const sortedIndents = formattedIndents.sort((a, b) => new Date(b.createdOn) - new Date(a.createdOn));
 
@@ -297,7 +313,7 @@ const CreateIndent = () => {
     };
     
     /**
-     * 🚀 --- SINGLE-STAGE SUBMISSION (FLAG 1 & FLAG 2) --- 🚀 (Unchanged logic)
+     * 🚀 --- SINGLE-STAGE SUBMISSION (FLAG 1 & FLAG 2) --- 🚀
      */
     const handleSubmit = async () => {
         // Combined validation checks
@@ -311,14 +327,25 @@ const CreateIndent = () => {
         const submissionRequestUserName = username || null; 
 
         let submissionRoleId;
+        let designation = ''; // Officer title for the printout/API
+        let dashboardSubmitTo = ''; // Office name for the dashboard display 
+
         if (submitToOption === 'division') {
             submissionRoleId = 5; 
+            designation = 'Executive Engineer';
+            dashboardSubmitTo = 'Division Officers'; // 🔑 Office Name
         } else if (submitToOption === 'subdivision') {
             submissionRoleId = 6; 
+            designation = 'Assistant Engineer';
+            dashboardSubmitTo = 'SubDivision Officer'; // 🔑 Office Name
         } else if (submitToOption === 'section') {
             submissionRoleId = 7; 
+            designation = 'Section Officer';
+            dashboardSubmitTo = 'Section Officer'; // 🔑 Office Name
         } else {
-            submissionRoleId = 4; // Fallback
+            submissionRoleId = 4; // Fallback Role ID
+            designation = 'Unknown Officer';
+            dashboardSubmitTo = 'Unknown Office';
         }
 
         const divCodeStr = division;
@@ -333,16 +360,10 @@ const CreateIndent = () => {
         const actualSelectedOptions = availableOptions
             .filter(opt => selectedOptions.includes(opt.code));
 
-        let designation = '';
         let toCode = selectedSubDivision ? selectedSubDivision.sd_code : subDivision; 
 
         if (submitToOption === 'division') {
-            designation = 'Executive Engineer';
             toCode = selectedDivision ? selectedDivision.div_code : division; 
-        } else if (submitToOption === 'subdivision') {
-            designation = 'Assistant Engineer';
-        } else if (submitToOption === 'section') {
-            designation = 'Section Officer';
         }
 
         // --- STAGE 1: API PAYLOAD (FLAG 1: CREATE INDENT) ---
@@ -386,11 +407,11 @@ const CreateIndent = () => {
                     divisionCode: division,
                     subDivision: selectedSubDivision ? selectedSubDivision.sub_division : '',
                     subDivisionCode: subDivision,
-                    submitTo: submitToOption.toLowerCase().replace('-', ''),
+                    submitTo: submitToOption.toLowerCase().replace('-', ''), // Used for the "To: (Office)" in the printout
                     toCode: toCode,
                     selectedOptions: actualSelectedOptions.map(opt => ({ name: opt.name, code: opt.code })),
                     selectedOptionNames: actualSelectedOptions.map(opt => opt.name).join(' / '),
-                    designation,
+                    designation, // Officer designation used in the printout
                     date: formattedDate,
                     time: currentDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }),
                     indentNumber: fullIndentNo, 
@@ -431,15 +452,17 @@ const CreateIndent = () => {
                     const newDashboardIndent = {
                         indentNumber: fullIndentNo,
                         createdOn: formattedDate,
-                        submitTo: designation,
+                        
+                        // 🔑 FIX: Use the calculated office name for the dashboard display
+                        submitTo: dashboardSubmitTo, 
+                        
                         status: 'Pending',
                         division: finalIndentData.division,
-                        // Note: Using the single selected/created values here. 
-                        // If multiple sections are selected, this is a simplification for the dashboard.
                         subDivision: finalIndentData.subDivision, 
                         section: finalIndentData.selectedOptionNames, 
                         divisionCode: finalIndentData.divisionCode,
                     };
+                    // Ensure the new indent is added at the top and sorted.
                     setSubmittedIndents(prev => [newDashboardIndent, ...prev].sort((a, b) => new Date(b.createdOn) - new Date(a.createdOn)));
 
                 } else {
@@ -466,8 +489,51 @@ const CreateIndent = () => {
 
     // --- RENDER FUNCTIONS (Print/Result/Dashboard) ---
     
-    // handlePrint and renderIndentContent remain logically the same
-    const handlePrint = () => { /* ... print logic ... */ };
+    const handlePrint = () => { 
+        const printWindow = window.open('', '', 'height=600,width=800');
+        printWindow.document.write('<html><head><title>Indent Print</title>');
+        printWindow.document.write('<style>');
+        printWindow.document.write(`
+            @media print {
+                @page { size: A4; margin: 20mm; }
+                body { font-family: sans-serif; margin: 0; padding: 0; font-size: 10pt; }
+                .print-container { width: 100%; padding: 0; margin: 0; }
+                .letterhead { width: 100%; height: auto; max-width: 100%; margin-bottom: 20px; }
+                .indent-info, .to-section, .subject, .signature { margin-bottom: 15px; }
+                .indent-info { display: flex; justify-content: space-between; font-size: 11pt; }
+                .table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                .table th, .table td { border: 1px solid #000; padding: 8px; text-align: left; vertical-align: top; }
+                .table th { background-color: #f2f2f2; }
+                .signature p { margin: 0; padding: 0; }
+                .signature strong { display: block; margin-top: 40px; }
+            }
+        `);
+        printWindow.document.write('</style>');
+        printWindow.document.write('</head><body><div class="print-container">');
+        
+        // Add the image (Letterhead)
+        if (letterheadImg) {
+            printWindow.document.write(`<img src="${letterheadImg}" class="letterhead" style="width: 100%;">`);
+        } else {
+            printWindow.document.write('<h2 style="text-align: center;">VISHVIN TECHNOLOGIES PVT. LTD.</h2><hr/>');
+        }
+
+        // Add the rendered content
+        const content = document.getElementById('indent-content-inner');
+        if (content) {
+            printWindow.document.write(content.innerHTML);
+        } else {
+            printWindow.document.write('<p>Error: Indent content not available for printing.</p>');
+        }
+
+        printWindow.document.write('</div></body></html>');
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+            printWindow.print();
+        }, 500);
+    };
+
     const renderIndentContent = () => {
         if (!indentData) return null;
 
@@ -483,6 +549,7 @@ const CreateIndent = () => {
             const section = sectionOptions.find(opt => opt.so_code === sectionCode);
             if (section) {
                 const parentSubDiv = subDivisions.find(sd => sd.sd_code === section.sd_code);
+                // Fallback to the subdivision selected on the form if parent is not found
                 return parentSubDiv ? parentSubDiv.sub_division : indentData.subDivision;
             }
             return indentData.subDivision;
@@ -571,7 +638,7 @@ const CreateIndent = () => {
         );
     };
     
-    const renderSubmissionResult = () => { /* ... result rendering logic ... */
+    const renderSubmissionResult = () => { 
         if (!submissionStatus || !indentData) return null;
 
         const statusColor = submissionStatus.status === 'Pending' ? 'success' : 'warning';
@@ -604,9 +671,9 @@ const CreateIndent = () => {
                            <h5 className='mb-0 text-primary'>Generated Indent Letter Preview (Ready for Print)</h5>
                         </CardHeader>
                         <CardBody className='p-4'>
-                           <div style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #ccc', padding: '15px', backgroundColor: '#fff' }}>
+                            <div style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #ccc', padding: '15px', backgroundColor: '#fff' }}>
                                {renderIndentContent()}
-                           </div>
+                            </div>
                         </CardBody>
                     </Card>
 
@@ -693,8 +760,8 @@ const CreateIndent = () => {
                                             <th>Indent #</th>
                                             <th>Date</th>
                                             <th>Division</th>
-                                            <th>Sub-Division</th> {/* 🔑 NEW COLUMN */}
-                                            <th>Section</th> {/* 🔑 NEW COLUMN */}
+                                            <th>Sub-Division</th> 
+                                            <th>Section</th> 
                                             <th>Submitted To</th>
                                             <th>Status</th>
                                         </tr>
@@ -706,8 +773,8 @@ const CreateIndent = () => {
                                                     <td>{indent.indentNumber}</td>
                                                     <td>{indent.createdOn}</td>
                                                     <td>{indent.division}</td>
-                                                    <td>{indent.subDivision}</td> {/* 🔑 NEW DATA */}
-                                                    <td>{indent.section}</td>     {/* 🔑 NEW DATA */}
+                                                    <td>{indent.subDivision}</td> 
+                                                    <td>{indent.section}</td> 
                                                     <td>{indent.submitTo}</td>
                                                     <td><span className={`badge bg-${getStatusColor(indent.status)}`}>{indent.status}</span></td>
                                                 </tr>
