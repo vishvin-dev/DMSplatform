@@ -9,9 +9,13 @@ import {
     fetchOfficersAssignedIndentCount,
     fetchOfficerApproveIndentCount,
     fetchingResubmittedIndentsCountByDORole,
-    fetchingResubmittedIndentsByDORole
+    fetchingResubmittedIndentsByDORole,
+    RejectedIndentByOfficer,
+    fetchingRejectedIndentByOfficer,
+    fetchingRejectedIndentCountByOfficer
 } from "../../models/Indent.js";
 
+//INDENT CREATION
 export const Indent = async (req, res) => {
     const { flagId, ...data } = req.body;
 
@@ -129,8 +133,6 @@ export const Indent = async (req, res) => {
         });
     }
 };
-
-
 //THIS IS THE RESBMITTED INDENT THINGS OK(OFFICERS SCREEN)
 export const IndentrResubmitted = async (req, res) => {
     const { flagId, ...data } = req.body;
@@ -179,5 +181,66 @@ export const IndentrResubmitted = async (req, res) => {
         });
     }
 };
+// ======================================//Indent is Rejected Here from the Officers ok ============================================================
+export const RejetedIndent=async(req,res)=>{
+     const { flagId, ...data } = req.body;
 
+    try {
+        if (!flagId) {
+            return res.status(400).json({
+                status: "failed",
+                message: "flagId is required"
+            });
+        }
+        
+//===================THis IS THE REJECTED INDENT IT IS =======================================
+        
+        if (Number(flagId) === 1) {
+            const result = await RejectedIndentByOfficer(data);
+            return res.status(200).json({
+                message: "RejectedIndent submitted Successfully",
+                status: "success",
+            });
+        }
+
+//=====================THIS IS THE FETCHING THE REJCTED INDENTCount IT IS OK========================
+        else if (Number(flagId) === 2) {
+            const result = await fetchingRejectedIndentCountByOfficer(data.Role_Id);
+            return res.status(200).json({
+                message: "RejectedIndentCount fetched Successfully",
+                status: "success",
+                result
+            });
+        }
+//=====================THIS IS THE FETCHING THE REJCTED INDENT IT IS OK========================
+
+        else if (Number(flagId) === 3) {
+            const result = await fetchingRejectedIndentByOfficer(data.Role_Id);
+            return res.status(200).json({
+                message: "RejectedIndent fetched Successfully",
+                status: "success",
+                count:result.length,
+                result
+            });
+        }
+       
+// ===================================================================================================================================================
+// ===================================================================================================================================================
+        else {
+            return res.status(400).json({
+                status: "failed",
+                message: "Invalid flagId"
+            });
+        }
+    } catch (err) {
+        console.error("Indent Controller Error:", err);
+        return res.status(500).json({
+            status: "failed",
+            message: "Server error in Indent controller",
+            error: err.message
+        });
+    }
+}
+//=================================================================================================================================================
+//=================================================================================================================================================
 

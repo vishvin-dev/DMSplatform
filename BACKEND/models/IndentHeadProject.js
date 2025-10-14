@@ -1,5 +1,4 @@
 
-
 import { pool } from "../Config/db.js";
 import { getFullIndentNo } from "../utils/IndentPrefix/indent.js"
 
@@ -472,3 +471,186 @@ export const fetchingResubmittedToOfficerFromPM = async (CreatedByUser_Id) => {
 };
 // ===========================================================================================
 // ===========================================================================================
+
+
+
+      
+// =============================================================================================================
+// THIS IS THE FETCHING THE OFFICER PENDING APPROVAL AND REJECT SCREEN OK 
+// =============================================================================================================
+        //THIS IS THE FETCHING THE OFFICER PENDING APPROVALCOUNT ===========
+export const fetchingOfficerApprovalPendingCount = async () => {
+  try {
+    const [result] = await pool.execute(`
+      SELECT 
+          COUNT(DISTINCT i.Indent_Id) AS TotalIndents
+      FROM Indent i
+      JOIN User u 
+          ON i.CreatedByUser_Id = u.User_Id
+      JOIN Roles r 
+          ON i.Role_Id = r.Role_Id
+      LEFT JOIN IndentStatusMaster sm 
+          ON i.Status_Id = sm.Status_Id
+      LEFT JOIN IndentZoneMapping z 
+          ON i.Indent_Id = z.Indent_Id
+      LEFT JOIN zone_codes zc
+          ON z.div_code = zc.div_code 
+          AND z.sd_code = zc.sd_code 
+          AND z.so_code = zc.so_code
+      WHERE i.Status_Id = 1;   -- ✅ Count only by Status_Id
+    `);
+
+    return result[0];
+  } catch (error) {
+    console.error("Error fetching indent count by Status_Id:", error);
+    throw error;
+  }
+};
+export const fetchingOfficerApprovalPending = async () => {
+  try {
+    const [result] = await pool.execute(`
+      SELECT 
+          i.Indent_Id,
+          i.Indent_No,
+          i.Status_Id,
+          sm.StatusName,
+          i.CreatedOn,
+          i.UpdatedOn,
+          i.RequestUserName,
+          u.User_Id AS CreatedByIndent,
+          u.FirstName,
+          u.LastName,
+          r.Role_Id,
+          r.RoleName AS submitTo,
+          GROUP_CONCAT(DISTINCT z.div_code) AS div_codes,
+          GROUP_CONCAT(DISTINCT z.sd_code) AS sd_codes,
+          GROUP_CONCAT(DISTINCT z.so_code) AS so_codes,
+          GROUP_CONCAT(DISTINCT zc.division) AS division_names,
+          GROUP_CONCAT(DISTINCT zc.sub_division) AS subdivision_names,
+          GROUP_CONCAT(DISTINCT zc.section_office) AS section_names
+      FROM Indent i
+      JOIN User u 
+          ON i.CreatedByUser_Id = u.User_Id
+      JOIN Roles r 
+          ON i.Role_Id = r.Role_Id
+      LEFT JOIN IndentStatusMaster sm 
+          ON i.Status_Id = sm.Status_Id
+      LEFT JOIN IndentZoneMapping z 
+          ON i.Indent_Id = z.Indent_Id
+      LEFT JOIN zone_codes zc
+          ON z.div_code = zc.div_code 
+          AND z.sd_code = zc.sd_code 
+          AND z.so_code = zc.so_code
+      WHERE i.Status_Id = 1   --  Filter only by Status_Id
+      GROUP BY 
+          i.Indent_Id, i.Indent_No, i.Status_Id, sm.StatusName,
+          i.CreatedOn, i.UpdatedOn, i.RequestUserName,
+          u.User_Id, u.FirstName, u.LastName,
+          r.Role_Id, r.RoleName
+      ORDER BY i.CreatedOn DESC;
+    `);
+
+    return result.map(row => ({
+      ...row,
+      fullIndentNo: getFullIndentNo(row.Indent_No)
+    }));
+
+  } catch (error) {
+    console.error("Error while fetching indents by Status_Id:", error);
+    throw error;
+  }
+};
+// ==============================================================================================================
+
+
+// ==============================================================================================================
+//THIS IS THE FETCHING THE OFFICER REJECTEDCOUNT  ===========
+export const fetchingOfficerRejectedCount = async () => {
+  try {
+    const [result] = await pool.execute(`
+      SELECT 
+          COUNT(DISTINCT ri.Indent_Id) AS RejectedIndentCount
+      FROM rejectedindent ri
+      JOIN indent i 
+          ON ri.Indent_Id = i.Indent_Id
+      JOIN user u 
+          ON ri.UploadedByUser_Id = u.User_Id
+      JOIN roles r 
+          ON ri.RejectedByRole_Id = r.Role_Id
+      LEFT JOIN indentstatusmaster sm 
+          ON ri.Status_Id = sm.Status_Id
+      LEFT JOIN indentzonemapping z 
+          ON i.Indent_Id = z.Indent_Id
+      LEFT JOIN zone_codes zc
+          ON z.div_code = zc.div_code 
+          AND z.sd_code = zc.sd_code 
+          AND z.so_code = zc.so_code
+      WHERE ri.Status_Id = 5;   -- ✅ Count only rejected indents
+    `);
+
+    return result[0];  // returns { RejectedIndentCount: <number> }
+
+  } catch (error) {
+    console.error("Error fetching rejected indent count:", error);
+    throw error;
+  }
+};
+
+//THIS IS THE FETCHING THE OFFICER REJECTED  ===========
+export const fetchingOfficerRejected = async () => {
+  try {
+    const [result] = await pool.execute(`
+      SELECT 
+          ri.RejectionIndent_Id,
+          ri.Indent_Id,
+          i.Indent_No,
+          ri.Status_Id,
+          sm.StatusName,
+          ri.RejectedComment,
+          ri.RejectedOn,
+          ri.RequestUserName,
+          u.User_Id AS UploadedByUser_Id,
+          u.FirstName,
+          u.LastName,
+          r.Role_Id AS RejectedByRole_Id,
+          r.RoleName AS RejectedByRoleName,
+          GROUP_CONCAT(DISTINCT z.div_code) AS div_codes,
+          GROUP_CONCAT(DISTINCT z.sd_code) AS sd_codes,
+          GROUP_CONCAT(DISTINCT z.so_code) AS so_codes,
+          GROUP_CONCAT(DISTINCT zc.division) AS division_names,
+          GROUP_CONCAT(DISTINCT zc.sub_division) AS subdivision_names,
+          GROUP_CONCAT(DISTINCT zc.section_office) AS section_names
+      FROM rejectedindent ri
+      JOIN indent i 
+          ON ri.Indent_Id = i.Indent_Id
+      JOIN user u 
+          ON ri.UploadedByUser_Id = u.User_Id
+      JOIN roles r 
+          ON ri.RejectedByRole_Id = r.Role_Id
+      LEFT JOIN indentstatusmaster sm 
+          ON ri.Status_Id = sm.Status_Id
+      LEFT JOIN indentzonemapping z 
+          ON i.Indent_Id = z.Indent_Id
+      LEFT JOIN zone_codes zc
+          ON z.div_code = zc.div_code 
+          AND z.sd_code = zc.sd_code 
+          AND z.so_code = zc.so_code
+      WHERE ri.Status_Id = 5   --  Fetch only rejected indents
+      GROUP BY 
+          ri.RejectionIndent_Id, ri.Indent_Id, i.Indent_No, ri.Status_Id, sm.StatusName,
+          ri.RejectedComment, ri.RejectedOn, ri.RequestUserName,
+          u.User_Id, u.FirstName, u.LastName,
+          r.Role_Id, r.RoleName
+      ORDER BY ri.RejectedOn DESC;
+    `);
+
+    return result.map(row => ({
+      ...row,
+      fullIndentNo: getFullIndentNo(row.Indent_No)
+    }));
+
+  } catch (error) {
+    console.error("Error fetching rejected indents:", error);
+    throw error;
+  }
+};
