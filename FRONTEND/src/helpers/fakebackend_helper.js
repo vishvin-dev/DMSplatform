@@ -436,7 +436,8 @@ export const postcreateindent = data => api.create(url.POST_CREATE_INDENT, data)
 export const IndentProjectHead = data => api.create(url.INDENT_PROJECT_HEAD, data);
 export const resubmittedindent = data => api.create(url.RE_SUBMITTED_INDENT, data);
 export const rejected = data => api.create(url.REJECTED, data);
-
+export const projectHeadFetch = data => api.create(url.PROJECT_HEAD_FETCH, data);
+export const indentView = data => api.create(url.INDENT_VIEW, data);
 
 
 //DMS peoject api
