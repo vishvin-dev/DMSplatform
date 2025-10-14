@@ -964,70 +964,94 @@ const Reports = () => {
                                     <CardBody>
                                         <div className="d-flex flex-column gap-3">
                                             <FormGroup className="mb-0">
-                                                <Label className="form-label fw-medium">Role <span className="text-danger">*</span></Label>
-                                                <Input
-                                                    type="select"
-                                                    value={role}
-                                                    onChange={handleRoleChange}
-                                                    className="form-select"
-                                                >
-                                                    <option value="">Select Role</option>
-                                                    <option value="Uploader">Uploader</option>
-                                                    <option value="QC">QC</option>
-                                                </Input>
-                                            </FormGroup>
-
-                                            <FormGroup className="mb-0">
-                                                <Label className="form-label fw-medium">User <span className="text-danger">*</span></Label>
-                                                <Input
-                                                    type="select"
-                                                    value={selectedUser}
-                                                    onChange={(e) => setSelectedUser(e.target.value)}
-                                                    disabled={!role || userOptions.length === 0}
-                                                    className="form-select"
-                                                >
-                                                    <option value="">Select User</option>
-                                                    {userOptions.map(user => (
-                                                        <option
-                                                            key={user.id || user.user_id || user.email}
-                                                            value={user.id || user.user_id || user.email}
+                                                <div className="row align-items-center">
+                                                    <div className="col-4">
+                                                        <Label className="form-label fw-medium mb-0">Role <span className="text-danger">*</span></Label>
+                                                    </div>
+                                                    <div className="col-8">
+                                                        <Input
+                                                            type="select"
+                                                            value={role}
+                                                            onChange={handleRoleChange}
+                                                            className="form-select"
                                                         >
-                                                            {user.user_name || user.name || user.email || 'Unknown User'}
-                                                        </option>
-                                                    ))}
-                                                </Input>
+                                                            <option value="">Select Role</option>
+                                                            <option value="Uploader">Uploader</option>
+                                                            <option value="QC">QC</option>
+                                                        </Input>
+                                                    </div>
+                                                </div>
                                             </FormGroup>
 
                                             <FormGroup className="mb-0">
-                                                <Label className="form-label fw-medium">Report Type <span className="text-danger">*</span></Label>
-                                                <Input
-                                                    type="select"
-                                                    value={reportType}
-                                                    onChange={(e) => { setReportType(e.target.value); setReportData(null); setShowResults(false); }}
-                                                    className="form-select"
-                                                >
-                                                    <option value="">Select Report Type</option>
-                                                    <option value="Document Summary">Document Summary</option>
-                                                    <option value="User Activity">User Activity</option>
-                                                    <option value="Status Report">Status Report</option>
-                                                    <option value="Performance Report">Performance Report</option>
-                                                </Input>
+                                                <div className="row align-items-center">
+                                                    <div className="col-4">
+                                                        <Label className="form-label fw-medium mb-0">User <span className="text-danger">*</span></Label>
+                                                    </div>
+                                                    <div className="col-8">
+                                                        <Input
+                                                            type="select"
+                                                            value={selectedUser}
+                                                            onChange={(e) => setSelectedUser(e.target.value)}
+                                                            disabled={!role || userOptions.length === 0}
+                                                            className="form-select"
+                                                        >
+                                                            <option value="">Select User</option>
+                                                            {userOptions.map(user => (
+                                                                <option
+                                                                    key={user.id || user.user_id || user.email}
+                                                                    value={user.id || user.user_id || user.email}
+                                                                >
+                                                                    {user.user_name || user.name || user.email || 'Unknown User'}
+                                                                </option>
+                                                            ))}
+                                                        </Input>
+                                                    </div>
+                                                </div>
                                             </FormGroup>
 
                                             <FormGroup className="mb-0">
-                                                <Label className="form-label fw-medium">Date Range <span className="text-danger">*</span></Label>
-                                                <Input
-                                                    type="select"
-                                                    value={dateRange}
-                                                    onChange={handleDateRangeChange}
-                                                    className="form-select"
-                                                >
-                                                    <option value="">Select Date Range</option>
-                                                    <option value="today">Today</option>
-                                                    <option value="weekly">Weekly</option>
-                                                    <option value="monthly">Monthly</option>
-                                                    <option value="custom">Custom Date Range</option>
-                                                </Input>
+                                                <div className="row align-items-center">
+                                                    <div className="col-4">
+                                                        <Label className="form-label fw-medium mb-0">Report Type <span className="text-danger">*</span></Label>
+                                                    </div>
+                                                    <div className="col-8">
+                                                        <Input
+                                                            type="select"
+                                                            value={reportType}
+                                                            onChange={(e) => { setReportType(e.target.value); setReportData(null); setShowResults(false); }}
+                                                            className="form-select"
+                                                        >
+                                                            <option value="">Select Report Type</option>
+                                                            <option value="Document Summary">Document Summary</option>
+                                                            <option value="User Activity">User Activity</option>
+                                                            <option value="Status Report">Status Report</option>
+                                                            <option value="Performance Report">Performance Report</option>
+                                                        </Input>
+                                                    </div>
+                                                </div>
+                                            </FormGroup>
+
+                                            <FormGroup className="mb-0">
+                                                <div className="row align-items-center">
+                                                    <div className="col-4">
+                                                        <Label className="form-label fw-medium mb-0">Date Range <span className="text-danger">*</span></Label>
+                                                    </div>
+                                                    <div className="col-8">
+                                                        <Input
+                                                            type="select"
+                                                            value={dateRange}
+                                                            onChange={handleDateRangeChange}
+                                                            className="form-select"
+                                                        >
+                                                            <option value="">Select Date Range</option>
+                                                            <option value="today">Today</option>
+                                                            <option value="weekly">Weekly</option>
+                                                            <option value="monthly">Monthly</option>
+                                                            <option value="custom">Custom Date Range</option>
+                                                        </Input>
+                                                    </div>
+                                                </div>
                                             </FormGroup>
                                         </div>
                                     </CardBody>
@@ -1050,26 +1074,38 @@ const Reports = () => {
                                                 {dateRange === 'custom' ? (
                                                     <>
                                                         <FormGroup className="mb-0">
-                                                            <Label className="form-label fw-medium">Start Date <span className="text-danger">*</span></Label>
-                                                            <Input
-                                                                type="date"
-                                                                value={customStartDate}
-                                                                onChange={(e) => setCustomStartDate(e.target.value)}
-                                                                max={new Date().toISOString().split('T')[0]}
-                                                                className="form-control"
-                                                            />
+                                                            <div className="row align-items-center">
+                                                                <div className="col-4">
+                                                                    <Label className="form-label fw-medium mb-0">Start Date <span className="text-danger">*</span></Label>
+                                                                </div>
+                                                                <div className="col-8">
+                                                                    <Input
+                                                                        type="date"
+                                                                        value={customStartDate}
+                                                                        onChange={(e) => setCustomStartDate(e.target.value)}
+                                                                        max={new Date().toISOString().split('T')[0]}
+                                                                        className="form-control"
+                                                                    />
+                                                                </div>
+                                                            </div>
                                                         </FormGroup>
 
                                                         <FormGroup className="mb-0">
-                                                            <Label className="form-label fw-medium">End Date <span className="text-danger">*</span></Label>
-                                                            <Input
-                                                                type="date"
-                                                                value={customEndDate}
-                                                                onChange={(e) => setCustomEndDate(e.target.value)}
-                                                                min={customStartDate}
-                                                                max={new Date().toISOString().split('T')[0]}
-                                                                className="form-control"
-                                                            />
+                                                            <div className="row align-items-center">
+                                                                <div className="col-4">
+                                                                    <Label className="form-label fw-medium mb-0">End Date <span className="text-danger">*</span></Label>
+                                                                </div>
+                                                                <div className="col-8">
+                                                                    <Input
+                                                                        type="date"
+                                                                        value={customEndDate}
+                                                                        onChange={(e) => setCustomEndDate(e.target.value)}
+                                                                        min={customStartDate}
+                                                                        max={new Date().toISOString().split('T')[0]}
+                                                                        className="form-control"
+                                                                    />
+                                                                </div>
+                                                            </div>
                                                         </FormGroup>
                                                     </>
                                                 ) : (
@@ -1119,59 +1155,6 @@ const Reports = () => {
                                 </Card>
                             </Col>
                         )}
-
-                        {/* Card 4: Report Results Preview - Status Card */}
-                        <Col lg={3} md={6} className="mb-3">
-                            <Card className="h-100">
-                                <CardHeader className="bg-primary text-white p-2">
-                                    <h6 className="mb-0 card-title text-white">
-                                        <i className="ri-bar-chart-line me-2"></i>Report Status
-                                    </h6>
-                                </CardHeader>
-                                <CardBody className="d-flex flex-column justify-content-center">
-                                    {loading ? (
-                                        <div className="text-center text-primary py-3">
-                                            <Spinner className="mb-2" />
-                                            <p className="mb-0">Generating Report...</p>
-                                        </div>
-                                    ) : showResults && reportData ? (
-                                        <div className="text-center">
-                                            <i className="ri-file-search-line display-6 d-block mb-2 text-success"></i>
-                                            <h6 className="mb-1 text-success">Report Ready!</h6>
-                                            <p className="text-muted mb-0" style={{ fontSize: '0.85rem' }}>
-                                                Check the new browser tab for the report.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center text-muted">
-                                            <i className="ri-file-chart-line display-6 d-block mb-2"></i>
-                                            <small>Complete all filters and click 'Generate Report'.</small>
-                                        </div>
-                                    )}
-                                </CardBody>
-                            </Card>
-                        </Col>
-                    </Row>
-
-                    {/* Default Message when no reports */}
-                    <Row>
-                        <Col lg={12}>
-                            <Card>
-                                <CardHeader className="bg-light p-3">
-                                    <h5 className="mb-0">
-                                        <i className="ri-bar-chart-line me-2"></i>
-                                        Report Results
-                                    </h5>
-                                </CardHeader>
-                                <CardBody>
-                                    <div className="text-center text-muted py-5">
-                                        <i className="ri-file-chart-line display-1 text-muted"></i>
-                                        <h5 className="mt-3 text-muted">No reports displayed here</h5>
-                                        <p className="mb-0">Your report will be rendered in a separate browser tab upon generation.</p>
-                                    </div>
-                                </CardBody>
-                            </Card>
-                        </Col>
                     </Row>
                 </Container>
             </div>
