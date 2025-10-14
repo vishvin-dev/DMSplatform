@@ -1419,13 +1419,50 @@ const UserCreation = () => {
                 .matches(/^[0-9]+$/, "Must be only digits")
                 .min(10, "Must be exactly 10 digits")
                 .max(10, "Must be exactly 10 digits"),
-            dateOfBirth: Yup.date().required("DateOfBirth is required")
+            dateOfBirth: Yup.date()
+                .required("DateOfBirth is required")
+                .test('age', 'Must be at least 18 years old', function (value) {
+                    if (!value) return false;
+                    const birthDate = new Date(value);
+                    const today = new Date();
+                    let age = today.getFullYear() - birthDate.getFullYear();
+                    const monthDiff = today.getMonth() - birthDate.getMonth();
+
+                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                        age--;
+                    }
+                    return age >= 18;
+                }),
+            maritalStatus: Yup.string().required("Marital Status is required")
         }),
         onSubmit: (values) => {
             console.log("Contact Info:", values);
             toggleTab(activeTab + 1);
         }
     });
+
+    const handlePhoneNumberChange = (e) => {
+        const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+        contactInfoValidation.setFieldValue('contactNo', value);
+    };
+
+
+    const handlePasswordChange = (e) => {
+        const value = e.target.value.slice(0, 20);
+        loginInfoValidation.setFieldValue('password', value);
+    };
+
+    const handleConfirmPasswordChange = (e) => {
+        const value = e.target.value.slice(0, 20);
+        loginInfoValidation.setFieldValue('confirmPassword', value);
+    };
+
+    // Optional: Prevent typing beyond limit
+    const handleKeyPress = (e, currentValue) => {
+        if (currentValue.length >= 20) {
+            e.preventDefault();
+        }
+    };
 
     // Custom validation function for office information
     const validateOfficeInfo = (values) => {
@@ -1514,12 +1551,16 @@ const UserCreation = () => {
             confirmPassword: ''
         },
         validationSchema: Yup.object({
-            email: Yup.string().required("Email is required"),
+            email: Yup.string()
+                .required("Email is required")
+                .email("Please enter a valid email address"),
             password: Yup.string()
                 .required("Password is required")
-                .min(6, "Password must be at least 6 characters"),
+                .min(6, "Password must be at least 6 characters")
+                .max(20, "Password cannot exceed 20 characters"),
             confirmPassword: Yup.string()
                 .required("ConfirmPassword is required")
+                .max(20, "Confirm Password cannot exceed 20 characters")
                 .oneOf([Yup.ref('password'), null], 'Passwords must match')
         }),
         onSubmit: (values) => {
@@ -1785,7 +1826,7 @@ const UserCreation = () => {
                         div_code: divCode,
                         sd_code: subDivisions[0],
                         so_code: sectionCode,
-                        circle: circleCode, 
+                        circle: circleCode,
                         zone: "Kalaburagi"
                     });
                 });
@@ -1796,7 +1837,7 @@ const UserCreation = () => {
                         div_code: divCode,
                         sd_code: subDivCode,
                         so_code: sections[index] || "", // Use corresponding section if available
-                        circle: circleCode, 
+                        circle: circleCode,
                         zone: "Kalaburagi"
                     });
                 });
@@ -1807,7 +1848,7 @@ const UserCreation = () => {
                 div_code: divCode,
                 sd_code: "", // Empty for subdivision
                 so_code: "", // Empty for section
-                circle: circleCode, 
+                circle: circleCode,
                 zone: "Kalaburagi"
             });
         }
@@ -2113,9 +2154,10 @@ const UserCreation = () => {
                                                                 name="contactNo"
                                                                 type="text"
                                                                 placeholder="Contact No"
-                                                                onChange={contactInfoValidation.handleChange}
+                                                                onChange={handlePhoneNumberChange} // Use custom handler
                                                                 onBlur={contactInfoValidation.handleBlur}
                                                                 value={contactInfoValidation.values.contactNo}
+                                                                maxLength={10}
                                                                 invalid={
                                                                     contactInfoValidation.touched.contactNo &&
                                                                     contactInfoValidation.errors.contactNo
@@ -2126,6 +2168,10 @@ const UserCreation = () => {
                                                                     {contactInfoValidation.errors.contactNo}
                                                                 </div>
                                                             ) : null}
+                                                            {/* Add character count display */}
+                                                            <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                                                                {contactInfoValidation.values.contactNo.length}/10 digits
+                                                            </div>
                                                         </FormGroup>
                                                     </Col>
                                                 </Row>
@@ -2134,7 +2180,7 @@ const UserCreation = () => {
                                                     <div style={{ width: '320px' }}>
                                                         <FormGroup className="mb-3">
                                                             <Label className="form-label required" style={{ fontSize: '0.85rem', marginBottom: '4px' }}>
-                                                                DateOfBirth <span className="text-danger">*</span>
+                                                                DateOfBirth <span className="text-danger">*</span> (Must be 18+ years)
                                                             </Label>
                                                             <LocalizationProvider dateAdapter={AdapterDayjs}>
                                                                 <DatePicker
@@ -2151,6 +2197,7 @@ const UserCreation = () => {
                                                                         )
                                                                     }
                                                                     disableFuture
+                                                                    maxDate={dayjs().subtract(18, 'year')} // This will prevent selecting dates less than 18 years ago
                                                                     renderInput={(params) => (
                                                                         <TextField
                                                                             {...params}
@@ -2165,7 +2212,7 @@ const UserCreation = () => {
                                                                                 contactInfoValidation.touched.dateOfBirth &&
                                                                                     contactInfoValidation.errors.dateOfBirth
                                                                                     ? contactInfoValidation.errors.dateOfBirth
-                                                                                    : ''
+                                                                                    : 'Must be at least 18 years old'
                                                                             }
                                                                             sx={{
                                                                                 mt: 0.5,
@@ -2185,7 +2232,6 @@ const UserCreation = () => {
                                                                     )}
                                                                 />
                                                             </LocalizationProvider>
-
                                                         </FormGroup>
                                                     </div>
                                                 </Row>
@@ -2481,9 +2527,11 @@ const UserCreation = () => {
                                                                         name="password"
                                                                         type="password"
                                                                         placeholder="Password"
-                                                                        onChange={loginInfoValidation.handleChange}
+                                                                        onChange={handlePasswordChange}
+                                                                        onKeyPress={(e) => handleKeyPress(e, loginInfoValidation.values.password)}
                                                                         onBlur={loginInfoValidation.handleBlur}
                                                                         value={loginInfoValidation.values.password}
+                                                                        maxLength={20}
                                                                         invalid={
                                                                             loginInfoValidation.touched.password &&
                                                                             loginInfoValidation.errors.password
@@ -2494,6 +2542,9 @@ const UserCreation = () => {
                                                                             {loginInfoValidation.errors.password}
                                                                         </div>
                                                                     ) : null}
+                                                                    <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                                                                        {loginInfoValidation.values.password.length}/20 characters
+                                                                    </div>
                                                                 </FormGroup>
                                                             </Col>
                                                         </Row>
@@ -2505,9 +2556,11 @@ const UserCreation = () => {
                                                                         name="confirmPassword"
                                                                         type="password"
                                                                         placeholder="ConfirmPassword"
-                                                                        onChange={loginInfoValidation.handleChange}
+                                                                        onChange={handleConfirmPasswordChange}
+                                                                        onKeyPress={(e) => handleKeyPress(e, loginInfoValidation.values.confirmPassword)}
                                                                         onBlur={loginInfoValidation.handleBlur}
                                                                         value={loginInfoValidation.values.confirmPassword}
+                                                                        maxLength={20}
                                                                         invalid={
                                                                             loginInfoValidation.touched.confirmPassword &&
                                                                             loginInfoValidation.errors.confirmPassword
@@ -2518,6 +2571,9 @@ const UserCreation = () => {
                                                                             {loginInfoValidation.errors.confirmPassword}
                                                                         </div>
                                                                     ) : null}
+                                                                    <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                                                                        {loginInfoValidation.values.confirmPassword.length}/20 characters
+                                                                    </div>
                                                                 </FormGroup>
                                                             </Col>
                                                         </Row>
