@@ -15,6 +15,7 @@ import {
     fetchingRejectedIndentCountByOfficer
 } from "../../models/Indent.js";
 
+//INDENT CREATION
 export const Indent = async (req, res) => {
     const { flagId, ...data } = req.body;
 
@@ -132,8 +133,6 @@ export const Indent = async (req, res) => {
         });
     }
 };
-
-
 //THIS IS THE RESBMITTED INDENT THINGS OK(OFFICERS SCREEN)
 export const IndentrResubmitted = async (req, res) => {
     const { flagId, ...data } = req.body;
@@ -182,8 +181,6 @@ export const IndentrResubmitted = async (req, res) => {
         });
     }
 };
-
-
 // ======================================//Indent is Rejected Here from the Officers ok ============================================================
 export const RejetedIndent=async(req,res)=>{
      const { flagId, ...data } = req.body;
