@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     Container, Card, CardHeader, CardBody, Input, Table, Button, Modal,
-    ModalHeader, ModalBody, ModalFooter, Row, Col, Label, FormGroup, Spinner, Alert
+    ModalHeader, ModalBody, ModalFooter, Row, Col, Label, FormGroup, Spinner, Alert,
+    InputGroup, InputGroupText // <-- ADDED InputGroup and InputGroupText
 } from 'reactstrap';
 import letterheadImg from './VishvinLetterHead.jpg'; 
 import { indentView } from '../../helpers/fakebackend_helper'; 
@@ -280,20 +281,10 @@ const IndentView = () => {
                  .filter-col { flex-grow: 0; max-width: 200px; }
                  .search-col {
                      flex-grow: 0;
-                     max-width: 300px; /* ✅ Reduced width */
+                     max-width: 300px; 
                      min-width: 250px;
                  }
-                 .search-box {
-                     position: relative;
-                 }
-                 .search-icon {
-                     position: absolute;
-                     right: 12px;
-                     top: 50%;
-                     transform: translateY(-50%);
-                     color: #999;
-                     font-size: 16px;
-                 }
+                 /* Custom CSS for icon is no longer needed as InputGroup handles alignment */
             `}</style>
             <Container fluid>
                 <Card>
@@ -322,7 +313,11 @@ const IndentView = () => {
                             <Col md={true} sm={12} className="search-col">
                                 <FormGroup className="mb-0">
                                     <Label for="searchBox" style={{ opacity: 0 }}>Search Label</Label>
-                                    <div className="search-box">
+                                    {/* FIX APPLIED HERE: Using InputGroup for proper icon alignment */}
+                                    <InputGroup>
+                                        <InputGroupText style={{ borderRight: 'none', backgroundColor: 'white' }}>
+                                            <i className="ri-search-line search-icon"></i>
+                                        </InputGroupText>
                                         <Input 
                                             type="text" 
                                             id="searchBox"
@@ -330,10 +325,9 @@ const IndentView = () => {
                                             placeholder="Search by Indent #, Location, or Creator..." 
                                             value={searchTerm} 
                                             onChange={(e) => setSearchTerm(e.target.value)} 
-                                            
+                                            style={{ borderLeft: 'none' }}
                                         />
-                                        {/* <i className="ri-search-line search-icon"></i> */}
-                                    </div>
+                                    </InputGroup>
                                 </FormGroup>
                             </Col>
                         </Row>
