@@ -69,44 +69,52 @@ const ResetPassword = ({ isForcePasswordChange }) => {
         .oneOf([Yup.ref('newPassword')], 'Passwords must match')
     }),
   
-onSubmit: async (values) => {
-  try {
-    const payload = {
-      email: values.email,
-      currentPassword: values.currentPassword,
-      newPassword: values.newPassword
-    };
+    onSubmit: async (values) => {
+      try {
+        const payload = {
+          email: values.email,
+          currentPassword: values.currentPassword,
+          newPassword: values.newPassword
+        };
 
-    const response = await postresetpassword(payload);  // API call
+        const response = await postresetpassword(payload);  // API call
 
-    if (response.status === "success") {
-      sessionStorage.removeItem('authUser');
-      validation.resetForm();
-      setPasswordStrength({ score: 0, label: '', color: '' });
-      setResponse(response.message);
-      setErrorModal(false);
-      setSuccessModal(true);
+        if (response.status === "success") {
+          sessionStorage.removeItem('authUser');
+          validation.resetForm();
+          setPasswordStrength({ score: 0, label: '', color: '' });
+          setResponse(response.message);
+          setErrorModal(false);
+          setSuccessModal(true);
 
-      setTimeout(() => {
-        navigate("/login", { replace: true });
-      }, 1000);
+          setTimeout(() => {
+            navigate("/login", { replace: true });
+          }, 1000);
+        }
+
+      } catch (error) {
+        console.error('System Error:', error);
+
+        // Handle different error response structures
+        let errorMessage = "A system error occurred. Please try again.";
+        
+        if (error.response && error.response.data) {
+          // Handle axios error response
+          errorMessage = error.response.data.message || errorMessage;
+        } else if (error.response) {
+          // Handle direct response object
+          errorMessage = error.response.message || errorMessage;
+        } else if (error.message) {
+          // Handle error message directly
+          errorMessage = error.message;
+        }
+
+        setResponse(errorMessage);
+        setSuccessModal(false);
+        setErrorModal(true);
+      }
     }
-
-  } catch (error) {
-    console.error('System Error:', error);
-
-    // Check if backend sent response with message
-    if (error.response && error.response) {
-      setResponse(error.response.message || "Something went wrong.");
-    } else {
-      setResponse("A system error occurred. Please try again.");
-    }
-
-    setSuccessModal(false);
-    setErrorModal(true);
-  }
-}
- });
+  });
 
   return (
     <div className="auth-page-content" style={{
