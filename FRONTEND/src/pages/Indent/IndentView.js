@@ -16,15 +16,9 @@ const INITIAL_INDENTS = [];
 // This map will be populated by the API Flag 1 response
 let GLOBAL_STATUS_MAP = {}; 
 
-// Hardcoded statuses for the UI dropdown based on your Flag 1 response, plus an 'All' option.
-const HARDCODED_STATUSES = [
+// Hardcoded base status for the UI dropdown, primarily for the 'All' option.
+const BASE_STATUS_OPTIONS = [
     { label: 'All', value: 'all' },
-    { label: 'Pending Approval', value: 'To Be Approved' },
-    { label: 'Approved', value: 'Approved' },
-    { label: 'Acknowledged', value: 'Acknowledged' },
-    { label: 'Returned for Revision', value: 'ResubmittedToOfficers' },
-    { label: 'Rejected', value: 'Rejected' },
-    { label: 'Closed', value: 'Closed' },
 ];
 
 const formatSelectedOptions = (names) => {
@@ -64,8 +58,6 @@ const renderIndentTemplate = (indentData) => {
                     </div>
                 )}
                 
-                {/* Quantity summary section (removed to integrate into the table below) */}
-
                 <div><p>To,</p><p>The {submitTo.charAt(0).toUpperCase() + submitTo.slice(1)} Officer</p><p>{getToCode()}</p></div>
                 <div style={{ fontWeight: 'bold', marginBottom: '20px' }}><p>Subject: Request for physical records of Gescom Consumer of {formattedOptionNames}</p><p>DWA No: 14,42,53,250</p></div>
                 <div><p>Dear Sir/Madam,</p><p>With reference to the above DWA no and subject, we request for the physical available consumer records of the below listed location(s).</p></div>
@@ -82,7 +74,6 @@ const renderIndentTemplate = (indentData) => {
                         </tr>
                     </thead>
                     <tbody>
-                        {/* CRITICAL FIX: Iterate over selectedOptions for detail rows */}
                         {selectedOptions.map((option, index) => (
                             <tr key={index}>
                                 <td>{index + 1}</td>
@@ -119,7 +110,7 @@ const normalizeIndentData = (apiData) => {
         const sectionNames = item.section_names || 'N/A';
 
         const submitTo = (item.CreatedByRole || '').includes('Section') ? 'section' : 
-                         (item.CreatedByRole || '').includes('SubDivision') ? 'subdivision' : 'division';
+                            (item.CreatedByRole || '').includes('SubDivision') ? 'subdivision' : 'division';
 
         // Split multi-value fields (so_codes and section_names) by comma
         const soCodesArray = (item.so_codes || '').split(',').map(s => s.trim()).filter(s => s.length > 0);
@@ -168,7 +159,8 @@ const normalizeIndentData = (apiData) => {
 // 3. API FETCHING LOGIC (Two Concurrent Calls: Flag 1 for Map, Flag 2 for Data)
 // =================================================================
 
-const fetchIndentData = async (sessionData, setIndents, setTotalCount, setIsLoading, setError) => {
+// MODIFICATION: Pass setStatusOptions to populate dropdown dynamically
+const fetchIndentData = async (sessionData, setIndents, setTotalCount, setIsLoading, setError, setStatusOptions) => {
     const requestUserName = sessionData.requestUserName || null;
 
     setIsLoading(true);
@@ -186,16 +178,26 @@ const fetchIndentData = async (sessionData, setIndents, setTotalCount, setIsLoad
             indentView(dataPayload)
         ]);
 
-        // --- Step 1: Process Status Map (Flag 1) ---
+        // --- Step 1: Process Status Map (Flag 1) & Update Dropdown Options ---
         if (statusResponse && statusResponse.status === 'success' && Array.isArray(statusResponse.result)) {
             const statusMap = {};
+            const dynamicStatusOptions = [...BASE_STATUS_OPTIONS]; // Start with 'All'
+            
             statusResponse.result.forEach(s => {
                 // Populate global map: { 1: 'To Be Approved', 2: 'Approved', ... }
                 statusMap[s.Status_Id] = s.StatusName;
+                
+                // Add to dynamic dropdown list
+                dynamicStatusOptions.push({
+                    label: s.StatusName, // Display Name
+                    value: s.StatusName // Value for filtering
+                });
             });
             GLOBAL_STATUS_MAP = statusMap;
+            setStatusOptions(dynamicStatusOptions); // Update state for the dropdown
         } else {
-             console.error("Failed to fetch Status Map (Flag 1). Using fallback status from Flag 2 data.");
+             console.error("Failed to fetch Status Map (Flag 1). Using base status options.");
+             setStatusOptions(BASE_STATUS_OPTIONS); 
         }
 
         // --- Step 2: Process Indent Data (Flag 2) ---
@@ -229,7 +231,7 @@ const IndentView = () => {
 
     // --- Session Data Retrieval ---
     const sessionData = useMemo(() => {
-        // Retrieve RequestUserName from sessionStorage, defaulting to the one in the screenshot
+        // Retrieve RequestUserName from sessionStorage
         const fallbackEmail = sessionStorage.getItem('Email') || sessionStorage.getItem('requestUserName') || "projectmanager@gmail.com";
         return { requestUserName: fallbackEmail };
     }, []);
@@ -245,8 +247,10 @@ const IndentView = () => {
 
     // Filter States
     const [viewStatus, setViewStatus] = useState('all'); 
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
+    // NEW STATE: Stores the dynamically loaded status options for the dropdown
+    const [statusOptions, setStatusOptions] = useState(BASE_STATUS_OPTIONS); 
+    const [startDate, setStartDate] = useState(''); // Kept for completeness, though unused in filter logic
+    const [endDate, setEndDate] = useState(''); // Kept for completeness, though unused in filter logic
 
     // Modals
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -264,8 +268,8 @@ const IndentView = () => {
             return;
         }
 
-        // Fetch both Flag 1 (Status Map) and Flag 2 (Data List)
-        fetchIndentData(sessionData, setIndents, setTotalCount, setIsLoading, setFetchError);
+        // Pass the new setStatusOptions setter
+        fetchIndentData(sessionData, setIndents, setTotalCount, setIsLoading, setFetchError, setStatusOptions);
 
         setPage(0);
 
@@ -350,7 +354,7 @@ const IndentView = () => {
         }
     };
 
-    // --- Column Definition ---
+    // --- Column Definition (No change) ---
     const columns = useMemo(() => [
         { header: 'Indent number', accessorKey: 'indentNumber', sortable: true },
         { header: 'Status', accessorKey: 'status', sortable: true }, 
@@ -499,7 +503,7 @@ const IndentView = () => {
                     <CardBody>
                         <Row className="g-3 mb-3 align-items-end filter-row">
                             
-                            {/* --- Status Filter --- */}
+                            {/* --- Status Filter (MODIFIED SECTION) --- */}
                             <Col md="auto" sm={6} className="filter-col">
                                 <FormGroup className="mb-0">
                                     <Label for="statusFilter">Filter by Status</Label>
@@ -511,13 +515,11 @@ const IndentView = () => {
                                         className="filter-control-group small-filter-input"
                                         disabled={isLoading}
                                     >
-                                        {/* Hardcoded options */}
-                                        {HARDCODED_STATUSES.map(option => (
+                                        {/* Renders options from the state, dynamically populated by the API (Flag 1) */}
+                                        {statusOptions.map(option => (
                                             <option key={option.value} value={option.value}>
+                                                {/* REMOVED: Status count is no longer displayed here */}
                                                 {option.label}
-                                                {/* Display current filter counts */}
-                                                {option.label === 'All' ? ` (${indents.length})` : 
-                                                 ` (${filteredIndents.filter(i => i.status === option.value).length})`}
                                             </option>
                                         ))}
                                     </Input>
