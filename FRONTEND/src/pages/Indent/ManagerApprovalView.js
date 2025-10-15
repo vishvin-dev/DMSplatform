@@ -4,8 +4,8 @@ import {
     ModalHeader, ModalBody, ModalFooter, Row, Col, Label, FormGroup, Alert, Spinner
 } from 'reactstrap';
 import letterheadImg from './VishvinLetterHead.jpg';
-// Use the original helper name, ensuring all calls go to the correct route.
-import { IndentProjectHead } from '../../helpers/fakebackend_helper';
+// Added projectHeadFetch import. IndentProjectHead remains for original Flags 1-9.
+import { IndentProjectHead, projectHeadFetch } from '../../helpers/fakebackend_helper';
 
 // =================================================================
 // 1. CONSTANTS AND UTILITY FUNCTIONS
@@ -16,7 +16,8 @@ const STATUS_MAP = {
     1: 'To Be Approved',
     2: 'Approved',
     3: 'Acknowledged', // Status ID 3 is explicitly used for 'Acknowledged' in the Flag 3 API call
-    4: 'Resubmitted' // Status ID 4 for Resubmitted
+    4: 'Resubmitted', // Status ID 4 for Resubmitted
+    6: 'Rejected',    // Status ID 6 from your latest screenshot
 };
 
 const SORT_ARROW_SIZE = 13;
@@ -106,7 +107,7 @@ const renderAcknowledgementTemplate = (ackData) => {
 };
 
 // =================================================================
-// 2. API DATA FETCHING LOGIC (Using only IndentProjectHead route)
+// 2. API DATA FETCHING LOGIC 
 // =================================================================
 
 const normalizeManagerIndentData = (apiData) => {
@@ -127,7 +128,6 @@ const normalizeManagerIndentData = (apiData) => {
         const sdCode = item.sd_codes || '';
         
         // **CRITICAL FIELDS FOR QUANTITY AND NAMES**
-        const finalApprovedQtys = item.FinalApprovedQtys || item.FinalApprovedQty || '0';
         const officerEnteredQtys = item.OfficerEnteredQtys || item.OfficerEnteredQty || item.EnteredQtys || item.EnteredQty || '0';
         
         const sectionQtyDetailId = item.SectionQtyDetail_Id || 0;
@@ -267,27 +267,55 @@ const normalizeManagerIndentData = (apiData) => {
     });
 };
 
-// --- API FETCH FUNCTIONS ---
+// --- API FETCH UTILITY (Improved for Flag 1/3's nested count) ---
 
 const extractCountFromResponse = (response) => {
     if (response && response.status === 'success') {
-        // Priority 1: Direct count field from the result wrapper (as seen in Flag 7 response)
+        // Priority 1: Direct numeric count field (Flag 2 format: { "count": 1, ... })
+        if (response.count !== undefined && typeof response.count === 'number') {
+            return response.count;
+        }
+        
+        // Priority 2: Count nested in the 'count' array (Flag 1/3 format: {"count": [ { "TotalIndents": 1 } ]} or {"count": [ { "RejectedIndentCount": 1 } ]})
+        if (Array.isArray(response.count) && response.count.length > 0) {
+            if (response.count[0].TotalIndents !== undefined) {
+                 return parseInt(response.count[0].TotalIndents, 10) || 0;
+            }
+            // **CRITICAL FIX for Flag 3 Rejected Count**
+            if (response.count[0].RejectedIndentCount !== undefined) {
+                 return parseInt(response.count[0].RejectedIndentCount, 10) || 0;
+            }
+        }
+        
+        // Priority 3: Direct count field from the result wrapper (as seen in Flag 7 response)
         if (response.result && response.result.count !== undefined) {
-            return response.result.count;
+            return parseInt(response.result.count, 10) || 0;
         }
-        // Priority 2: Nested totalCount (from older/different structure)
-        const nestedResult = response.result && response.result.result && Array.isArray(response.result.result) ? response.result.result : response.result;
-        if (Array.isArray(nestedResult) && nestedResult.length > 0 && nestedResult[0].totalCount !== undefined) {
-            return nestedResult[0].totalCount;
+        
+        // Priority 4: Nested result array for totalCount (Fallback for other flags)
+        const nestedResult = response.result && response.result.result && Array.isArray(response.result.result) 
+            ? response.result.result : response.result;
+        
+        if (Array.isArray(nestedResult) && nestedResult.length > 0) {
+            if (nestedResult[0].totalCount !== undefined) {
+                return parseInt(nestedResult[0].totalCount, 10) || 0;
+            }
+            if (nestedResult[0].TotalApprovedIndents !== undefined) {
+                return parseInt(nestedResult[0].TotalApprovedIndents, 10) || 0;
+            }
+            if (nestedResult[0].TotalIndents !== undefined) {
+                 return parseInt(nestedResult[0].TotalIndents, 10) || 0;
+            }
         } 
-        // Priority 3: Top-level count (less common)
-        if (response.count !== undefined) {
-             return response.count;
-        }
     }
-    return 0;
+    return 0; // Always return a number
 }
 
+
+// =================================================================
+// **ORIGINAL API FETCH FUNCTIONS for Acknowledge Queue (Flags 1 & 2 on IndentProjectHead)**
+// =================================================================
+// NOTE: These functions remain UNTOUCHED, using IndentProjectHead.
 
 const fetchManagerAcknowledgeData = async (sessionData, setIndents, setIsLoading, setError) => {
     const userId = sessionData.userId || null;
@@ -315,46 +343,13 @@ const fetchManagerAcknowledgeData = async (sessionData, setIndents, setIsLoading
             setError(response.message || response.result?.message || 'Failed to fetch acknowledge indents (Flag 2).');
         }
     } catch (err) {
-        console.error("API Fetch Error (Flag 2):", err);
+        console.error("API Fetch Error (Flag 2 - IndentProjectHead):", err);
         setError('An unexpected network error occurred while fetching the acknowledge queue.');
     } finally {
         setIsLoading(false);
     }
 };
 
-const fetchManagerAcknowledgedData = async (sessionData, setIndents, setIsLoading, setError) => {
-    const userId = sessionData.userId || null;
-    const requestUserName = sessionData.requestUserName || null; 
-
-    setIsLoading(true);
-    setError(null);
-    setIndents([]);
-
-    const payload = { "flagId": 5, "CreatedByUser_Id": userId, "RequestUserName": requestUserName };
-
-    try {
-        const response = await IndentProjectHead(payload);
-        const resultData = response && response.result && response.result.result ? response.result.result : response.result;
-
-        if (response && response.status === 'success' && resultData) {
-            const apiData = Array.isArray(resultData) ? resultData : [];
-            // Map the status ID 3 to 'Acknowledged' manually as this queue is for status 3 data
-            const normalizedData = normalizeManagerIndentData(apiData.map(item => ({...item, IndentStatus_Id: 3})));
-            setIndents(normalizedData);
-        } else if (response && response.status === 'success') {
-            setIndents([]);
-        } else {
-            setError(response.message || response.result?.message || 'Failed to fetch acknowledged indents (Flag 5).');
-        }
-    } catch (err) {
-        console.error("API Fetch Error (Flag 5):", err);
-        setError('An unexpected network error occurred while fetching the acknowledged indents.');
-    } finally {
-        setIsLoading(false);
-    }
-};
-
-// **FIXED: Reverting Acknowledge Count to dedicated logic to prevent loss of count**
 const fetchManagerAcknowledgeCount = async (sessionData, setIsCountLoading, setCount) => {
     const userId = sessionData.userId || null;
     const requestUserName = sessionData.requestUserName || null;
@@ -395,10 +390,175 @@ const fetchManagerAcknowledgeCount = async (sessionData, setIsCountLoading, setC
             setCount(0);
         }
     } catch (err) {
-        console.error("Network error fetching acknowledge count (Flag 1):", err);
+        console.error("Network error fetching acknowledge count (Flag 1 - IndentProjectHead):", err);
         setCount(0);
     } finally {
         setIsCountLoading(false);
+    }
+};
+
+
+// =================================================================
+// **NEW API FETCH FUNCTIONS for Pending Officer Approval (Flags 1 & 2 on projectHeadFetch)**
+// =================================================================
+
+const fetchPendingOfficerApprovalData = async (sessionData, setIndents, setIsLoading, setError) => {
+    const requestUserName = sessionData.requestUserName || null; 
+
+    setIsLoading(true);
+    setError(null);
+    setIndents([]);
+
+    // Flag 2 payload from previous request
+    const payload = { "flagId": 2, "RequestUserName": requestUserName };
+
+    try {
+        // **Uses projectHeadFetch**
+        const response = await projectHeadFetch(payload); 
+
+        // Response structure for Flag 2: { status: 'success', count: 1, result: [...] }
+        const resultData = response && response.result ? response.result : [];
+        
+        if (response && response.status === 'success' && resultData) {
+            const apiData = Array.isArray(resultData) ? resultData : [];
+            const normalizedData = normalizeManagerIndentData(apiData);
+            setIndents(normalizedData);
+        } else if (response && response.status === 'success') {
+            setIndents([]);
+        } else {
+            setError(response.message || 'Failed to fetch pending officer indents (Flag 2 - new route).');
+        }
+    } catch (err) {
+        console.error("API Fetch Error (Flag 2 - projectHeadFetch):", err);
+        setError('An unexpected network error occurred while fetching the pending officer approval queue.');
+    } finally {
+        setIsLoading(false);
+    }
+};
+
+const fetchPendingOfficerApprovalCount = async (sessionData, setIsCountLoading, setCount) => {
+    const requestUserName = sessionData.requestUserName || null;
+    
+    setIsCountLoading(true);
+
+    // Flag 1 payload from previous request
+    const countPayload = { "flagId": 1, "RequestUserName": requestUserName };
+
+    try {
+        // **Uses projectHeadFetch**
+        const response = await projectHeadFetch(countPayload);
+        
+        setCount(extractCountFromResponse(response));
+        
+    } catch (err) {
+        console.error("Network error fetching pending officer approval count (Flag 1 - projectHeadFetch):", err);
+        setCount(0);
+    } finally {
+        setIsCountLoading(false);
+    }
+};
+
+// =================================================================
+// **NEW API FETCH FUNCTIONS for Rejected Officer Data (Flags 3 & 4 on projectHeadFetch)**
+// =================================================================
+
+/**
+ * Fetches the count for the rejected officer indents (Flag 3) using projectHeadFetch.
+ */
+const fetchPendingOfficerRejectedCount = async (sessionData, setIsCountLoading, setCount) => {
+    const requestUserName = sessionData.requestUserName || null;
+    
+    setIsCountLoading(true);
+
+    // Flag 3: Fetching rejected count. Payload mimics screenshot.
+    const countPayload = { "flagId": 3, "RequestUserName": requestUserName };
+
+    try {
+        // **Uses projectHeadFetch**
+        const response = await projectHeadFetch(countPayload);
+        
+        // Count extraction is robust for this nested format
+        setCount(extractCountFromResponse(response));
+        
+    } catch (err) {
+        console.error("Network error fetching rejected officer count (Flag 3 - projectHeadFetch):", err);
+        setCount(0);
+    } finally {
+        setIsCountLoading(false);
+    }
+};
+
+/**
+ * Fetches the data for the rejected officer indents (Flag 4) using projectHeadFetch.
+ */
+const fetchPendingOfficerRejectedData = async (sessionData, setIndents, setIsLoading, setError) => {
+    const requestUserName = sessionData.requestUserName || null; 
+
+    setIsLoading(true);
+    setError(null);
+    setIndents([]);
+
+    // Flag 4: Fetching rejected data. Payload mimics screenshot.
+    const payload = { "flagId": 4, "RequestUserName": requestUserName };
+
+    try {
+        // **Uses projectHeadFetch**
+        const response = await projectHeadFetch(payload); 
+
+        // Response structure for Flag 4: { status: 'success', count: 1, result: [...] }
+        const resultData = response && response.result ? response.result : [];
+        
+        if (response && response.status === 'success' && resultData) {
+            const apiData = Array.isArray(resultData) ? resultData : [];
+            // Map status manually if needed, but normalizeManagerIndentData should handle the Status_Id: 6 -> 'Rejected'
+            const normalizedData = normalizeManagerIndentData(apiData);
+            setIndents(normalizedData);
+        } else if (response && response.status === 'success') {
+            setIndents([]);
+        } else {
+            setError(response.message || 'Failed to fetch pending rejected indents (Flag 4 - new route).');
+        }
+    } catch (err) {
+        console.error("API Fetch Error (Flag 4 - projectHeadFetch):", err);
+        setError('An unexpected network error occurred while fetching the rejected officer queue.');
+    } finally {
+        setIsLoading(false);
+    }
+};
+
+// =================================================================
+// **REMAINING API FETCH FUNCTIONS** (Original - Uses IndentProjectHead)
+// =================================================================
+
+const fetchManagerAcknowledgedData = async (sessionData, setIndents, setIsLoading, setError) => {
+    const userId = sessionData.userId || null;
+    const requestUserName = sessionData.requestUserName || null; 
+
+    setIsLoading(true);
+    setError(null);
+    setIndents([]);
+
+    // Flag 5 original payload (uses IndentProjectHead)
+    const payload = { "flagId": 5, "CreatedByUser_Id": userId, "RequestUserName": requestUserName };
+
+    try {
+        const response = await IndentProjectHead(payload);
+        const resultData = response && response.result && response.result.result ? response.result.result : response.result;
+
+        if (response && response.status === 'success' && resultData) {
+            const apiData = Array.isArray(resultData) ? resultData : [];
+            const normalizedData = normalizeManagerIndentData(apiData.map(item => ({...item, IndentStatus_Id: 3})));
+            setIndents(normalizedData);
+        } else if (response && response.status === 'success') {
+            setIndents([]);
+        } else {
+            setError(response.message || response.result?.message || 'Failed to fetch acknowledged indents (Flag 5).');
+        }
+    } catch (err) {
+        console.error("API Fetch Error (Flag 5):", err);
+        setError('An unexpected network error occurred while fetching the acknowledged indents.');
+    } finally {
+        setIsLoading(false);
     }
 };
 
@@ -407,6 +567,7 @@ const fetchManagerAcknowledgedCount = async (sessionData, setIsCountLoading, set
     const requestUserName = sessionData.requestUserName || null;
     
     setIsCountLoading(true);
+    // Flag 4 original payload (uses IndentProjectHead)
     const countPayload = { "flagId": 4, "CreatedByUser_Id": userId, "RequestUserName": requestUserName };
 
     try {
@@ -420,13 +581,13 @@ const fetchManagerAcknowledgedCount = async (sessionData, setIsCountLoading, set
     }
 };
 
-// **FIXED: Removed redundant setError call from this function's logic.**
 const fetchManagerResubmitCount = async (sessionData, setIsCountLoading, setCount) => {
     const userId = sessionData.userId || null;
     const requestUserName = sessionData.requestUserName || null;
     
     setIsCountLoading(true);
     
+    // Flag 7 original payload (uses IndentProjectHead)
     const countPayload = { 
         "flagId": 7, // API Flag for Resubmitted to Officer Count
         "CreatedByUser_Id": userId, 
@@ -435,7 +596,6 @@ const fetchManagerResubmitCount = async (sessionData, setIsCountLoading, setCoun
 
     try {
         const response = await IndentProjectHead(countPayload);
-        // Using the updated robust extraction logic
         setCount(extractCountFromResponse(response)); 
     } catch (err) {
         console.error("Network error fetching resubmit count (Flag 7):", err);
@@ -453,6 +613,7 @@ const fetchManagerResubmitData = async (sessionData, setIndents, setIsLoading, s
     setError(null);
     setIndents([]);
 
+    // Flag 8 original payload (uses IndentProjectHead)
     const payload = { 
         "flagId": 8, // API Flag for Resubmitted to Officer Data
         "CreatedByUser_Id": userId, 
@@ -466,7 +627,6 @@ const fetchManagerResubmitData = async (sessionData, setIndents, setIsLoading, s
 
         if (response && response.status === 'success' && resultData) {
             const apiData = Array.isArray(resultData) ? resultData : [];
-            // Manually map the status ID 4 to 'Resubmitted'
             const normalizedData = normalizeManagerIndentData(apiData.map(item => ({...item, IndentStatus_Id: 4, StatusName: 'Resubmitted'})));
             setIndents(normalizedData);
         } else if (response && response.status === 'success') {
@@ -496,13 +656,19 @@ const ManagerApprovalView = () => {
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [fetchError, setFetchError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
-    // 'approved' is for Flag 2 data (pending acknowledge), 'acknowledged' is for Flag 5 (completed), 'resubmitted' is Flag 8
+    
+    // View Statuses: 'approved'(Flag 2 IH), 'acknowledged'(Flag 5 IH), 'resubmitted'(Flag 8 IH), 
+    // 'to_approve'(Flag 2 PF), 'rejected_officer'(NEW Flag 4 PF)
     const [viewStatus, setViewStatus] = useState('approved'); 
 
     // Counts (API driven)
-    const [acknowledgeCount, setAcknowledgeCount] = useState(0); // Flag 1 (Pending Acknowledge)
+    const [acknowledgeCount, setAcknowledgeCount] = useState(0); // Original Flag 1 (IndentProjectHead)
     const [acknowledgedCount, setAcknowledgedCount] = useState(0); // Flag 4 (Acknowledged)
     const [resubmitCount, setResubmitCount] = useState(0); // Flag 7 (Resubmitted to Officer)
+    const [pendingOfficerApprovalCount, setPendingOfficerApprovalCount] = useState(0); // NEW Flag 1 (projectHeadFetch)
+    // NEW state for the new Rejected queue
+    const [pendingOfficerRejectedCount, setPendingOfficerRejectedCount] = useState(0); 
+
     const [isCountLoading, setIsCountLoading] = useState(false); 
 
     // Modals & Forms
@@ -568,31 +734,39 @@ const ManagerApprovalView = () => {
 
     // --- Effects (API Calls & Data Refresh) ---
     const refreshData = useCallback(() => {
-        if (!sessionData.userId) {
-            setFetchError("Authentication error: Missing user session data.");
+        if (!sessionData.requestUserName) {
+            setFetchError("Authentication error: Missing RequestUserName session data.");
             return;
         }
 
         setFetchError(null);
         setPage(0);
 
-        // Fetch Data based on selected viewStatus
+        // --- Data Fetching ---
         if (viewStatus === 'approved') {
-            fetchManagerAcknowledgeData(sessionData, setIndents, setIsLoading, setFetchError);
+            fetchManagerAcknowledgeData(sessionData, setIndents, setIsLoading, setFetchError); 
         } else if (viewStatus === 'acknowledged') {
             fetchManagerAcknowledgedData(sessionData, setIndents, setIsLoading, setFetchError);
         } else if (viewStatus === 'resubmitted') {
             fetchManagerResubmitData(sessionData, setIndents, setIsLoading, setFetchError);
+        } else if (viewStatus === 'to_approve') {
+            fetchPendingOfficerApprovalData(sessionData, setIndents, setIsLoading, setFetchError);
+        } else if (viewStatus === 'rejected_officer') {
+             // NEW Flag 4, projectHeadFetch logic (Pending Rejected)
+            fetchPendingOfficerRejectedData(sessionData, setIndents, setIsLoading, setFetchError);
         }
            else {
             setIndents([]);
             setIsLoading(false);
         }
         
-        // Fetch All Counts
-        fetchManagerAcknowledgeCount(sessionData, setIsCountLoading, setAcknowledgeCount); // Flag 1
-        fetchManagerAcknowledgedCount(sessionData, setIsCountLoading, setAcknowledgedCount); // Flag 4
-        fetchManagerResubmitCount(sessionData, setIsCountLoading, setResubmitCount); // Flag 7
+        // --- Count Fetching ---
+        fetchManagerAcknowledgeCount(sessionData, setIsCountLoading, setAcknowledgeCount); 
+        fetchPendingOfficerApprovalCount(sessionData, setIsCountLoading, setPendingOfficerApprovalCount);
+        fetchManagerAcknowledgedCount(sessionData, setIsCountLoading, setAcknowledgedCount); 
+        fetchManagerResubmitCount(sessionData, setIsCountLoading, setResubmitCount); 
+        // NEW Flag 3 count (projectHeadFetch)
+        fetchPendingOfficerRejectedCount(sessionData, setIsCountLoading, setPendingOfficerRejectedCount);
     }, [sessionData, viewStatus]);
 
     useEffect(() => {
@@ -736,27 +910,27 @@ const ManagerApprovalView = () => {
             // Structure matching the screenshot for resubmitting the corrected qty
             return {
                 "SectionQtyDetail_Id": originalOption.SectionQtyDetail_Id,
-                "PMQty": originalOption.OfficerEnteredQty,         // Project Manager (Officer) Quantity - Officer's confirmed qty
-                "OOQty": q.quantity,                                // Override/Overridden Quantity - Manager's corrected/final quantity
-                "ApprovalHistoryComment": resubmitComment,          // The main comment needs to be attached to each section
+                "PMQty": originalOption.OfficerEnteredQty,            // Project Manager (Officer) Quantity - Officer's confirmed qty
+                "OOQty": q.quantity,                                 // Override/Overridden Quantity - Manager's corrected/final quantity
+                "ApprovalHistoryComment": resubmitComment,           // The main comment needs to be attached to each section
             };
         });
 
         // 2. Construct the main Flag 6 payload
         const resubmitPayload = {
-            "flagId": 6,                                            // **REQUIRED FLAG ID 6**
-            "Indent_Id": selectedIndent.Indent_Id_For_API,          
-            "ActionByUser_Id": sessionData.userId,                  // User performing the action
-            "Role_Id": sessionData.roleId,                          // User's Role ID (Project Manager)
-            "DO_Role_Id": selectedIndent.doRoleId,                  // **DYNAMICALLY SET DO_Role_Id from Flag 2 response**
-            "Status_Id": 4,                                         // Status ID 4 often means 'Resubmitted'
-            "sections": sectionsPayload                             
+            "flagId": 6,                                             // **REQUIRED FLAG ID 6**
+            "Indent_Id": selectedIndent.Indent_Id_For_API,           
+            "ActionByUser_Id": sessionData.userId,                   // User performing the action
+            "Role_Id": sessionData.roleId,                           // User's Role ID (Project Manager)
+            "DO_Role_Id": selectedIndent.doRoleId,                   // **DYNAMICALLY SET DO_Role_Id from Flag 2 response**
+            "Status_Id": 4,                                          // Status ID 4 often means 'Resubmitted'
+            "sections": sectionsPayload                              
         };
         
         console.log("Flag 6 Resubmit Payload:", resubmitPayload);
 
         try {
-            // **API CALL for Flag 6**
+            // **API CALL for Flag 6 (Uses IndentProjectHead)**
             const response = await IndentProjectHead(resubmitPayload); 
 
             if (response && response.status === 'success') {
@@ -924,7 +1098,7 @@ const ManagerApprovalView = () => {
 
 
         try {
-            // **API CALL** - The helper must accept FormData and not force JSON headers.
+            // **API CALL for Flag 3 (Uses IndentProjectHead)**
             const response = await IndentProjectHead(finalApprovedPayload); 
 
             if (response && response.status === 'success') {
@@ -999,6 +1173,10 @@ const ManagerApprovalView = () => {
                 ? "No indents found in the Acknowledged list."
                 : viewStatus === 'resubmitted'
                 ? "No indents found in the Resubmitted to Officer list."
+                : viewStatus === 'to_approve'
+                ? "No pending indents in the Officer Approval queue."
+                : viewStatus === 'rejected_officer'
+                ? "No rejected indents pending officer action."
                 : "No indents found in this queue.";
 
             return (<tr><td colSpan={5} style={{ textAlign: 'center', padding: '24px' }}>{noDataMessage}</td></tr>);
@@ -1080,17 +1258,19 @@ const ManagerApprovalView = () => {
                                         disabled={isLoading}>
                                         Resubmitted to Officer ({isCountLoading ? <Spinner size="sm" color="primary" /> : resubmitCount})
                                     </Button>
+                                    {/* BUTTON FOR PENDING OFFICER APPROVAL (Uses projectHeadFetch) */}
                                     <Button 
                                         color={viewStatus === 'to_approve' ? 'warning' : 'light'} 
                                         onClick={() => setViewStatus('to_approve')}
                                         disabled={isLoading}>
-                                        Pending Officer Approval (0) {/* Placeholder for other flags */}
+                                        Pending Officer Approval ({isCountLoading ? <Spinner size="sm" color="warning" /> : pendingOfficerApprovalCount})
                                     </Button>
+                                    {/* NEW BUTTON FOR REJECTED INDENTS (Uses projectHeadFetch) */}
                                     <Button 
-                                        color={viewStatus === 'rejected' ? 'danger' : 'light'} 
-                                        onClick={() => setViewStatus('rejected')}
+                                        color={viewStatus === 'rejected_officer' ? 'danger' : 'light'} 
+                                        onClick={() => setViewStatus('rejected_officer')}
                                         disabled={isLoading}>
-                                        Rejected (0) {/* Placeholder for other flags */}
+                                        Rejected ({isCountLoading ? <Spinner size="sm" color="danger" /> : pendingOfficerRejectedCount})
                                     </Button>
                                 </div>
                             </Col>
@@ -1127,22 +1307,28 @@ const ManagerApprovalView = () => {
                         <ModalFooter className="d-flex justify-content-between">
                             <Button color="secondary" onClick={toggleViewModal}>Close</Button>
                             
-                            {selectedIndent.status === 'Approved' && (
+                            {selectedIndent.status === 'Approved' && viewStatus === 'approved' && (
                                 <div>
                                     <Button color="primary" className="me-2" onClick={handleOpenResubmit} disabled={isActionLoading}>Resubmit (Correct Qty & Comment)</Button>
                                     <Button color="info" onClick={handleOpenAcknowledge} disabled={isActionLoading}>Acknowledge Records</Button> 
                                 </div>
                             )}
                             
-                            {selectedIndent.status === 'To Be Approved' && (
+                            {/* Original Reject button for the original queue */}
+                            {selectedIndent.status === 'To Be Approved' && viewStatus === 'approved' && (
                                 <div>
                                     <Button color="danger" onClick={handleOpenReject} disabled={isActionLoading}>Reject</Button>
                                 </div>
                             )}
 
-                            {['Rejected', 'Acknowledged', 'Resubmitted'].includes(selectedIndent.status) && (
-                                <span className={`text-${getStatusColor(selectedIndent.status)} fw-bold`}>Status: {selectedIndent.status}</span>
-                            )}
+                            {/* Status display for all queues where explicit action is not required in the modal footer */}
+                            {['Rejected', 'Acknowledged', 'Resubmitted'].includes(selectedIndent.status) || viewStatus === 'to_approve' || viewStatus === 'rejected_officer' ? (
+                                <span className={`text-${getStatusColor(selectedIndent.status)} fw-bold`}>
+                                    Status: {selectedIndent.status}
+                                    {selectedIndent.status === 'To Be Approved' && viewStatus === 'to_approve' && " (Awaiting Officer Action)"}
+                                    {selectedIndent.status === 'Rejected' && viewStatus === 'rejected_officer' && " (Pending Officer Review)"}
+                                </span>
+                            ) : null}
                             
                         </ModalFooter>
                     </Modal>
