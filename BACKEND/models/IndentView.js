@@ -96,11 +96,11 @@ export const fetchIndentStatus=async()=>{
         const [result]=await pool.execute(`
                 SELECT Status_Id, StatusName
                 FROM indentstatusmaster
-                ORDER BY StatusName DESC;
-
+                ORDER BY Status_Id ASC;
             `)
             return result
     } catch (error) {
-        
+        console.log("Error in IndentStatusMaster")
+        throw error
     }
 }
