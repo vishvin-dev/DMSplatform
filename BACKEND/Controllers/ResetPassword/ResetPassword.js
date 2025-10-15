@@ -1,6 +1,8 @@
 import { findUserByEmail,updateUserPassword } from "../../models/userModel.js";
 import bcrypt from "bcrypt"
 
+
+// THIS IS THE RESET PASSWORD
 export const resetPassword = async (req, res) => {
     try {
         const { email, currentPassword, newPassword } = req.body;
@@ -8,6 +10,15 @@ export const resetPassword = async (req, res) => {
         if (!email || !currentPassword || !newPassword) {
             return res.status(400).json({ message: "All fields are required.", status: "failed" });
         }
+         // 2️ Basic email format validation (no external library)
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({
+                message: "Invalid email format.",
+                status: "failed",
+            });
+        }
+
         const users = await findUserByEmail(email);
         if (!users || users.length === 0) {
             return res.status(404).json({ message: "User not found or disabled.", status: "failed" });

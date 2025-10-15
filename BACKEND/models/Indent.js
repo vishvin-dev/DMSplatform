@@ -661,7 +661,10 @@ export const fetchingRejectedIndentByOfficer=async(Role_Id)=>{
             ORDER BY r.RejectedOn ASC 
             
             `,[Role_Id])
-            return result
+             return result.map(row => ({
+            ...row,
+            fullIndentNo: getFullIndentNo(row.Indent_No)
+        }));
     } catch (error) {
         console.error("Error fetching Rejected indents:", error);
         throw error;
