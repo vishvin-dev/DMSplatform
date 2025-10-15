@@ -111,7 +111,7 @@ const normalizeIndentData = (apiData) => {
         const subDivision = item.subdivision_names || 'N/A';
         const sectionNames = item.section_names || 'N/A';
         const submitTo = (item.CreatedByRole || '').includes('Section') ? 'section' : 
-                        (item.CreatedByRole || '').includes('SubDivision') ? 'subdivision' : 'division';
+                         (item.CreatedByRole || '').includes('SubDivision') ? 'subdivision' : 'division';
 
         const soCodesArray = (item.so_codes || '').split(',').map(s => s.trim()).filter(s => s.length > 0);
         const sectionNamesArray = (item.section_names || '').split(',').map(s => s.trim()).filter(s => s.length > 0);
@@ -213,6 +213,8 @@ const IndentView = () => {
     const [statusOptions, setStatusOptions] = useState(BASE_STATUS_OPTIONS); 
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+    
+    // PAGINATION STATES
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(5);
 
@@ -268,6 +270,45 @@ const IndentView = () => {
         'Closed': 'dark'
     }[status] || 'secondary');
 
+    // PAGINATION RENDER FUNCTION
+    const renderPagination = () => {
+        const pageSizeOptions = [{ value: 5, label: '5' }, { value: 10, label: '10' }, { value: 25, label: '25' }, { value: -1, label: 'All' }];
+        const totalPages = pageCount;
+
+        return (
+            <div style={{ margin: '18px 0 12px 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }} >
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                        <span style={{ color: '#748391', fontSize: 15, marginBottom: 2 }}>
+                            Showing{' '}<b style={{ color: '#222', fontWeight: 600 }}>{paginatedData.length}</b>{' '}of <b>{sortedData.length}</b> Results
+                        </span>
+                        <select value={pageSize} onChange={e => {
+                            setPageSize(e.target.value === '-1' ? -1 : parseInt(e.target.value, 10));
+                            setPage(0);
+                        }} style={{ border: '1px solid #c9ddf7', borderRadius: 7, padding: '7px 10px', fontSize: 15, width: '80px', color: '#444', marginTop: 4, outline: 'none', background: 'white' }} >
+                            {pageSizeOptions.map(option => (<option key={option.value} value={option.value}>{option.label}</option>))}
+                        </select>
+                    </div>
+                    <div className="btn-group" role="group" aria-label="Pagination">
+                        <button type="button" className="btn btn-light" disabled={page === 0 || pageSize === -1} onClick={() => setPage(Math.max(page - 1, 0))} >Previous</button>
+                        {pageSize !== -1 && Array.from({ length: Math.min(totalPages, 5) }).map((_, i) => {
+                            let pageNum = i;
+                            if (totalPages > 5) {
+                                if (page >= 2 && page < totalPages - 2) { pageNum = page - 2 + i; }
+                                else if (page >= totalPages - 2) { pageNum = totalPages - 5 + i; }
+                            }
+                            if (pageNum >= 0 && pageNum < totalPages) {
+                                return (<button key={pageNum} type="button" className={`btn ${page === pageNum ? 'btn-primary active' : 'btn-light'}`} onClick={() => setPage(pageNum)} disabled={page === pageNum} >{pageNum + 1}</button>);
+                            } else { return null; }
+                        })}
+                        <button type="button" className="btn btn-light" disabled={(page >= totalPages - 1 || totalPages === 0) || pageSize === -1} onClick={() => setPage(Math.min(page + 1, totalPages - 1))} >Next</button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+    // END PAGINATION RENDER FUNCTION
+
     return (
         <div className="page-content">
             <style>{`
@@ -284,7 +325,10 @@ const IndentView = () => {
                      max-width: 300px; 
                      min-width: 250px;
                  }
-                 /* Custom CSS for icon is no longer needed as InputGroup handles alignment */
+                 .filter-control-group .form-control {
+                     height: calc(1.5em + 0.75rem + 2px);
+                     padding: 0.375rem 0.75rem;
+                 }
             `}</style>
             <Container fluid>
                 <Card>
@@ -300,7 +344,7 @@ const IndentView = () => {
                                         type="select"
                                         id="statusFilter"
                                         value={viewStatus}
-                                        onChange={(e) => setViewStatus(e.target.value)}
+                                        onChange={(e) => { setViewStatus(e.target.value); setPage(0); }} // Reset page on filter change
                                         disabled={isLoading}
                                     >
                                         {statusOptions.map(option => (
@@ -316,7 +360,7 @@ const IndentView = () => {
                                     {/* FIX APPLIED HERE: Using InputGroup for proper icon alignment */}
                                     <InputGroup>
                                         <InputGroupText style={{ borderRight: 'none', backgroundColor: 'white' }}>
-                                            <i className="ri-search-line search-icon"></i>
+                                            <i className="ri-search-line"></i>
                                         </InputGroupText>
                                         <Input 
                                             type="text" 
@@ -324,7 +368,7 @@ const IndentView = () => {
                                             className="form-control" 
                                             placeholder="Search by Indent #, Location, or Creator..." 
                                             value={searchTerm} 
-                                            onChange={(e) => setSearchTerm(e.target.value)} 
+                                            onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }} // Reset page on search change
                                             style={{ borderLeft: 'none' }}
                                         />
                                     </InputGroup>
@@ -366,6 +410,8 @@ const IndentView = () => {
                                 </tbody>
                             </table>
                         </div>
+                        {/* CALL TO RENDER PAGINATION */}
+                        {renderPagination()} 
                     </CardBody>
                 </Card>
 
