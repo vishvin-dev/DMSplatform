@@ -1072,11 +1072,11 @@ const ViewIndent = () => {
                                         onClick={() => setViewStatus('rejected')}>
                                         Rejected ({isRejectedCountLoading ? <Spinner size="sm" color="danger" /> : rejectedCount})
                                     </Button>
-                                    <Button
+                                    {/* <Button
                                         color={viewStatus === 'all' ? 'primary' : 'light'}
                                         onClick={() => setViewStatus('all')}>
                                         All ({indents.length})
-                                    </Button>
+                                    </Button> */}
                                 </div>
                             </Col>
                             <Col sm={4}>

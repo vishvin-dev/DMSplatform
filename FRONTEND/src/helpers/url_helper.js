@@ -330,6 +330,8 @@ export const POST_CREATE_INDENT = "/backend-service/indent";
 export const INDENT_PROJECT_HEAD = "/backend-service/indent/IndentProjectHead";
 export const RE_SUBMITTED_INDENT = "/backend-service/indent/resubmittedindent";
 export const REJECTED = "/backend-service/indent/rejected";
+export const PROJECT_HEAD_FETCH = "/backend-service/indent/projectHeadFetch";
+export const INDENT_VIEW = "/backend-service/indent/indentView";
 //**************** */
 
 

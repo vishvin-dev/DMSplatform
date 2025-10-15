@@ -1,41 +1,47 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     Container, Card, CardHeader, CardBody, Input, Table, Button, Modal,
-    ModalHeader, ModalBody, ModalFooter, Row, Col, Label, FormGroup
+    ModalHeader, ModalBody, ModalFooter, Row, Col, Label, FormGroup, Spinner, Alert
 } from 'reactstrap';
 import letterheadImg from './VishvinLetterHead.jpg'; 
 
-// --- Mock Data (Kept for component functionality) ---
-const mockIndents = [
-    { indentNumber: 'VTPL/DMS/GESCOM/2025-26/001', createdBy: 'John Doe', createdOn: '2025-09-09T10:30:00Z', date: '09/09/2025', time: '10:30:00 AM', division: 'City Division', subDivision: 'Central Sub-Division', submitTo: 'subdivision', subDivisionCode: 'CEN-SD', selectedOptionNames: 'Section A / Section B', selectedOptions: [{ name: 'Section A', code: 'SEC-A', quantity: 0 }, { name: 'Section B', code: 'SEC-B', quantity: 0 }], status: 'To Be Approved' },
-    { indentNumber: 'VTPL/DMS/GESCOM/2025-26/002', createdBy: 'Jane Smith', createdOn: '2025-09-08T15:45:12Z', date: '08/09/2025', time: '03:45:12 PM', division: 'Rural Division', subDivision: 'West Sub-Division', submitTo: 'division', divisionCode: 'RRL-DIV', selectedOptionNames: 'West Sub-Division / East Sub-Division', selectedOptions: [{ name: 'West Sub-Division', code: 'W-SD', quantity: 80 }, { name: 'East Sub-Division', code: 'E-SD', quantity: 120 }], status: 'Approved' },
-    { indentNumber: 'VTPL/DMS/GESCOM/2025-26/003', createdBy: 'Peter Jones', createdOn: '2025-09-07T11:00:00Z', date: '07/09/2025', time: '11:00:00 AM', division: 'City Division', subDivision: 'North Sub-Division', submitTo: 'section', sectionCode: 'N-SEC', selectedOptionNames: 'North Section / South Section', selectedOptions: [{ name: 'North Section', code: 'N-SEC', quantity: 50 }, { name: 'South Section', code: 'S-SEC', quantity: 70 }], status: 'Returned for Revision', rejectionReason: 'North Section quantity seems low. Please recheck and correct physical count before resubmitting.' }, 
-    { indentNumber: 'VTPL/DMS/GESCOM/2025-26/004', createdBy: 'Mary Williams', createdOn: '2025-09-10T09:20:00Z', date: '10/09/2025', time: '09:20:00 AM', division: 'Metro Division', subDivision: 'East Sub-Division', submitTo: 'subdivision', subDivisionCode: 'E-SD', selectedOptionNames: 'Downtown Section / Uptown Section', selectedOptions: [{ name: 'Downtown Section', code: 'DT-SEC', quantity: 0 }, { name: 'Uptown Section', code: 'UT-SEC', quantity: 0 }], status: 'Rejected' },
-    { indentNumber: 'VTPL/DMS/GESCOM/2025-26/005', createdBy: 'David Brown', createdOn: '2025-09-06T18:05:00Z', date: '06/09/2025', time: '06:05:00 PM', division: 'Rural Division', subDivision: 'South Sub-Division', submitTo: 'division', divisionCode: 'RRL-DIV', selectedOptionNames: 'South Sub-Division', selectedOptions: [{ name: 'South Sub-Division', code: 'S-SD', quantity: 150 }], status: 'Returned for Revision', rejectionReason: 'The division information is incomplete. Please correct the submission data.' }, 
-    { indentNumber: 'VTPL/DMS/GESCOM/2025-26/006', createdBy: 'Susan Miller', createdOn: '2025-09-05T14:30:00Z', date: '05/09/2025', time: '02:30:00 PM', division: 'City Division', subDivision: 'Central Sub-Division', submitTo: 'subdivision', subDivisionCode: 'CEN-SD', selectedOptionNames: 'Park Avenue Section', selectedOptions: [{ name: 'Park Avenue Section', code: 'PA-SEC', quantity: 50 }], status: 'To Be Approved' },
-    { indentNumber: 'VTPL/DMS/GESCOM/2025-26/007', createdBy: 'Michael Clark', createdOn: '2025-09-04T12:00:00Z', date: '04/09/2025', time: '12:00:00 PM', division: 'Rural Division', subDivision: 'East Sub-Division', submitTo: 'subdivision', subDivisionCode: 'E-SD', selectedOptionNames: 'Highway Section', selectedOptions: [{ name: 'Highway Section', code: 'HW-SEC', quantity: 90 }], status: 'Approved' },
-];
-// --- End of Mock Data ---
+// Assuming 'indentView' is available from your helpers
+import { indentView } from '../../helpers/fakebackend_helper'; 
 
-// Function to replace '/' with 'and' for display
+// =================================================================
+// 1. CONSTANTS AND UTILITY FUNCTIONS
+// =================================================================
+
+const INITIAL_INDENTS = [];
+// This map will be populated by the API Flag 1 response
+let GLOBAL_STATUS_MAP = {}; 
+
+// Hardcoded base status for the UI dropdown, primarily for the 'All' option.
+const BASE_STATUS_OPTIONS = [
+    { label: 'All', value: 'all' },
+];
+
 const formatSelectedOptions = (names) => {
     if (!names) return '';
-    return names.replace(/\s\/\s/g, ' and ');
+    const parts = names.split('/').map(p => p.trim()).filter(p => p.length > 0);
+    return parts.join(' / ');
 };
 
-// --- Template for the initial Indent / Resubmit View (Simplified) ---
 const renderIndentTemplate = (indentData) => {
     if (!indentData) return null;
     const submitTo = indentData.submitTo || '';
     const selectedOptions = indentData.selectedOptions || [];
-    const isReturned = indentData.status === 'Returned for Revision';
+    const isReturned = indentData.status === 'Rejected' || indentData.status === 'Returned for Revision' || indentData.status === 'ResubmittedToOfficers';
     
+    // Check if quantity data exists to decide if we show the quantity columns
+    const hasQuantityData = indentData.officerEnteredQty || indentData.finalApprovedQty;
+
     const getToCode = () => {
         if (submitTo === 'division') return indentData.divisionCode;
         if (submitTo === 'subdivision') return indentData.subDivisionCode;
         return indentData.subDivisionCode || indentData.sectionCode;
     };
-    const formattedOptionNames = formatSelectedOptions(indentData.selectedOptionNames);
+    const formattedOptionNames = `${indentData.division} / ${indentData.subDivision} / ${indentData.sectionNames || ''}`; 
 
     return (
         <div className="a4-sheet-modal" style={{ backgroundImage: `url(${letterheadImg})` }}>
@@ -45,7 +51,6 @@ const renderIndentTemplate = (indentData) => {
                     <div style={{ textAlign: 'right' }}><div><strong>Date:</strong> {indentData.date}</div><div><strong>Time:</strong> {indentData.time}</div></div>
                 </div>
                 
-                {/* Manager/Officer Reason for Revision */}
                 {isReturned && indentData.rejectionReason && (
                     <div className="alert alert-info p-3 mb-3 border border-info" style={{ fontSize: '14px' }}>
                         <h6 className="mb-1 text-dark">Revision Instructions:</h6>
@@ -64,23 +69,22 @@ const renderIndentTemplate = (indentData) => {
                             <th>Division</th>
                             <th>Sub-Division</th>
                             <th>Section / Sub-Division</th>
-                            {isReturned && <th style={{ width: '20%' }}>Last Recorded Qty</th>}
+                            {hasQuantityData && <th>Officer Confirmed Qty</th>}
+                            {hasQuantityData && <th>Final Approved Qty</th>}
                         </tr>
                     </thead>
                     <tbody>
-                        {selectedOptions.map((option, index) => {
-                            const recordedQty = option.quantity || 0;
-
-                            return (
-                                <tr key={index}>
-                                    <td>{index + 1}</td>
-                                    <td>{indentData.division}</td>
-                                    <td>{indentData.subDivision}</td>
-                                    <td>{option.name}</td>
-                                    {isReturned && <td className="fw-bold text-danger">{recordedQty}</td>}
-                                </tr>
-                            );
-                        })}
+                        {selectedOptions.map((option, index) => (
+                            <tr key={index}>
+                                <td>{index + 1}</td>
+                                <td>{option.divisionName}</td>
+                                <td>{option.subDivisionName}</td>
+                                <td>{option.name}</td>
+                                {/* Display top-level quantity data on every row */}
+                                {hasQuantityData && <td className="text-center">{indentData.officerEnteredQty || '0'}</td>}
+                                {hasQuantityData && <td className="text-center">{indentData.finalApprovedQty || '0'}</td>}
+                            </tr>
+                        ))}
                     </tbody>
                 </Table>
                 
@@ -91,69 +95,204 @@ const renderIndentTemplate = (indentData) => {
     );
 };
 
+// Function to normalize API response data to the UI format
+const normalizeIndentData = (apiData) => {
+    if (!Array.isArray(apiData)) return [];
+    
+    return apiData.map(item => {
+        const createdDate = new Date(item.CreatedOn || new Date());
+        
+        const statusId = item.Status_Id;
+        const status = GLOBAL_STATUS_MAP[statusId] || item.IndentStatus || 'Unknown';
+        
+        const division = item.division_names || 'N/A';
+        const subDivision = item.subdivision_names || 'N/A';
+        const sectionNames = item.section_names || 'N/A';
+
+        const submitTo = (item.CreatedByRole || '').includes('Section') ? 'section' : 
+                            (item.CreatedByRole || '').includes('SubDivision') ? 'subdivision' : 'division';
+
+        // Split multi-value fields (so_codes and section_names) by comma
+        const soCodesArray = (item.so_codes || '').split(',').map(s => s.trim()).filter(s => s.length > 0);
+        const sectionNamesArray = (item.section_names || '').split(',').map(s => s.trim()).filter(s => s.length > 0);
+        const maxLen = Math.max(soCodesArray.length, sectionNamesArray.length);
+        
+        const normalizedSections = Array.from({ length: maxLen }).map((_, index) => ({
+            name: sectionNamesArray[index] || soCodesArray[index] || 'N/A',
+            code: soCodesArray[index] || item.sd_codes, 
+            quantity: 0, 
+            divisionName: division, 
+            subDivisionName: subDivision
+        }));
+
+
+        return {
+            indentNumber: item.fullIndentNo || item.Indent_No || 'N/A',
+            createdBy: item.FirstName || item.RequestUserName || 'N/A',
+            approvedBy: item.FinalApprovedByUser || 'N/A', 
+            createdOn: item.CreatedOn,
+            date: createdDate.toLocaleDateString('en-GB'),
+            time: createdDate.toLocaleTimeString('en-US', { hour12: true }),
+            division: division,
+            subDivision: subDivision,
+            subDivisionCode: item.sd_codes,
+            divisionCode: item.div_codes,
+            sectionCode: item.so_codes,
+            submitTo: submitTo,
+            status: status, // This is the combined/mapped status name
+            sectionNames: sectionNames,
+            
+            // **CAPTURED QUANTITY FIELDS**
+            finalApprovedQty: item.FinalApprovedQty || null,
+            officerEnteredQty: item.OfficerEnteredQty || null,
+            
+            // Consolidated names for table display (using raw names)
+            selectedOptionNames: `${division}/${subDivision}/${sectionNames}`, 
+            // CRITICAL FIX: Array of sections for modal detail rows
+            selectedOptions: normalizedSections, 
+            rejectionReason: item.RejectedComment || null, 
+        };
+    });
+};
+
+// =================================================================
+// 3. API FETCHING LOGIC (Two Concurrent Calls: Flag 1 for Map, Flag 2 for Data)
+// =================================================================
+
+// MODIFICATION: Pass setStatusOptions to populate dropdown dynamically
+const fetchIndentData = async (sessionData, setIndents, setTotalCount, setIsLoading, setError, setStatusOptions) => {
+    const requestUserName = sessionData.requestUserName || null;
+
+    setIsLoading(true);
+    setError(null);
+    setIndents(INITIAL_INDENTS);
+
+    // Payloads for concurrent fetching
+    const statusPayload = { "flagId": 1, "RequestUserName": requestUserName };
+    const dataPayload = { "flagId": 2, "RequestUserName": requestUserName };
+
+    try {
+        // Run both API calls concurrently
+        const [statusResponse, dataResponse] = await Promise.all([
+            indentView(statusPayload),
+            indentView(dataPayload)
+        ]);
+
+        // --- Step 1: Process Status Map (Flag 1) & Update Dropdown Options ---
+        if (statusResponse && statusResponse.status === 'success' && Array.isArray(statusResponse.result)) {
+            const statusMap = {};
+            const dynamicStatusOptions = [...BASE_STATUS_OPTIONS]; // Start with 'All'
+            
+            statusResponse.result.forEach(s => {
+                // Populate global map: { 1: 'To Be Approved', 2: 'Approved', ... }
+                statusMap[s.Status_Id] = s.StatusName;
+                
+                // Add to dynamic dropdown list
+                dynamicStatusOptions.push({
+                    label: s.StatusName, // Display Name
+                    value: s.StatusName // Value for filtering
+                });
+            });
+            GLOBAL_STATUS_MAP = statusMap;
+            setStatusOptions(dynamicStatusOptions); // Update state for the dropdown
+        } else {
+             console.error("Failed to fetch Status Map (Flag 1). Using base status options.");
+             setStatusOptions(BASE_STATUS_OPTIONS); 
+        }
+
+        // --- Step 2: Process Indent Data (Flag 2) ---
+        if (dataResponse && dataResponse.status === 'success') {
+            const resultData = dataResponse.result || [];
+            
+            // Normalize data, using the freshly populated GLOBAL_STATUS_MAP
+            const normalizedData = normalizeIndentData(resultData);
+
+            setIndents(normalizedData);
+            setTotalCount(dataResponse.count || normalizedData.length || 0);
+        } else {
+            setError(dataResponse.message || 'Failed to fetch Indent data (Flag 2).');
+        }
+
+    } catch (err) {
+        console.error("API Fetch Error (Flag 1/2 Concurrent Call):", err);
+        setError('An unexpected network error occurred while fetching data.');
+    } finally {
+        setIsLoading(false);
+    }
+};
+
+
+// =================================================================
+// 4. MAIN COMPONENT
+// =================================================================
+
 const IndentView = () => {
     document.title = `Indent Queue | DMS`;
 
-    const [indents] = useState(mockIndents);
+    // --- Session Data Retrieval ---
+    const sessionData = useMemo(() => {
+        // Retrieve RequestUserName from sessionStorage
+        const fallbackEmail = sessionStorage.getItem('Email') || sessionStorage.getItem('requestUserName') || "projectmanager@gmail.com";
+        return { requestUserName: fallbackEmail };
+    }, []);
+
+    // --- State Variables ---
+    const [indents, setIndents] = useState(INITIAL_INDENTS);
+    const [isLoading, setIsLoading] = useState(false);
+    const [fetchError, setFetchError] = useState(null);
+    const [totalCount, setTotalCount] = useState(0); 
+    
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedIndent, setSelectedIndent] = useState(null);
 
     // Filter States
-    const [viewStatus, setViewStatus] = useState('all');
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
+    const [viewStatus, setViewStatus] = useState('all'); 
+    // NEW STATE: Stores the dynamically loaded status options for the dropdown
+    const [statusOptions, setStatusOptions] = useState(BASE_STATUS_OPTIONS); 
+    const [startDate, setStartDate] = useState(''); // Kept for completeness, though unused in filter logic
+    const [endDate, setEndDate] = useState(''); // Kept for completeness, though unused in filter logic
 
     // Modals
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-    
-    // Data and Form States
-    const [filteredIndents, setFilteredIndents] = useState(mockIndents);
     
     // Table States
     const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(5);
+    
 
-    // --- Column Definition ---
-    const columns = useMemo(() => [
-        { header: 'Indent number', accessorKey: 'indentNumber', sortable: true },
-        { header: 'Status', accessorKey: 'status', sortable: true }, 
-        { header: 'Created by', accessorKey: 'createdBy', sortable: true },
-        { header: 'Section/Sub-Division', accessorKey: 'selectedOptionNames', sortable: true },
-        { header: 'Created on', accessorKey: 'createdOn', sortable: true },
-        { header: 'Action', accessorKey: 'action', sortable: false },
-    ], []);
+    // --- Data Fetching and Refresh ---
+    const refreshData = useCallback(() => {
+        if (!sessionData.requestUserName) {
+            setFetchError("Authentication error: Missing RequestUserName session data.");
+            return;
+        }
 
-    // --- Core Filtering Logic ---
+        // Pass the new setStatusOptions setter
+        fetchIndentData(sessionData, setIndents, setTotalCount, setIsLoading, setFetchError, setStatusOptions);
+
+        setPage(0);
+
+    }, [sessionData]);
+
+
     useEffect(() => {
+        refreshData();
+    }, [refreshData]);
+
+
+    // --- Core Filtering Logic (Local Filters) ---
+    const filteredIndents = useMemo(() => {
         let results = indents;
 
-        // 1. Filter by Status
-        if (viewStatus === 'to_approve') {
-            results = results.filter(indent => indent.status === 'To Be Approved');
-        } else if (viewStatus === 'approved') {
-            results = results.filter(indent => indent.status === 'Approved');
-        } else if (viewStatus === 'rejected') {
-            results = results.filter(indent => indent.status === 'Rejected');
-        } else if (viewStatus === 'returned_for_revision') {
-            results = results.filter(indent => indent.status === 'Returned for Revision');
-        } else if (viewStatus === 'all') {
-            results = indents;
+        // --- 1. Status Filter ---
+        if (viewStatus !== 'all') {
+             results = results.filter(i => i.status === viewStatus);
         }
+        
+        // --- 2. Date Range Filter (IGNORED for now) ---
 
-        // 2. Filter by Date Range (using createdOn)
-        const start = startDate ? new Date(startDate).getTime() : 0;
-        const end = endDate ? new Date(endDate).getTime() : Infinity;
-
-        if (start > 0 || end !== Infinity) {
-            results = results.filter(indent => {
-                const createdTime = new Date(indent.createdOn).getTime();
-                // Check if createdTime is within the selected range (inclusive)
-                return createdTime >= start && createdTime <= end;
-            });
-        }
-
-        // 3. Filter by Search Term
+        // --- 3. Search Filter ---
         if (searchTerm.trim() !== '') {
             results = results.filter(indent =>
                 (indent.indentNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -162,9 +301,7 @@ const IndentView = () => {
             );
         }
         
-        setFilteredIndents(results);
-        setSortConfig({ key: null, direction: null });
-        setPage(0);
+        return results;
     }, [searchTerm, indents, viewStatus, startDate, endDate]);
 
 
@@ -208,10 +345,24 @@ const IndentView = () => {
             case 'Approved': return 'success';
             case 'Rejected': return 'danger';
             case 'To Be Approved': return 'warning';
+            case 'Resubmitted': 
+            case 'ResubmittedToOfficers':
             case 'Returned for Revision': return 'info';
+            case 'Acknowledged': return 'info'; 
+            case 'Closed': return 'dark';
             default: return 'secondary';
         }
     };
+
+    // --- Column Definition (No change) ---
+    const columns = useMemo(() => [
+        { header: 'Indent number', accessorKey: 'indentNumber', sortable: true },
+        { header: 'Status', accessorKey: 'status', sortable: true }, 
+        { header: 'Created by', accessorKey: 'createdBy', sortable: true },
+        { header: 'Section/Sub-Division', accessorKey: 'selectedOptionNames', sortable: true },
+        { header: 'Created on', accessorKey: 'createdOn', sortable: true },
+        { header: 'Action', accessorKey: 'action', sortable: false },
+    ], []);
 
     // --- Render Logic (Table) ---
     const renderTableHeader = () => (
@@ -242,18 +393,15 @@ const IndentView = () => {
     );
 
     const renderTableRows = () => {
+        if (isLoading) { return (<tr><td colSpan={columns.length} className="text-center py-5"><Spinner size="sm" className="me-2" /> Loading Indents...</td></tr>); }
+        if (fetchError) { return (<tr><td colSpan={columns.length} className="text-center py-5"><Alert color="danger" className="mb-0">{fetchError}</Alert></td></tr>); }
+
         if (!paginatedData || paginatedData.length === 0) {
             let message = "No Documents Found.";
-             if (viewStatus === 'returned_for_revision') {
-                 message = "No Documents Found in the Resubmit Queue.";
-            } else if (viewStatus === 'to_approve') {
-                message = "No Documents Found Pending Approval.";
-            } else if (viewStatus === 'approved') {
-                message = "No Approved Documents Found.";
-            } else if (viewStatus === 'rejected') {
-                message = "No Rejected Documents Found.";
-            } else if (viewStatus === 'all') {
-                message = "No Documents Found matching the criteria.";
+            if (viewStatus !== 'all') {
+                message = `No Documents Found with status: ${viewStatus}.`;
+            } else if (indents.length === 0) {
+                message = `No Indent data fetched (${totalCount} total).`;
             }
 
             return (<tr><td colSpan={columns.length} style={{ textAlign: 'center', padding: '24px' }}>{message}</td></tr>);
@@ -269,7 +417,6 @@ const IndentView = () => {
                 <td>{new Date(indent.createdOn).toLocaleString()}</td>
                 <td style={{ textAlign: 'left' }}>
                     <div className="d-flex justify-content-start align-items-center gap-2">
-                        {/* ONLY View button remains */}
                         <Button color="primary" size="sm" onClick={() => handleViewClick(indent)}>View</Button>
                     </div>
                 </td>
@@ -317,46 +464,46 @@ const IndentView = () => {
     return (
         <div className="page-content">
             <style>{`
-                /* Ensure horizontal scrollbar for overflowing content in the table */
-                .table-responsive { overflow-x: auto; }
+                 /* Ensure horizontal scrollbar for overflowing content in the table */
+                 .table-responsive { overflow-x: auto; }
 
-                .a4-sheet-modal{width:100%;border:1px solid #ccc;background-color:#fff;background-size:100% 100%;background-repeat:no-repeat;font-family:Arial,sans-serif;color:#000;font-size:13px;line-height:1.6;margin:0 auto}
-                .content-wrapper-modal{padding:14% 8% 8%}
-                .a4-sheet-modal table,.a4-sheet-modal th,.a4-sheet-modal td{font-size:12px;padding:5px}
-                .scrollable-modal-body{max-height:70vh;overflow-y:auto;}
-                .filter-control-group .form-control {
-                    height: calc(1.5em + 0.75rem + 2px);
-                    padding: 0.375rem 0.75rem;
-                }
+                 .a4-sheet-modal{width:100%;border:1px solid #ccc;background-color:#fff;background-size:100% 100%;background-repeat:no-repeat;font-family:Arial,sans-serif;color:#000;font-size:13px;line-height:1.6;margin:0 auto}
+                 .content-wrapper-modal{padding:14% 8% 8%}
+                 .a4-sheet-modal table,.a4-sheet-modal th,.a4-sheet-modal td{font-size:12px;padding:5px}
+                 .scrollable-modal-body{max-height:70vh;overflow-y:auto;}
+                 .filter-control-group .form-control {
+                     height: calc(1.5em + 0.75rem + 2px);
+                     padding: 0.375rem 0.75rem;
+                 }
 
-                /* New styles for optimized filter row */
-                .filter-row {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 10px 15px; /* Vertical and horizontal gap */
-                    align-items: flex-end;
-                }
-                .filter-col {
-                    flex-grow: 0;
-                    /* Set a fixed max-width for the filter columns on larger screens */
-                    max-width: 200px; 
-                }
-                .search-col {
-                    flex-grow: 1;
-                    /* Ensure the search bar takes up the remaining space */
-                    min-width: 250px;
-                }
-                .small-filter-input {
-                    min-width: 160px; /* Ensure select and date inputs are compact */
-                }
-            `}</style>
+                 /* New styles for optimized filter row */
+                 .filter-row {
+                     display: flex;
+                     flex-wrap: wrap;
+                     gap: 10px 15px; /* Vertical and horizontal gap */
+                     align-items: flex-end;
+                 }
+                 .filter-col {
+                     flex-grow: 0;
+                     /* Set a fixed max-width for the filter columns on larger screens */
+                     max-width: 200px; 
+                 }
+                 .search-col {
+                     flex-grow: 1;
+                     /* Ensure the search bar takes up the remaining space */
+                     min-width: 250px;
+                 }
+                 .small-filter-input {
+                     min-width: 160px; /* Ensure select and date inputs are compact */
+                 }
+             `}</style>
             <Container fluid>
                 <Card>
                     <CardHeader className="bg-primary text-white p-3"><h5 className="mb-0 text-white">Indent Request View</h5></CardHeader>
                     <CardBody>
                         <Row className="g-3 mb-3 align-items-end filter-row">
                             
-                            {/* --- Status Filter (LEFT SIDE) - Use md="auto" to size to content on medium screens and up */}
+                            {/* --- Status Filter (MODIFIED SECTION) --- */}
                             <Col md="auto" sm={6} className="filter-col">
                                 <FormGroup className="mb-0">
                                     <Label for="statusFilter">Filter by Status</Label>
@@ -366,45 +513,20 @@ const IndentView = () => {
                                         value={viewStatus}
                                         onChange={(e) => setViewStatus(e.target.value)}
                                         className="filter-control-group small-filter-input"
+                                        disabled={isLoading}
                                     >
-                                        <option value="all">All ({indents.length})</option>
-                                        <option value="to_approve">Pending Approval ({indents.filter(i => i.status === 'To Be Approved').length})</option>
-                                        <option value="approved">Approved ({indents.filter(i => i.status === 'Approved').length})</option>
-                                        <option value="rejected">Rejected ({indents.filter(i => i.status === 'Rejected').length})</option>
-                                        <option value="returned_for_revision">Returned for Revision ({indents.filter(i => i.status === 'Returned for Revision').length})</option>
+                                        {/* Renders options from the state, dynamically populated by the API (Flag 1) */}
+                                        {statusOptions.map(option => (
+                                            <option key={option.value} value={option.value}>
+                                                {/* REMOVED: Status count is no longer displayed here */}
+                                                {option.label}
+                                            </option>
+                                        ))}
                                     </Input>
                                 </FormGroup>
                             </Col>
 
-                            {/* --- Date Range Filter (From Date - LEFT SIDE) --- */}
-                            <Col md="auto" sm={6} className="filter-col">
-                                <FormGroup className="mb-0">
-                                    <Label for="startDate">From Date</Label>
-                                    <Input
-                                        type="date"
-                                        id="startDate"
-                                        value={startDate}
-                                        onChange={(e) => setStartDate(e.target.value)}
-                                        className="filter-control-group small-filter-input"
-                                    />
-                                </FormGroup>
-                            </Col>
-                            
-                            {/* --- Date Range Filter (To Date - LEFT SIDE) --- */}
-                            <Col md="auto" sm={6} className="filter-col">
-                                <FormGroup className="mb-0">
-                                    <Label for="endDate">To Date</Label>
-                                    <Input
-                                        type="date"
-                                        id="endDate"
-                                        value={endDate}
-                                        onChange={(e) => setEndDate(e.target.value)}
-                                        className="filter-control-group small-filter-input"
-                                    />
-                                </FormGroup>
-                            </Col>
-
-                            {/* --- Search Box (RIGHT SIDE) - Use md={true} to take remaining space */}
+                            {/* --- Search Box --- */}
                             <Col md={true} sm={12} className="search-col">
                                 <FormGroup className="mb-0">
                                     <Label for="searchBox" style={{ opacity: 0 }}>Search Label</Label>
@@ -432,7 +554,7 @@ const IndentView = () => {
                     </CardBody>
                 </Card>
 
-                {/* 1. View Indent Modal (ONLY Modal Remaining) */}
+                {/* 1. View Indent Modal */}
                 {selectedIndent && (
                     <Modal isOpen={isViewModalOpen} toggle={toggleViewModal} centered size="lg">
                         <ModalHeader toggle={toggleViewModal}>Indent Details: {selectedIndent.indentNumber} ({selectedIndent.status})</ModalHeader>
