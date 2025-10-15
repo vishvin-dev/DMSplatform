@@ -91,6 +91,7 @@
     "react-toastify": "^10.0.6",
     "reactstrap": "^9.2.3",
     "redux": "^5.0.1",
+    "remixicon": "^4.7.0",
     "remixicon-react": "^1.0.0",
     "reselect": "^5.1.1",
     "sass": "1.77.6",
