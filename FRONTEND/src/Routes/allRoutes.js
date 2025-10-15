@@ -338,11 +338,13 @@ import Report from "../pages/Reports/Report";
 
 import ManagerApprovalView from "../pages/Indent/ManagerApprovalView";
 import IndentView from "../pages/Indent/IndentView";
+import IndentReport from "../pages/Reports/IndentReport";
 
 
 // import AddDocuments from "../pages/AddDocuments/AddDocuments";
 
 const authProtectedRoutes = [
+  {path: "/IndentReport", component: <IndentReport/>},
   {path: "/Reports", component: <Report/>},
  {path: "/Testing", component: <Test/>},
  {path: "/categorycreation", component: <Category/>},
