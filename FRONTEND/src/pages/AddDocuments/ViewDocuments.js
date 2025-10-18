@@ -74,45 +74,79 @@ const ViewDocuments = () => {
         // Get the user's level from the first zone entry
         const userZone = zones[0];
         const level = userZone.level;
+        const circleCode = userZone.circle_code;
         setUserLevel(level);
 
+        console.log("User Level:", level);
+        console.log("Circle Code:", circleCode);
+        console.log("All Zones:", zones);
+
+        // Fetch divisions using circle_code for all user levels
+        if (circleCode) {
+            try {
+                const divisions = await flagIdFunction({ 
+                    flagId: 1, 
+                    requestUserName: authUser.user.Email,
+                    circle_code: circleCode
+                });
+                setDivisionName(divisions);
+                console.log("Fetched divisions:", divisions);
+            } catch (error) {
+                console.error("Error fetching divisions:", error);
+            }
+        }
+
         if (level === 'section') {
-            // For section level: load division, subdivision (disabled), and section options
-            const divisionData = [{ 
-                div_code: userZone.div_code, 
-                division: userZone.division 
-            }];
-            const subDivisionData = [{ 
-                sd_code: userZone.sd_code, 
-                sub_division: userZone.sub_division 
-            }];
-            
-            // Get all section offices from zones (in case there are multiple)
-            const sectionData = zones.map(zone => ({
-                so_code: zone.so_code,
-                section_office: zone.section_office
-            }));
+            // Get unique divisions from zones
+            const divisionData = [];
+            const seenDivisions = new Set();
+            zones.forEach(zone => {
+                if (!seenDivisions.has(zone.div_code)) {
+                    seenDivisions.add(zone.div_code);
+                    divisionData.push({ div_code: zone.div_code, division: zone.division });
+                }
+            });
+
+            // Get unique sub-divisions from zones
+            const subDivisionData = [];
+            const seenSubDivisions = new Set();
+            zones.forEach(zone => {
+                if (!seenSubDivisions.has(zone.sd_code)) {
+                    seenSubDivisions.add(zone.sd_code);
+                    subDivisionData.push({ sd_code: zone.sd_code, sub_division: zone.sub_division });
+                }
+            });
+
+            // Get all sections from zones
+            const sectionData = zones.map(zone => ({ so_code: zone.so_code, section_office: zone.section_office }));
 
             setDivisionName(divisionData);
             setSubDivisions(subDivisionData);
             setSectionOptions(sectionData);
-            
-            // Set default values and disable fields
-            setDivision(userZone.div_code);
-            setSubDivision(userZone.sd_code);
-            setIsFieldsDisabled({
-                division: true,
-                subDivision: true,
-                section: sectionData.length === 1
-            });
-            
-            // If only one section, auto-select it
+
+            // Set division if only one exists
+            if (divisionData.length === 1) {
+                setDivision(divisionData[0].div_code);
+                setIsFieldsDisabled(prev => ({ ...prev, division: true }));
+            }
+
+            // Set sub-division display value - ONLY FOR SECTION LEVEL
+            if (subDivisionData.length === 1) {
+                setSubDivision(subDivisionData[0].sd_code);
+                setIsFieldsDisabled(prev => ({ ...prev, subDivision: true }));
+            } else {
+                // For multiple sub-divisions, set a special value to display all
+                setSubDivision('multiple');
+                setIsFieldsDisabled(prev => ({ ...prev, subDivision: true }));
+            }
+
+            // Set section if only one exists
             if (sectionData.length === 1) {
                 setSection(sectionData[0].so_code);
+                setIsFieldsDisabled(prev => ({ ...prev, section: true }));
             }
         }
         else if (level === 'subdivision') {
-            // For subdivision level: load division (disabled) and subdivision options
             const divisionData = [{ 
                 div_code: userZone.div_code, 
                 division: userZone.division 
@@ -151,7 +185,8 @@ const ViewDocuments = () => {
                 const sections = await flagIdFunction({
                     flagId: 3,
                     requestUserName: userName,
-                    sd_code: selectedSdCode
+                    sd_code: selectedSdCode,
+                    circle_code: circleCode
                 });
                 setSectionOptions(sections);
                 
@@ -166,7 +201,6 @@ const ViewDocuments = () => {
             }
         }
         else if (level === 'division') {
-            // For division level: load division options
             // Get unique divisions from zones (in case there are multiple)
             const uniqueDivisions = [];
             const seenDivisions = new Set();
@@ -196,7 +230,8 @@ const ViewDocuments = () => {
                 const subdivisions = await flagIdFunction({
                     flagId: 2,
                     requestUserName: userName,
-                    div_code: selectedDivCode
+                    div_code: selectedDivCode,
+                    circle_code: circleCode
                 });
                 setSubDivisions(subdivisions);
                 
@@ -212,7 +247,8 @@ const ViewDocuments = () => {
                     const sections = await flagIdFunction({
                         flagId: 3,
                         requestUserName: userName,
-                        sd_code: subdivisions[0].sd_code
+                        sd_code: subdivisions[0].sd_code,
+                        circle_code: circleCode
                     });
                     setSectionOptions(sections);
                     
@@ -226,6 +262,18 @@ const ViewDocuments = () => {
                     }
                 }
             }
+        }
+        else if (level === 'circle') {
+            // For circle level, don't pre-populate anything and keep fields enabled
+            setIsFieldsDisabled({
+                division: false,
+                subDivision: false,
+                section: false
+            });
+            // Don't set any default values for circle level
+            setDivision('');
+            setSubDivision('');
+            setSection('');
         }
     }, [flagIdFunction, userName]);
 
@@ -267,65 +315,98 @@ const ViewDocuments = () => {
         setShowResults(false);
     };
 
+    // UPDATED: Handle division change with circle_code
     const handleDivisionChange = async (e) => {
         const selectedDivCode = e.target.value;
         setDivision(selectedDivCode);
         resetSubsequentFilters();
         
-        // Only fetch subdivisions if division level or if not disabled
-        if (selectedDivCode && (userLevel === 'division' || !isFieldsDisabled.subDivision)) {
+        const authUser = JSON.parse(sessionStorage.getItem("authUser"));
+        const circleCode = authUser?.user?.zones?.[0]?.circle_code;
+
+        if (selectedDivCode && circleCode) {
             const subdivisions = await flagIdFunction({ 
                 flagId: 2, 
                 requestUserName: userName, 
-                div_code: selectedDivCode 
+                div_code: selectedDivCode,
+                circle_code: circleCode
             });
             setSubDivisions(subdivisions);
+
+            if (subdivisions.length === 1 && userLevel !== 'circle') {
+                setSubDivision(subdivisions[0].sd_code);
+                setIsFieldsDisabled(prev => ({ ...prev, subDivision: true }));
+
+                const sections = await flagIdFunction({ 
+                    flagId: 3, 
+                    requestUserName: userName, 
+                    sd_code: subdivisions[0].sd_code,
+                    circle_code: circleCode
+                });
+                setSectionOptions(sections);
+
+                if (sections.length === 1) {
+                    setSection(sections[0].so_code);
+                    setIsFieldsDisabled(prev => ({ ...prev, section: true }));
+                } else {
+                    setIsFieldsDisabled(prev => ({ ...prev, section: false }));
+                }
+            } else {
+                setIsFieldsDisabled(prev => ({ ...prev, subDivision: false, section: false }));
+            }
         }
     };
 
+    // UPDATED: Handle sub-division change with circle_code
     const handleSubDivisionChange = async (e) => {
         const selectedSdCode = e.target.value;
         setSubDivision(selectedSdCode);
         
-        // Reset only section if not disabled
+        // Reset account search fields when section changes
+        setAccountSearchInput('');
+        setaccount_id('');
+        setHasSearched(false);
+        setDocuments([]);
+        setConsumerInfo(null);
+        setShowResults(false);
+
         if (!isFieldsDisabled.section) {
             setSection('');
             setSectionOptions([]);
         }
-        setAccountSearchInput(''); 
+
+        const authUser = JSON.parse(sessionStorage.getItem("authUser"));
+        const circleCode = authUser?.user?.zones?.[0]?.circle_code;
+
+        if (selectedSdCode && circleCode) {
+            const sections = await flagIdFunction({ 
+                flagId: 3, 
+                requestUserName: userName, 
+                sd_code: selectedSdCode,
+                circle_code: circleCode
+            });
+            setSectionOptions(sections);
+
+            if (sections.length === 1 && userLevel !== 'circle') {
+                setSection(sections[0].so_code);
+                setIsFieldsDisabled(prev => ({ ...prev, section: true }));
+            } else {
+                setIsFieldsDisabled(prev => ({ ...prev, section: false }));
+            }
+        }
+    };
+
+    const handleSectionChange = (e) => {
+        const selectedSectionCode = e.target.value;
+        setSection(selectedSectionCode);
+        
+        // Reset account search fields when section changes
+        setAccountSearchInput('');
         setaccount_id('');
-        setHasSearched(false); 
+        setHasSearched(false);
         setDocuments([]);
         setConsumerInfo(null);
         setShowResults(false);
-        
-        // Fetch sections based on user level and selected subdivision
-        if (selectedSdCode) {
-            // For all levels that have subdivision access, fetch sections
-            if (userLevel === 'section' || userLevel === 'subdivision' || userLevel === 'division') {
-                const sections = await flagIdFunction({ 
-                    flagId: 3, 
-                    requestUserName: userName, 
-                    sd_code: selectedSdCode 
-                });
-                setSectionOptions(sections);
-                
-                // If only one section, auto-select it and disable the dropdown
-                if (sections.length === 1) {
-                    setSection(sections[0].so_code);
-                    setIsFieldsDisabled(prev => ({
-                        ...prev,
-                        section: true
-                    }));
-                } else {
-                    // Multiple sections available, enable dropdown
-                    setIsFieldsDisabled(prev => ({
-                        ...prev,
-                        section: false
-                    }));
-                }
-            }
-        }
     };
 
     const handleAccountSearchChange = (e) => {
@@ -367,6 +448,38 @@ const ViewDocuments = () => {
         setAccountSuggestions([]);
         setShowSuggestions(false);
         setHasSearched(false);
+    };
+
+    // Function to render sub-division dropdown options
+    const renderSubDivisionOptions = () => {
+        if (subDivisions.length === 0) {
+            return <option value="">Select Sub Division</option>;
+        }
+
+        // ONLY show comma-separated values for SECTION level users with multiple sub-divisions
+        if (userLevel === 'section' && subDivisions.length > 1) {
+            // For multiple sub-divisions in section level, show comma-separated in a single disabled option
+            const allSubDivisionNames = subDivisions.map(sd => sd.sub_division).join(', ');
+            return (
+                <>
+                    <option value="multiple" disabled>
+                        {allSubDivisionNames}
+                    </option>
+                </>
+            );
+        }
+
+        // For all other cases (including circle level), show normal dropdown options
+        return (
+            <>
+                <option value="">Select Sub Division</option>
+                {subDivisions.map(subDiv => (
+                    <option key={subDiv.sd_code} value={subDiv.sd_code}>
+                        {subDiv.sub_division}
+                    </option>
+                ))}
+            </>
+        );
     };
 
     const getFileIcon = (type) => {
@@ -616,12 +729,7 @@ const ViewDocuments = () => {
                                             onChange={handleSubDivisionChange}
                                             disabled={isFieldsDisabled.subDivision || !division}
                                         >
-                                            <option value="">Select Sub Division</option>
-                                            {subDivisions.map(subDiv => (
-                                                <option key={subDiv.sd_code} value={subDiv.sd_code}>
-                                                    {subDiv.sub_division}
-                                                </option>
-                                            ))}
+                                            {renderSubDivisionOptions()}
                                         </Input>
                                     </FormGroup>
                                 </Col>
