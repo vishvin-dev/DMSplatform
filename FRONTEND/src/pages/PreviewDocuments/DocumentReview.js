@@ -234,7 +234,7 @@ const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comme
                             <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
                                 <strong>File Number:</strong><span className="text-muted ms-1">{verificationDetails.fileNumber || 'N/A'}</span>
                             </ListGroupItem>
-                            <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
+                            {/* <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
                                 <strong>Contractor:</strong><span className="text-muted ms-1">{verificationDetails.contractorName || 'N/A'}</span>
                             </ListGroupItem>
                             <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
@@ -242,7 +242,7 @@ const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comme
                             </ListGroupItem>
                             <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
                                 <strong>Category:</strong><span className="text-muted ms-1">{verificationDetails.category || 'N/A'}</span>
-                            </ListGroupItem>
+                            </ListGroupItem> */}
                             <hr className="my-1"/>
                         </>
                     ) : (
@@ -292,11 +292,14 @@ const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comme
     </div>
 );
 
+// UPDATED: Added documentTypes prop
 const ScanPreviewModal = ({
     isOpen, onClose, onRescan, onAddPage, onSubmit, scannedData, onDataChange,
     activeIndex, setActiveIndex,
     isAddingPageLoading, isRescanning, isSubmittingDraft,
-    setScannedDocumentData
+    setScannedDocumentData,
+    documentTypes, // ADDED
+    DocumentTypeDropdown // ADDED
 }) => {
     const iframeRef = useRef(null);
     const [isIframeReady, setIsIframeReady] = useState(false);
@@ -481,10 +484,29 @@ const ScanPreviewModal = ({
                                             <strong>Account ID:</strong>
                                             <span className="text-muted">{scannedData.doc.account_id}</span>
                                         </ListGroupItem>
-                                        <ListGroupItem className="px-2 py-2 border-0 d-flex justify-content-between">
-                                            <strong>Document Type:</strong>
-                                            <span className="text-muted">{scannedData.doc.category}</span>
+                                        
+                                        {/* --- MODIFICATION START --- */}
+                                        <ListGroupItem className="px-2 py-2 border-0 d-flex justify-content-between align-items-center">
+                                            <strong className="me-2">Document Type:<span className="text-danger">*</span></strong>
+                                            <DocumentTypeDropdown
+                                                value={scannedData.doc.category}
+                                                onChange={(e) => {
+                                                    const newCategory = e.target.value;
+                                                    const isOther = newCategory === 'other';
+                                                    
+                                                    setScannedDocumentData(prev => ({
+                                                        ...prev,
+                                                        doc: { ...prev.doc, category: newCategory },
+                                                        isOther: isOther,
+                                                        docName: isOther ? prev.docName : ''
+                                                    }));
+                                                }}
+                                                documentTypes={documentTypes}
+                                                placeholder="Select Type..."
+                                            />
                                         </ListGroupItem>
+                                        {/* --- MODIFICATION END --- */}
+
                                     </ListGroup>
                                 ) : (
                                     <div className="text-center text-muted p-3 small">
@@ -493,6 +515,13 @@ const ScanPreviewModal = ({
                                 )}
                             </CardBody>
                         </Card>
+                        {scannedData.isOther && (
+                            <Card className="mb-3"><CardHeader className="bg-light p-3"><h6 className="mb-0">Document Details</h6></CardHeader><CardBody className="p-3">
+                                <p className="text-muted small mb-2">This document type requires a name.</p>
+                                <div className="mb-2"><label htmlFor="docName" className="form-label small">Document Name <span className="text-danger">*</span></label><Input id="docName" type="text" placeholder="e.g., NOC Certificate" value={scannedData.docName} onChange={(e) => onDataChange('docName', e.target.value)} /></div>
+                                <div><label htmlFor="docRef" className="form-label small">Reference (Optional)</label><Input id="docRef" type="text" placeholder="e.g., NOC-12345" value={scannedData.docRef} onChange={(e) => onDataChange('docRef', e.target.value)} /></div>
+                            </CardBody></Card>
+                        )}
                         <Card className="mb-3">
                             <CardHeader className="bg-light p-3 d-flex justify-content-between align-items-center">
                                 <h6 className="mb-0">Meta Tags</h6>
@@ -512,13 +541,13 @@ const ScanPreviewModal = ({
                                 <TagEditor key={scannedData.tags.join(',')} tags={scannedData.tags} onAddTag={(tag) => onDataChange('tags', [...scannedData.tags, tag])} onRemoveTag={(tag) => onDataChange('tags', scannedData.tags.filter(t => t !== tag))} />
                             </CardBody>
                         </Card>
-                        {scannedData.isOther && (
+                        {/* {scannedData.isOther && (
                             <Card className="mb-3"><CardHeader className="bg-light p-3"><h6 className="mb-0">Document Details</h6></CardHeader><CardBody className="p-3">
                                 <p className="text-muted small mb-2">This document type requires a name.</p>
                                 <div className="mb-2"><label htmlFor="docName" className="form-label small">Document Name <span className="text-danger">*</span></label><Input id="docName" type="text" placeholder="e.g., NOC Certificate" value={scannedData.docName} onChange={(e) => onDataChange('docName', e.target.value)} /></div>
                                 <div><label htmlFor="docRef" className="form-label small">Reference (Optional)</label><Input id="docRef" type="text" placeholder="e.g., NOC-12345" value={scannedData.docRef} onChange={(e) => onDataChange('docRef', e.target.value)} /></div>
                             </CardBody></Card>
-                        )}
+                        )} */}
                         <Card className="flex-grow-1"><CardHeader className="bg-light p-3"><h6 className="mb-0">Response / Comments</h6></CardHeader><CardBody className="p-2"><Input type="textarea" rows={3} placeholder="Enter comments..." value={scannedData.responseText} onChange={(e) => onDataChange('responseText', e.target.value)} /></CardBody></Card>
                     </Col>
                 </Row>
@@ -596,24 +625,22 @@ const DocumentReview = () => {
     const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
 
     
-
-    // NEW EFFECT HOOK: Load verification data from session storage
+    // --- MODIFICATION START ---
+    // Load verification details from location state (consumerData)
     useEffect(() => {
-        try {
-            const dataString = sessionStorage.getItem('verificationData');
-            if (dataString) {
-                const data = JSON.parse(dataString);
-                // Simple check to ensure required fields are present
-                if (data.noOfPages && data.fileNumber && data.contractorName) {
-                    setVerificationDetails(data);
-                }
-            }
-        } catch (error) {
-            console.error("Failed to parse verificationData from session storage:", error);
-            // Optionally clear the invalid session data
-            sessionStorage.removeItem('verificationData');
+        if (consumerData) {
+            setVerificationDetails({
+                noOfPages: consumerData.noOfPages, // This is passed from navigate state
+                fileNumber: consumerData.fileNumber, // This is passed from navigate state
+                // The following were removed from the modal, so they will be undefined.
+                // The DocumentInfoPanel will show 'N/A' which is correct.
+                contractorName: consumerData.contractorName,
+                approvedBy: consumerData.approvedBy,
+                category: consumerData.category
+            });
         }
-    }, []);
+    }, [consumerData]); // Run when consumerData is available
+    // --- MODIFICATION END ---
 
     useEffect(() => {
         const socketConnection = io(SCANNER_ENDPOINT, { transports: ["websocket", "polling"] });
@@ -670,22 +697,27 @@ const DocumentReview = () => {
                         setIsAddingPage(false);
                         setIsAddingPageLoading(false);
                     } else {
-                        const isOtherType = fileTypeFilter === 'other';
-                        const selectedDocType = documentTypes.find(doc => doc.DocumentListName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === fileTypeFilter);
-                        const docTypeLabel = isOtherType ? 'Other Document' : (selectedDocType ? selectedDocType.DocumentListName : fileTypeFilter);
+                        // UPDATED: Logic for new scan
                         const newDoc = {
-                            id: Date.now(), name: scan.fileName, type: blob.type, category: docTypeLabel,
-                            createdAt: new Date().toISOString().split('T')[0], createdBy: 'scanner', description: 'Newly scanned document',
+                            id: Date.now(), name: scan.fileName, type: blob.type,
+                            category: 'all', // Set to 'all' for placeholder
+                            createdAt: new Date().toISOString().split('T')[0],
+                            createdBy: 'scanner', description: 'Newly scanned document',
                             rr_no: consumerData.rr_no, consumer_name: consumerData.consumer_name,
                             account_id: consumerData.account_id,
                             pages: [newPage],
-                            comment: '', tags: [docTypeLabel.toLowerCase().replace(/\s+/g, ''), 'scanned'],
+                            comment: '',
+                            tags: ['scanned', 'new'], // Generic tags
                         };
                         setScanModalActiveIndex(0);
                         setScannedDocumentData({
                             doc: newDoc,
                             highlights: [{ type: 'Header', text: 'Scanned Document' }, { type: 'Footer', text: `Scanned on: ${newDoc.createdAt}` }, { type: 'Word', text: newDoc.consumer_name },],
-                            tags: newDoc.tags, responseText: '', isOther: isOtherType, docName: '', docRef: ''
+                            tags: newDoc.tags,
+                            responseText: '',
+                            isOther: false, // Set to false initially
+                            docName: '',
+                            docRef: ''
                         });
                         setIsScanPreviewModalOpen(true);
                     }
@@ -843,7 +875,7 @@ const DocumentReview = () => {
             setErrorModal(true); setLoading(false); return;
         }
         
-        // Append verification details from session storage
+        // Append verification details from state (which came from props)
         if (verificationDetails) {
              formData.append('NoOfPages', verificationDetails.noOfPages || '');
              formData.append('FileNumber', verificationDetails.fileNumber || '');
@@ -884,8 +916,9 @@ const DocumentReview = () => {
         try {
             const apiResponse = await postDocumentUpload(formData);
             if (apiResponse?.status === 'success') {
-                // Clear verification details from session after successful submission
-                sessionStorage.removeItem('verificationData');
+                // --- MODIFICATION START ---
+                // REMOVED: sessionStorage.removeItem('verificationData');
+                // --- MODIFICATION END ---
                 setResponse(apiResponse.message || `Successfully uploaded files.`);
                 setSuccessModal(true);
             } else {
@@ -959,14 +992,11 @@ const DocumentReview = () => {
         }
     };
 
+    // UPDATED: handleScanClick to remove dependency on fileTypeFilter
     const handleScanClick = () => {
-        if (fileTypeFilter === 'all') {
-            return;
-        }
         setIsAddingPage(false);
         setIsRescanning(false);
-        const selectedDocType = documentTypes.find(doc => doc.DocumentListName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === fileTypeFilter);
-        const docTypeLabel = fileTypeFilter === 'other' ? 'Other' : (selectedDocType ? selectedDocType.DocumentListName : 'Document');
+        const docTypeLabel = 'Scanned_Document'; // Use a generic label
         handleApiScan(docTypeLabel);
     };
 
@@ -1028,8 +1058,13 @@ const DocumentReview = () => {
 
     const handleSubmitScannedDocument = async () => {
         if (!scannedDocumentData) return;
+        
+        // ADDED VALIDATION
+        if (scannedDocumentData.doc.category === 'all' || !scannedDocumentData.doc.category) {
+            alert('Please select a Document Type.'); return;
+        }
         if (scannedDocumentData.isOther && !scannedDocumentData.docName.trim()) {
-            alert('Document Name is required.'); return;
+            alert('Document Name is required for "Other" type.'); return;
         }
 
         setIsSubmittingDraft(true);
@@ -1210,6 +1245,7 @@ const DocumentReview = () => {
                 <SuccessModal show={successModal} onCloseClick={handleSuccessAndNavigate} successMsg={response} />
                 <ErrorModal show={errorModal} onCloseClick={() => setErrorModal(false)} errorMsg={response} />
                 <Card>
+                    {/* --- MODIFICATION START --- */}
                     <CardHeader className="bg-primary bg-gradient p-2 d-flex align-items-center flex-wrap gap-3">
                         <div className="d-flex align-items-center rounded-pill bg-white bg-opacity-25 text-white py-2 px-3 shadow-sm">
                             <i className="ri-user-line me-2 fs-4 text-warning"></i>
@@ -1226,50 +1262,53 @@ const DocumentReview = () => {
                             <span className="me-2 opacity-75 fs-5">RR No:</span>
                             <h5 className="mb-0 fw-bold text-white">{consumerData.rr_no}</h5>
                         </div>
+                        {/* ADDED TARIFF FIELD */}
+                        <div className="d-flex align-items-center rounded-pill bg-white bg-opacity-25 text-white py-2 px-3 shadow-sm">
+                            <i className="ri-price-tag-3-line me-2 fs-4 text-success"></i>
+                            <span className="me-2 opacity-75 fs-5">Tariff:</span>
+                            <h5 className="mb-0 fw-bold text-white">{consumerData.tariff || 'N/A'}</h5>
+                        </div>
                     </CardHeader>
+                    {/* --- MODIFICATION END --- */}
                     <CardBody>
                         {documentsForReview.length === 0 ? (
                             <Row className="justify-content-center align-items-center" style={{ minHeight: '40vh' }}>
+                                {/* --- MODIFICATION START: Initial Scan UI --- */}
                                 <Col md={6} lg={5} className="text-center">
                                     <i className="ri-upload-cloud-line display-2 text-primary mb-3"></i>
                                     <h4>Please Upload Documents</h4>
-                                    <p className="text-muted">To begin, select a document type and click 'Scan'.</p>
+                                    <p className="text-muted">To begin, click 'Scan'.</p>
                                     <div className="mt-4">
                                         {loadingDocumentTypes ? (<div className="text-center"><Spinner size="sm" /> Loading...</div>) : (
-                                            <InputGroup>
-                                                <DocumentTypeDropdown
-                                                    value={fileTypeFilter}
-                                                    onChange={(e) => setFileTypeFilter(e.target.value)}
-                                                    documentTypes={documentTypes}
-                                                    placeholder="Select Document Type"
-                                                />
-                                                <Button color="primary" onClick={handleScanClick} disabled={fileTypeFilter === 'all'}>
-                                                    <svg xmlns="http://www.w3.org/2000/svg"
-                                                        width="18" height="18"
-                                                        fill="currentColor"
-                                                        viewBox="0 0 24 24"
-                                                        className="me-1">
-                                                        <path d="M3 3h6v2H5v4H3V3zm12 0h6v6h-2V5h-4V3zm6 12v6h-6v-2h4v-4h2zM3 15h2v4h4v2H3v-6zM7 7h10v10H7V7zm2 2v6h6V9H9z" />
-                                                    </svg>
-                                                    Scan
-                                                </Button>
-                                            </InputGroup>
+                                            <Button
+                                                color="primary"
+                                                size="lg"
+                                                onClick={handleScanClick}
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg"
+                                                    width="18" height="18"
+                                                    fill="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                    className="me-1">
+                                                    <path d="M3 3h6v2H5v4H3V3zm12 0h6v6h-2V5h-4V3zm6 12v6h-6v-2h4v-4h2zM3 15h2v4h4v2H3v-6zM7 7h10v10H7V7zm2 2v6h6V9H9z" />
+                                                </svg>
+                                                Scan
+                                            </Button>
                                         )}
                                     </div>
                                 </Col>
+                                {/* --- MODIFICATION END --- */}
                             </Row>
                         ) : (
                             <>
-                                <Row className="g-3 align-items-center mb-4"><Col md={5}>
-                                    {loadingDocumentTypes ? (<div className="text-center"><Spinner size="sm" /> Loading...</div>) : (
-                                        <InputGroup>
-                                            <DocumentTypeDropdown
-                                                value={fileTypeFilter}
-                                                onChange={(e) => setFileTypeFilter(e.target.value)}
-                                                documentTypes={documentTypes}
-                                                placeholder="Select Type to Scan New"
-                                            />
-                                            <Button color="primary" onClick={handleScanClick} disabled={fileTypeFilter === 'all'}>
+                                {/* --- MODIFICATION START: Secondary Scan UI --- */}
+                                <Row className="g-3 align-items-center mb-4">
+                                    <Col md={5}>
+                                        {loadingDocumentTypes ? (<div className="text-center"><Spinner size="sm" /> Loading...</div>) : (
+                                            <Button
+                                                color="primary"
+                                                onClick={handleScanClick}
+                                            >
                                                 <svg
                                                     xmlns="http://www.w3.org/2000/svg"
                                                     width="20"
@@ -1282,9 +1321,11 @@ const DocumentReview = () => {
                                                 </svg>
                                                 Scan New
                                             </Button>
-                                        </InputGroup>
-                                    )}
-                                </Col></Row>
+                                        )}
+                                    </Col>
+                                </Row>
+                                {/* --- MODIFICATION END --- */}
+                                
                                 <Row className="main-review-layout g-3 d-flex">
                                     <Col xl={3} lg={4} className="d-flex flex-column">
                                         <DocumentThumbnails documents={documentsForReview} selectedFile={selectedFile} onFileSelect={handleFileSelect} />
@@ -1307,6 +1348,7 @@ const DocumentReview = () => {
                         )}
                     </CardBody>
                 </Card>
+                {/* UPDATED: Pass documentTypes and DocumentTypeDropdown component */}
                 <ScanPreviewModal
                     isOpen={isScanPreviewModalOpen}
                     onClose={handleCloseScanPreview}
@@ -1321,6 +1363,8 @@ const DocumentReview = () => {
                     isRescanning={isRescanning}
                     isSubmittingDraft={isSubmittingDraft}
                     setScannedDocumentData={setScannedDocumentData}
+                    documentTypes={documentTypes}
+                    DocumentTypeDropdown={DocumentTypeDropdown}
                 />
                 <Modal isOpen={isScanningModalOpen} centered backdrop="static">
                     <ModalHeader>Scanning Document</ModalHeader>
