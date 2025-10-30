@@ -248,7 +248,8 @@ export const getDocumentsView = async (accountId) => {
       cd.consumer_name,
       cd.phone,
       cd.consumer_address,
-      cd.rr_no
+      cd.rr_no,
+      cd.tariff
 
     FROM 
       documentupload du
