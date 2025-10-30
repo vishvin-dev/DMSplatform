@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Button, Card, CardBody, CardHeader, Col, Container, Row, Label,
     ListGroup, ListGroupItem, Spinner, Form, FormGroup, Input, Progress,
-    Modal, ModalHeader, ModalBody, ModalFooter, Badge, Alert
+    Modal, ModalHeader, ModalBody, ModalFooter, Badge, Alert,
+    Collapse // ADDED Collapse
 } from 'reactstrap';
 import { useNavigate, useLocation } from 'react-router-dom';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
@@ -26,9 +27,6 @@ const Preview = () => {
     const [consumerToVerify, setConsumerToVerify] = useState(null);
     const [noOfPages, setNoOfPages] = useState('');
     const [fileNumber, setFileNumber] = useState('');
-    const [contractorName, setContractorName] = useState('');
-    const [approvedBy, setApprovedBy] = useState('');
-    const [category, setCategory] = useState('');
     const [isProcessingModal, setIsProcessingModal] = useState(false);
 
     // Filter and Search states
@@ -59,6 +57,7 @@ const Preview = () => {
     // Report-specific states
     const [reportData, setReportData] = useState([]);
     const [reportLoading, setReportLoading] = useState(true);
+    const [isReportCollapsed, setIsReportCollapsed] = useState(true); // ADDED: State for report collapse
 
     // Document modal states
     const [statusModalOpen, setStatusModalOpen] = useState(false);
@@ -88,6 +87,9 @@ const Preview = () => {
         color: '#fff',
         padding: '0.2rem 0.6rem'
     };
+
+    // ADDED: Toggle function for report collapse
+    const toggleReportCollapse = () => setIsReportCollapsed(prev => !prev);
 
     // Utility Functions
     const flagIdFunction = useCallback(async (params) => {
@@ -450,35 +452,17 @@ const Preview = () => {
         setConsumerToVerify(consumerData);
         setNoOfPages('');
         setFileNumber('');
-        setContractorName('');
-        setApprovedBy('');
-        setCategory('');
         setVerificationModalOpen(true);
     };
 
+    // --- MODIFICATION START ---
+    // Updated handleModalProceed
     const handleModalProceed = async () => {
-        // --- 1. Validate Fields ---
-        if (!noOfPages || !fileNumber || !contractorName || !approvedBy || !category) {
-            setResponse('Please fill all the verification fields.');
-            setErrorModal(true);
-            return;
-        }
-        
         setIsProcessingModal(true);
         const consumerData = consumerToVerify;
 
-        const verificationData = {
-            noOfPages: noOfPages,
-            fileNumber: fileNumber,
-            contractorName: contractorName,
-            approvedBy: approvedBy,
-            category: category,
-            account_id: consumerData.account_id,
-            timestamp: new Date().toISOString()
-        };
-
-        sessionStorage.setItem("verificationData", JSON.stringify(verificationData));
-        console.log("Verification Data Stored in Session Storage:", verificationData);
+        // REMOVED: verificationData object
+        // REMOVED: sessionStorage.setItem
         
         const consumerDataWithLocation = {
             ...consumerData,
@@ -488,6 +472,9 @@ const Preview = () => {
             DivisionName: divisionName.find(d => d.div_code === division)?.division || '',
             SubDivisionName: subDivisions.find(sd => sd.sd_code === subDivision)?.sub_division || '',
             SectionName: sectionOptions.find(s => s.so_code === section)?.section_office || '',
+            // ADDED: Pass No. of Pages and File Number in props state
+            noOfPages: noOfPages || '',
+            fileNumber: fileNumber || ''
         };
 
         try {
@@ -521,6 +508,7 @@ const Preview = () => {
             setVerificationModalOpen(false);
         }
     };
+    // --- MODIFICATION END ---
 
     // Document modal handlers
     const handlePendingClick = () => {
@@ -892,15 +880,20 @@ const Preview = () => {
                                 </FormGroup>
                             </Col>
                         </Row>
-                        <Row className="g-3 mb-4">
-                            <Col md={8}>
-                                <FormGroup className="mb-0">
-                                    <Label>Enter Account ID (min 5 chars)<span className="text-danger">*</span></Label>
-                                    <div className="d-flex align-items-center">
-                                        <div className="position-relative me-3" style={{ width: "350px" }}>
+                        
+                        {/* --- MODIFICATION START --- */}
+                        {/* Add justify-content-center to the Row */}
+                        <Row className="g-3 mb-4 justify-content-center">
+                            {/* Adjust Col size if needed, and add centering classes */}
+                            <Col md={8} lg={6} className="d-flex flex-column align-items-center">
+                                <FormGroup className="mb-0 w-100"> {/* Make FormGroup take full width of the centered column */}
+                                    <Label className="text-center d-block">Enter Account ID (min 5 chars)<span className="text-danger">*</span></Label> {/* Center the label */}
+                                    {/* Add justify-content-center to center the input group and buttons */}
+                                    <div className="d-flex align-items-center justify-content-center">
+                                        <div className="position-relative me-2" style={{ width: "250px" }}> {/* Adjusted width and margin */}
                                             <Input type="text" value={accountSearchInput} onChange={handleAccountSearchChange} placeholder="Enter Account ID" disabled={!section} />
                                             {showSuggestions && (
-                                                <ListGroup className="position-absolute w-100" style={{ zIndex: 1000, maxHeight: "200px", overflowY: "auto" }}>
+                                                <ListGroup className="position-absolute w-100" style={{ zIndex: 1000, maxHeight: "200px", overflowY: "auto", textAlign: 'left' }}> {/* Ensure suggestions are left-aligned */}
                                                     {loading ? ( <ListGroupItem>Loading...</ListGroupItem> ) :
                                                     accountSuggestions.length > 0 ? ( accountSuggestions.map((acc) => (
                                                         <ListGroupItem key={acc.account_id} action onClick={() => handleAccountSuggestionClick(acc.account_id)}>{acc.account_id}</ListGroupItem>
@@ -908,14 +901,16 @@ const Preview = () => {
                                                 </ListGroup>
                                             )}
                                         </div>
-                                        <Button color="primary" className="rounded px-4" style={{ minWidth: "120px" }} onClick={handleSearch} disabled={!account_id || loading}>
+                                        <Button color="primary" className="rounded px-3" style={{ minWidth: "100px" }} onClick={handleSearch} disabled={!account_id || loading}> {/* Adjusted padding/width */}
                                             {loading ? <><Spinner size="sm" className="me-1" /> Searching...</> : <><i className="ri-search-line me-1"></i> Search</>}
                                         </Button>
-                                        <Button color="light" className="rounded px-4 ms-2" style={{ minWidth: "120px" }} onClick={handleResetFilters}>Reset</Button>
+                                        <Button color="light" className="rounded px-3 ms-2" style={{ minWidth: "100px" }} onClick={handleResetFilters}>Reset</Button> {/* Adjusted padding/width */}
                                     </div>
                                 </FormGroup>
                             </Col>
                         </Row>
+                        {/* --- MODIFICATION END --- */}
+
                         <Row>
                             <Col lg={12}>
                                 <div className="table-responsive">
@@ -940,22 +935,32 @@ const Preview = () => {
                     </CardBody>
                 </Card>
 
+                {/* --- MODIFICATION START: Collapsible Report Card --- */}
                 <Card>
-                    <CardHeader className="bg-light p-3 position-relative" style={{ borderTop: "3px solid #405189" }}>
+                    <CardHeader 
+                        className="bg-light p-3 position-relative d-flex justify-content-between align-items-center" 
+                        style={{ borderTop: "3px solid #405189", cursor: "pointer" }}
+                        onClick={toggleReportCollapse}
+                    >
                         <h5 className="mb-0">My Report</h5>
+                        <Button color="link" className="p-0" onClick={toggleReportCollapse} style={{ textDecoration: 'none' }} aria-expanded={!isReportCollapsed} aria-controls="report-collapse">
+                            <i className={`ri-${isReportCollapsed ? 'add' : 'subtract'}-line fs-5 text-dark`}></i>
+                        </Button>
                     </CardHeader>
-                    <CardBody>
-                        {reportLoading ?
-                            (<div className="text-center p-4"><Spinner size="lg" color="primary" /><h6 className="mt-2">Loading Report...</h6></div>)
-                            : reportData.length > 0 ?
-                                (<div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '15px' }}><Row>{reportData.map((report) => (<ReportCard key={report.account_id} report={report} />))}</Row></div>)
-                                : (<div className="text-center p-5"><div className="mb-3"><i className="ri-file-text-line" style={{ fontSize: "4rem", color: "#adb5bd" }}></i></div><h4>No Report Data Found</h4><p className="text-muted">There is currently no report data associated with your account.</p></div>)}
-                    </CardBody>
+                    <Collapse isOpen={!isReportCollapsed} id="report-collapse">
+                        <CardBody>
+                            {reportLoading ?
+                                (<div className="text-center p-4"><Spinner size="lg" color="primary" /><h6 className="mt-2">Loading Report...</h6></div>)
+                                : reportData.length > 0 ?
+                                    (<div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '15px' }}><Row>{reportData.map((report) => (<ReportCard key={report.account_id} report={report} />))}</Row></div>)
+                                    : (<div className="text-center p-5"><div className="mb-3"><i className="ri-file-text-line" style={{ fontSize: "4rem", color: "#adb5bd" }}></i></div><h4>No Report Data Found</h4><p className="text-muted">There is currently no report data associated with your account.</p></div>)}
+                        </CardBody>
+                    </Collapse>
                 </Card>
+                {/* --- MODIFICATION END --- */}
 
-                {/* ################################################# */}
-                {/* --- NEW VERIFICATION INPUT MODAL --- */}
-                {/* ################################################# */}
+
+                {/* Verification Modal - MODIFIED */}
                 <Modal isOpen={verificationModalOpen} toggle={() => setVerificationModalOpen(false)} size="lg" centered backdrop="static">
                     <ModalHeader toggle={() => setVerificationModalOpen(false)} className="bg-primary text-white">
                         Document Verification for: {consumerToVerify?.consumer_name || 'N/A'}
@@ -966,46 +971,18 @@ const Preview = () => {
                             <Row className="g-3">
                                 <Col md={6}>
                                     <FormGroup>
-                                        {/* --- MODIFIED: Removed asterisk --- */}
+                                        {/* REMOVED: Mandatory span */}
                                         <Label>No. of Pages</Label>
                                         <Input type="number" value={noOfPages} onChange={(e) => setNoOfPages(e.target.value)} placeholder="Enter page count" min="1" />
                                     </FormGroup>
                                 </Col>
                                 <Col md={6}>
                                     <FormGroup>
-                                        {/* --- MODIFIED: Removed asterisk --- */}
+                                        {/* REMOVED: Mandatory span */}
                                         <Label>File Number</Label>
                                         <Input type="text" value={fileNumber} onChange={(e) => setFileNumber(e.target.value)} placeholder="Enter file reference number" />
                                     </FormGroup>
                                 </Col>
-                                {/* <Col md={6}>
-                                    <FormGroup>
-                                        <Label>Contractor Name<span className="text-danger">*</span></Label>
-                                        <Input type="text" value={contractorName} onChange={(e) => setContractorName(e.target.value)} placeholder="Enter contractor's name" />
-                                    </FormGroup>
-                                </Col>
-                                <Col md={6}>
-                                    <FormGroup>
-                                        <Label>Approved By<span className="text-danger">*</span></Label>
-                                        <Input type="text" value={approvedBy} onChange={(e) => setApprovedBy(e.target.value)} placeholder="Enter approver's name" />
-                                            
-                                        
-                                    </FormGroup>
-                                </Col>
-                                <Col md={6}>
-                                    <FormGroup>
-                                        <Label>Category<span className="text-danger">*</span></Label>
-                                        <Input type="select" value={category} onChange={(e) => setCategory(e.target.value)}>
-                                            <option value="">Select Category</option>
-                                            <option value="Agriculture">Agriculture</option>
-                                            <option value="Industry">Industry</option>
-                                            <option value="Rural">Rural</option>
-                                            <option value="Town">Town</option>
-                                            <option value="Domestic">Domestic</option>
-                                            <option value="Others">Others</option>
-                                        </Input>
-                                    </FormGroup>
-                                </Col> */}
                             </Row>
                         </Form>
                     </ModalBody>
@@ -1014,7 +991,7 @@ const Preview = () => {
                         <Button 
                             color="success" 
                             onClick={handleModalProceed} 
-                            // --- MODIFIED: Removed field checks from disabled prop ---
+                            // UPDATED: Removed validation from disabled check
                             disabled={isProcessingModal}
                         >
                             {isProcessingModal ? <><Spinner size="sm" className="me-1" /> Processing...</> : 'Save & Proceed'}
