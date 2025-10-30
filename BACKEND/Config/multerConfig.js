@@ -1,7 +1,7 @@
 import multer from "multer";
 import fs from "fs";
 
-const networkFolder = "Z:\\192.168.23.15\\File_Uplode";
+const networkFolder = "E:\Dms\scanDocument";
 const indentNetworkFolder = "Z:\\192.168.23.15\\IndentFile";
 
 

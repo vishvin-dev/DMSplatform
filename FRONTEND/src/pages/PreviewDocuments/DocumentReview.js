@@ -593,7 +593,9 @@ const DocumentReview = () => {
     const [verificationDetails, setVerificationDetails] = useState(null);
 
 
-    const SCANNER_ENDPOINT = "http://192.168.23.94:5000";
+    const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
+
+    
 
     // NEW EFFECT HOOK: Load verification data from session storage
     useEffect(() => {
