@@ -433,12 +433,12 @@ const Preview = () => {
 
     // --- STEP 2: VALIDATE, STORE, AND PROCEED (from Modal) ---
     const handleModalProceed = async () => {
-        // --- 1. Validate Fields ---
-        if (!noOfPages || !fileNumber || !contractorName || !approvedBy || !category) {
-            setResponse('Please fill all the verification fields.');
-            setErrorModal(true);
-            return;
-        }
+        // --- 1. Validate Fields (REMOVED as per request) ---
+        // if (!noOfPages || !fileNumber || !contractorName || !approvedBy || !category) {
+        //     setResponse('Please fill all the verification fields.');
+        //     setErrorModal(true);
+        //     return;
+        // }
         
         setIsProcessingModal(true);
         const consumerData = consumerToVerify;
@@ -684,7 +684,7 @@ const Preview = () => {
                 </Card>
 
                 {/* ################################################# */}
-                {/* --- NEW VERIFICATION INPUT MODAL --- */}
+                {/* --- NEW VERIFICATION INPUT MODAL (MODIFIED) --- */}
                 {/* ################################################# */}
                 <Modal isOpen={verificationModalOpen} toggle={() => setVerificationModalOpen(false)} size="lg" centered backdrop="static">
                     <ModalHeader toggle={() => setVerificationModalOpen(false)} className="bg-primary text-white">
@@ -696,17 +696,19 @@ const Preview = () => {
                             <Row className="g-3">
                                 <Col md={6}>
                                     <FormGroup>
-                                        <Label>No. of Pages<span className="text-danger">*</span></Label>
+                                        {/* --- MODIFIED: Removed asterisk --- */}
+                                        <Label>No. of Pages</Label>
                                         <Input type="number" value={noOfPages} onChange={(e) => setNoOfPages(e.target.value)} placeholder="Enter page count" min="1" />
                                     </FormGroup>
                                 </Col>
                                 <Col md={6}>
                                     <FormGroup>
-                                        <Label>File Number<span className="text-danger">*</span></Label>
+                                        {/* --- MODIFIED: Removed asterisk --- */}
+                                        <Label>File Number</Label>
                                         <Input type="text" value={fileNumber} onChange={(e) => setFileNumber(e.target.value)} placeholder="Enter file reference number" />
                                     </FormGroup>
                                 </Col>
-                                <Col md={6}>
+                                {/* <Col md={6}>
                                     <FormGroup>
                                         <Label>Contractor Name<span className="text-danger">*</span></Label>
                                         <Input type="text" value={contractorName} onChange={(e) => setContractorName(e.target.value)} placeholder="Enter contractor's name" />
@@ -716,7 +718,7 @@ const Preview = () => {
                                     <FormGroup>
                                         <Label>Approved By<span className="text-danger">*</span></Label>
                                         <Input type="text" value={approvedBy} onChange={(e) => setApprovedBy(e.target.value)} placeholder="Enter approver's name" />
-                                            
+                                        
                                         
                                     </FormGroup>
                                 </Col>
@@ -733,7 +735,7 @@ const Preview = () => {
                                             <option value="Other">Others</option>
                                         </Input>
                                     </FormGroup>
-                                </Col>
+                                </Col> */}
                             </Row>
                         </Form>
                     </ModalBody>
@@ -742,7 +744,8 @@ const Preview = () => {
                         <Button 
                             color="success" 
                             onClick={handleModalProceed} 
-                            disabled={isProcessingModal || !noOfPages || !fileNumber || !contractorName || !approvedBy || !category}
+                            // --- MODIFIED: Removed field checks from disabled prop ---
+                            disabled={isProcessingModal}
                         >
                             {isProcessingModal ? <><Spinner size="sm" className="me-1" /> Processing...</> : 'Save & Proceed'}
                         </Button>
