@@ -595,6 +595,8 @@ const DocumentReview = () => {
 
     const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
 
+    
+
     // NEW EFFECT HOOK: Load verification data from session storage
     useEffect(() => {
         try {
