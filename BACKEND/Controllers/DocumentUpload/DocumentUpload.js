@@ -1,7 +1,7 @@
 import path from "path";
 import fs from "fs";
 import mime from "mime-types"
-import { getDivisions, getSubDivisions, getSections, getRoles, getDocumentLists, getCircle } from "../../models/userModel.js"
+import {getZone, getDivisions, getSubDivisions, getSections, getRoles, getDocumentLists, getCircle } from "../../models/userModel.js"
 import {
     getAccountId, getConsumerDetails, postFileUpload, getDocumentCategory, getDocumentsView, getSingleDocumentById, getSingleDocumentByIdByDraft, postFileMetaOnly, insertDocumentVersion
     , getLatestVersion, getNextVersionLabel, markOldVersionNotLatest, updateDocumentStatus, resolveRejection, saveDraft, fetchDraftDocumentByAccountId, finalizeDrafts
@@ -12,6 +12,7 @@ import {
 export const DocumentUpload = async (req, res) => {
     const {
         flagId,
+        zone_code,
         circle_code,
         div_code,
         sd_code,
@@ -25,8 +26,11 @@ export const DocumentUpload = async (req, res) => {
         if (flagId === 1) {
             results = await getDivisions(circle_code);
         }
+        else if (flagId === 13) {
+            results = await getZone();
+        }
         else if (flagId === 11) {
-            results = await getCircle();
+            results = await getCircle(zone_code);
         } else if (flagId === 2) {
             if (!div_code) return res.status(400).json({ error: "div_code is required" });
             results = await getSubDivisions(div_code);

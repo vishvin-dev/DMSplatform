@@ -55,7 +55,7 @@
 // C:\Users\Praveen>"C:\Program Files\NAPS2\NAPS2.Console.exe" --driver twain --device "Canon MF460 ser_6CF2D8AE9F40" --output "E:\DmsscanDocument\ScannedFile_2025-10-29T11-10-00.jpg" --force
 
 
-// "C:\Program Files\NAPS2\NAPS2.Console.exe" --driver twain --device "Canon MF460 ser_6CF2D8AE9F40" --source feeder --output "E:\Dms\scanDocument\ScannedBatch_2025-10-29T11-45-00.pdf" --forced
+
 
 
 
@@ -73,7 +73,7 @@ const config = {
   defaultFormat: "pdf",
 
   // Folder where scanned files will be saved
-  outputDir: "E:\\Dms\\scanDocument",
+  outputDir: "E:\Dms\SCANDOCS",
 
   // CORS allowed origin
   socketCorsOrigin: "*",

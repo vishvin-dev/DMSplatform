@@ -77,7 +77,7 @@ export const scanDocument = async (req, res) => {
       await scanSide(scanner, frontPath, extension, jpegQuality);
       await scanSide(scanner, backPath, extension, jpegQuality);
 
-      // ⚡ At this point, watcher will process front & back separately
+      //  At this point, watcher will process front & back separately
       // → noise removal, compression, and produce encrypted PDFs.
       // We only need to MERGE those encrypted PDFs.
 

@@ -74,7 +74,6 @@ export const IndentProjectHead = async (req, res) => {
             return res.status(200).json({
                 message: "Approved IndentCount fetched successfully",
                 status: "success",
-                count: result.length,
                 result,
             });
         }
