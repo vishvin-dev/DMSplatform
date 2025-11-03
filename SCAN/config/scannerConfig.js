@@ -56,11 +56,6 @@
 
 
 
-
-
-
-import path from "path";
-
 const config = {
   // Path to NAPS2 executable
   naps2Path: "C:\\Program Files\\NAPS2\\NAPS2.Console.exe",
@@ -73,7 +68,7 @@ const config = {
   defaultFormat: "pdf",
 
   // Folder where scanned files will be saved
-  outputDir: "E:\Dms\SCANDOCS",
+  outputDir: "E:\\Dms\\SCANDOCS",
 
   // CORS allowed origin
   socketCorsOrigin: "*",

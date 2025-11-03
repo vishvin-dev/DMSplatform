@@ -1,5 +1,5 @@
 import bcrypt from "bcrypt";
-import { insertUser, insertUserZoneAccess, findUserByEmail, getDivisions, getSubDivisions, getSections, getGender, getMaritalStatus, getRoles, getCircle } from "../../models/userModel.js";
+import { insertUser, insertUserZoneAccess, findUserByEmail, getDivisions, getSubDivisions, getSections, getGender, getMaritalStatus, getRoles, getCircle, getZone } from "../../models/userModel.js";
 
 export const useCreations = async (req, res) => {
     try {
@@ -40,7 +40,7 @@ export const useCreations = async (req, res) => {
 
 
 export const getUserDropDowns = async (req, res) => {
-    const { flagId, circle_code, div_code, sd_code } = req.body;
+    const { flagId, circle_code, div_code, sd_code,zone_code } = req.body;
 
     try {
         let results;
@@ -62,7 +62,10 @@ export const getUserDropDowns = async (req, res) => {
             results = await getRoles();
         }
           else if (flagId == 7) {
-            results = await getCircle();
+            results = await getCircle(zone_code);
+        }
+        else if (flagId == 8) {
+            results = await getZone();
         } else {
             return res.status(400).json({ error: "Invalid flagId" });
         }

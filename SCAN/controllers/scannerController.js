@@ -149,6 +149,74 @@ export const scanDocument = async (req, res) => {
 };
 
 
+// =====================
+// Bulk Scan (ADF – multi-page feed)
+// =====================
+export const bulkScan = async (req, res) => {
+  try {
+    const { deviceName, fileName, format } = req.body;
+    const scanner = deviceName || config.defaultScanner;
+    const extension = format ? format.toLowerCase() : config.defaultFormat;
+
+    if (!scanner) {
+      return res.status(400).json({ error: "No scanner specified" });
+    }
+
+    // Create timestamped file name
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const safeFileName = fileName || `ScannedBatch_${timestamp}.${extension}`;
+    const outputPath = path.join(config.outputDir, safeFileName);
+
+    // Make sure output folder exists
+    const outputDir = path.dirname(outputPath);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+
+    // Command arguments for ADF (Automatic Document Feeder)
+    const args = [
+      "--driver", "twain",
+      "--device", scanner,
+      "--source", "feeder",         //  tells scanner to use ADF
+      "--output", outputPath,
+      "--force",
+    ];
+
+    console.log("Running NAPS2 bulk scan:", config.naps2Path, args.join(" "));
+
+    execFile(config.naps2Path, args, async (error, stdout, stderr) => {
+      if (error) {
+        console.error("Bulk scan error:", stderr);
+        return res.status(500).json({ error: stderr });
+      }
+
+      // Optional wait to ensure file is completely written
+      const waitForFile = (file) =>
+        new Promise((resolve, reject) => {
+          const check = setInterval(() => {
+            if (fs.existsSync(file)) {
+              clearInterval(check);
+              resolve(true);
+            }
+          }, config.fileStabilityCheck.pollMs);
+          setTimeout(() => reject(new Error("Timeout waiting for scan file")), config.fileStabilityCheck.pollMs * config.fileStabilityCheck.attempts);
+        });
+
+      await waitForFile(outputPath);
+
+      console.log("Bulk scan complete:", outputPath);
+      return res.json({
+        message: "Bulk scan completed successfully",
+        file: outputPath,
+      });
+    });
+  } catch (err) {
+    console.error("Bulk scan exception:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
 // const scanSide = (scanner, outputPath, extension, jpegQuality) => {
 //   return new Promise((resolve, reject) => {
 //     const args = [

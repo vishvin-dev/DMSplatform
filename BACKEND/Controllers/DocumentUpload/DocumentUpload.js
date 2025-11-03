@@ -26,7 +26,7 @@ export const DocumentUpload = async (req, res) => {
         if (flagId === 1) {
             results = await getDivisions(circle_code);
         }
-        else if (flagId === 13) {
+        else if (flagId === 14) {
             results = await getZone();
         }
         else if (flagId === 11) {

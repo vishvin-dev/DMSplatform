@@ -281,7 +281,7 @@ export const getMenuPagesByRole = async (roleId) => {
 
 export const getCircle = async (zone_code) => {
     const [result] = await pool.execute(
-          `SELECT circle, circle_code FROM zone_codes WHERE zone_code = ?;`,
+          `SELECT DISTINCT circle, circle_code FROM zone_codes WHERE zone_code = ?;`,
         [zone_code]
     );
     return result;
@@ -289,7 +289,7 @@ export const getCircle = async (zone_code) => {
 
 export const getZone=async()=>{
     const [result]=await pool.execute(
-        `SELECT zone, zone_code  FROM zone_codes ORDER BY zone;`
+        `SELECT DISTINCT zone, zone_code  FROM zone_codes ORDER BY ZONE;;`
     )
     return result;
 }
