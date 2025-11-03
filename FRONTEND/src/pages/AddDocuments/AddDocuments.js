@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Button, Card, CardBody, CardHeader, Col, Container, ModalBody, ModalFooter, ModalHeader, Row, Label,
@@ -6,17 +7,16 @@ import {
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
-import { getDocumentDropdowns, postDocumentUpload, qcReviewed, view, Scanning } from '../../helpers/fakebackend_helper';
+import { getDocumentDropdowns, postDocumentUpload, qcReviewed, view, Scanning, getAllUserDropDownss } from '../../helpers/fakebackend_helper';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
 import { io } from "socket.io-client";
 import '../AddDocuments/AddDocuments.css';
 import axios from 'axios';
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB in bytes
+const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
 const DocumentManagement = () => {
-    // Modal states
     const [modalOpen, setModalOpen] = useState(false);
     const [statusModalOpen, setStatusModalOpen] = useState(false);
     const [currentStatus, setCurrentStatus] = useState('');
@@ -28,11 +28,13 @@ const DocumentManagement = () => {
     const [errorModal, setErrorModal] = useState(false);
     const [response, setResponse] = useState('');
 
-    // Filter states
+    const [circle, setCircle] = useState('');
     const [division, setDivision] = useState('');
     const [subDivision, setSubDivision] = useState('');
     const [section, setSection] = useState('');
     const [userName, setUserName] = useState("");
+    const [zoneCode, setZoneCode] = useState('');
+    const [circleOptions, setCircleOptions] = useState([]);
     const [divisionName, setDivisionName] = useState([]);
     const [subDivisions, setSubDivisions] = useState([]);
     const [sectionOptions, setSectionOptions] = useState([]);
@@ -79,10 +81,11 @@ const DocumentManagement = () => {
     const [wasAddModalOpen, setWasAddModalOpen] = useState(false);
     const [scanTimeout, setScanTimeout] = useState(null);
     const [scans, setScans] = useState([]);
+    const [userLevel, setUserLevel] = useState('');
+    const [userZoneData, setUserZoneData] = useState([]);
 
     document.title = `Document Upload | DMS`;
 
-    // Document type to field name mapping
     const getFormikFieldName = (docType) => {
         const mapping = {
             'ID proof': 'IDproof',
@@ -93,58 +96,6 @@ const DocumentManagement = () => {
         };
         return mapping[docType];
     };
-
-    // Handle document re-upload
-    // const handleReuploadSubmit = async () => {
-    //     if (!newDocumentFile || !reuploadDocument || !changeReason) {
-    //         setResponse('Please provide all required fields');
-    //         setErrorModal(true);
-    //         return;
-    //     }
-
-    //     try {
-    //         setUploadLoading(true);
-    //         const authUser = JSON.parse(sessionStorage.getItem("authUser"));
-    //         const userId = authUser?.user?.User_Id;
-
-    //         const documentName = reuploadDocument.name.split('-').pop().trim();
-
-    //         const formData = new FormData();
-    //         formData.append('flagId', '8');
-    //         formData.append('ReUploadDocumentId', reuploadDocument.DocumentId);
-    //         formData.append('ChangeReason', changeReason);
-    //         formData.append('CreatedByUser_Id', userId);
-    //         formData.append(documentName, newDocumentFile);
-    //         formData.append("Status_Id", "1");
-
-    //         const response = await postDocumentUpload(formData);
-
-    //         if (response?.status === 'success') {
-    //             setResponse(response.message || 'Document re-uploaded successfully!');
-    //             setSuccessModal(true);
-    //             await fetchRejectedDocuments();
-    //         } else {
-    //             setResponse(response?.message || 'Failed to re-upload document');
-    //             setErrorModal(true);
-    //         }
-    //     } catch (error) {
-    //         console.error('Re-upload failed:', error);
-    //         setResponse(error.response?.data?.message ||
-    //             error.message ||
-    //             'Error re-uploading document. Please try again.');
-    //         setErrorModal(true);
-    //     } finally {
-    //         setUploadLoading(false);
-    //         setShowReuploadModal(false);
-    //         setReuploadDocument(null);
-    //         setNewDocumentFile(null);
-    //         setNewDocumentPreview(null);
-    //         setReuploadOldDocPreview(null);
-    //         setChangeReason('');
-    //     }
-    // };
-
-
 
     const handleReuploadSubmit = async () => {
         if (!newDocumentFile || !reuploadDocument || !changeReason) {
@@ -159,8 +110,6 @@ const DocumentManagement = () => {
             const userId = authUser?.user?.User_Id;
 
             const documentName = reuploadDocument.name.split('-').pop().trim();
-
-            // Special handling for "Additional" documents
             const fieldName = documentName === "Additional" ? "otherDocuments" : documentName;
 
             const formData = new FormData();
@@ -168,7 +117,7 @@ const DocumentManagement = () => {
             formData.append('ReUploadDocumentId', reuploadDocument.DocumentId);
             formData.append('ChangeReason', changeReason);
             formData.append('CreatedByUser_Id', userId);
-            formData.append(fieldName, newDocumentFile); // Use the modified field name
+            formData.append(fieldName, newDocumentFile);
             formData.append("Status_Id", "1");
 
             const response = await postDocumentUpload(formData);
@@ -196,10 +145,8 @@ const DocumentManagement = () => {
             setReuploadOldDocPreview(null);
             setChangeReason('');
         }
-    }
-    
+    };
 
-    // Updated useEffect for socket connection with new-scan-processed event
     useEffect(() => {
         const socketConnection = io("http://192.168.23.58:5000", {
             transports: ["websocket", "polling"],
@@ -210,22 +157,17 @@ const DocumentManagement = () => {
             setSocket(socketConnection);
         });
 
-        // Handler for receiving processed scanned images
         socketConnection.on("new-scan-processed", (scan) => {
             console.log("📄 New scan received:", scan);
 
-            // Add to scans list for preview
             setScans((prev) => [scan, ...prev]);
 
-            // Only process if we're currently scanning and the filename matches
             if (scanningInProgress && scan.fileName === currentScanFileName) {
-                // Clear the timeout since we received the file
                 if (scanTimeout) {
                     clearTimeout(scanTimeout);
                     setScanTimeout(null);
                 }
 
-                // Create the scanned document object with the image URL
                 setScannedDocument({
                     fileName: scan.fileName,
                     imageUrl: `http://192.168.23.58:5000${scan.imageUrl}`,
@@ -233,7 +175,6 @@ const DocumentManagement = () => {
                     timestamp: scan.timestamp || new Date().toISOString()
                 });
 
-                // Stop scanning progress
                 setScanningInProgress(false);
                 setScanning(false);
                 setScanProgress(100);
@@ -266,7 +207,6 @@ const DocumentManagement = () => {
         };
     }, [scanningInProgress, currentScanFileName, currentScanDocType, scanTimeout]);
 
-    // Update your existing useEffect for cleanup
     useEffect(() => {
         return () => {
             if (newDocumentPreview?.url) {
@@ -281,7 +221,6 @@ const DocumentManagement = () => {
         };
     }, [newDocumentPreview, previewContent, socket]);
 
-    // Replace the handleStatusClick function with these:
     const handleApprovedClick = () => {
         setSelectedFile(null);
         setSelectedRejectedFile(null);
@@ -305,10 +244,8 @@ const DocumentManagement = () => {
     const handlePendingClick = () => {
         setCurrentStatus('pending');
         setStatusModalOpen(true);
-
     };
 
-    // Updated Validation Schema
     const documentSchema = Yup.object().shape({
         docType: Yup.string().required('Document type is required'),
         docName: Yup.string().required('Document name is required'),
@@ -357,14 +294,12 @@ const DocumentManagement = () => {
         return <i className="ri-file-line fs-4 text-secondary"></i>;
     };
 
-    // Updated handleRealScan function to use JPG format
     const handleRealScan = async (docType) => {
         let progressInterval;
 
         try {
             setCurrentScanDocType(docType);
 
-            // Generate unique filename with JPG extension
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const fileName = `${docType.replace(/\s+/g, '_')}_${timestamp}.jpg`;
 
@@ -382,7 +317,6 @@ const DocumentManagement = () => {
                 });
             }, 500);
 
-            // Call the scanning API with JPG format
             const scanPayload = {
                 fileName: fileName,
                 format: "jpg"
@@ -682,7 +616,6 @@ const DocumentManagement = () => {
         }
     };
 
-    // Formik form setup
     const formik = useFormik({
         initialValues: {
             docType: '',
@@ -790,40 +723,403 @@ const DocumentManagement = () => {
         }
     };
 
-    const flagIdFunction = async (flagId, setState, requestUserName, div_code, sd_code, account_id) => {
+    const fetchCircleOptions = async (zoneCode) => {
         try {
-            const params = { flagId, requestUserName, div_code, sd_code, account_id };
-            const response = await getDocumentDropdowns(params);
-            const options = response?.data || [];
-            setState(options);
+            const params = {
+                flagId: 7,
+                zone_code: zoneCode,
+                requestUserName: userName
+            };
+            const response = await getAllUserDropDownss(params);
+            if (response?.status === 'success' && response?.data) {
+                setCircleOptions(response.data);
+            } else {
+                setCircleOptions([]);
+            }
         } catch (error) {
-            console.error(`Error fetching options for flag ${flagId}:`, error.message);
+            console.error('Error fetching circle options:', error);
+            setCircleOptions([]);
         }
     };
 
-    useEffect(() => {
+    const fetchDivisionOptions = async (circleCode) => {
+        try {
+            const params = {
+                flagId: 1,
+                circle_code: circleCode,
+                requestUserName: userName
+            };
+            const response = await getAllUserDropDownss(params);
+            if (response?.status === 'success' && response?.data) {
+                setDivisionName(response.data);
+            } else {
+                setDivisionName([]);
+            }
+        } catch (error) {
+            console.error('Error fetching division options:', error);
+            setDivisionName([]);
+        }
+    };
+
+    const fetchSubDivisionOptions = async (divCode) => {
+        try {
+            const params = {
+                flagId: 2,
+                div_code: divCode,
+                requestUserName: userName
+            };
+            const response = await getAllUserDropDownss(params);
+            if (response?.status === 'success' && response?.data) {
+                setSubDivisions(response.data);
+            } else {
+                setSubDivisions([]);
+            }
+        } catch (error) {
+            console.error('Error fetching subdivision options:', error);
+            setSubDivisions([]);
+        }
+    };
+
+    const fetchSectionOptions = async (sdCode) => {
+        try {
+            const params = {
+                flagId: 3,
+                sd_code: sdCode,
+                requestUserName: userName
+            };
+            const response = await getAllUserDropDownss(params);
+            if (response?.status === 'success' && response?.data) {
+                setSectionOptions(response.data);
+            } else {
+                setSectionOptions([]);
+            }
+        } catch (error) {
+            console.error('Error fetching section options:', error);
+            setSectionOptions([]);
+        }
+    };
+
+    // Get unique values for dropdowns when user has multiple zones - FIXED VERSION
+    const getUniqueValues = (data, key) => {
+        if (!data || !Array.isArray(data)) return [];
+
+        console.log(`Getting unique values for key: ${key}`, data);
+
+        const values = data.map(item => {
+            // Handle different key mappings with proper fallbacks
+            if (key === 'circle') {
+                return item.circle || item.circle_code || '';
+            }
+            if (key === 'division') {
+                return item.division || item.div_code || '';
+            }
+            if (key === 'sub_division') {
+                return item.sub_division || item.sd_code || '';
+            }
+            if (key === 'section_office') {
+                // Make sure we're getting the section_office field
+                const sectionValue = item.section_office || item.so_code || '';
+                console.log(`Section value for item:`, {
+                    section_office: item.section_office,
+                    so_code: item.so_code,
+                    result: sectionValue
+                });
+                return sectionValue;
+            }
+            return item[key] || '';
+        }).filter(value => value && value.trim() !== '');
+
+        const uniqueValues = [...new Set(values)];
+        console.log(`Unique values for ${key}:`, uniqueValues);
+        return uniqueValues;
+    };
+
+    const getDisplayValue = (data, key) => {
+        const values = getUniqueValues(data, key);
+        return values.join(', ');
+    };
+
+    // Check if dropdown should be disabled based on user level and number of values
+    const shouldDisableDropdown = (level, values) => {
+        const levelOrder = ['zone', 'circle', 'division', 'sub_division', 'section'];
+        const userLevelIndex = levelOrder.indexOf(userLevel);
+        const dropdownLevelIndex = levelOrder.indexOf(level);
+
+        console.log(`Checking disable for ${level}:`, {
+            userLevel,
+            userLevelIndex,
+            dropdownLevelIndex,
+            valuesCount: values.length,
+            values
+        });
+
+        // If user level is higher than or equal to dropdown level, check number of values
+        if (userLevelIndex >= dropdownLevelIndex) {
+            // For section level: disable if only one value, show dropdown if multiple values
+            if (level === 'section') {
+                const shouldDisable = values.length === 1;
+                console.log(`Section level - values: ${values.length}, disable: ${shouldDisable}`);
+                return shouldDisable;
+            }
+            // For sub_division level: disable if 3 or fewer values, show dropdown if more than 3 values
+            else if (level === 'sub_division') {
+                const shouldDisable = values.length <= 3;
+                console.log(`Sub-division level - values: ${values.length}, disable: ${shouldDisable}`);
+                return shouldDisable;
+            }
+            // For other levels: always disable if user level is higher or equal
+            else {
+                console.log(`Other level (${level}) - always disable: true`);
+                return true;
+            }
+        }
+
+        console.log(`User level lower than dropdown level - disable: false`);
+        return false;
+    };
+
+    // Get display value for disabled dropdowns
+    const getDisabledDropdownValue = (level) => {
+        if (userZoneData.length === 0) return '';
+
+        const values = getUniqueValues(userZoneData,
+            level === 'circle' ? 'circle' :
+                level === 'division' ? 'division' :
+                    level === 'sub_division' ? 'sub_division' :
+                        'section_office'
+        );
+
+        return values.join(', ');
+    };
+
+    // Initialize user data and dropdowns based on user level
+    const initializeUserData = () => {
         const obj = JSON.parse(sessionStorage.getItem("authUser"));
         const usernm = obj.user.Email;
+        const userZones = obj.user.zones;
+
         setUserName(usernm);
-        flagIdFunction(1, setDivisionName, usernm);
+        setUserZoneData(userZones);
+
+        if (userZones && userZones.length > 0) {
+            const firstZone = userZones[0];
+            const userLevel = firstZone.level;
+            setUserLevel(userLevel);
+
+            // Get unique values for each level
+            const uniqueCircles = getUniqueValues(userZones, 'circle');
+            const uniqueDivisions = getUniqueValues(userZones, 'division');
+            const uniqueSubDivisions = getUniqueValues(userZones, 'sub_division');
+            const uniqueSections = getUniqueValues(userZones, 'section_office');
+
+            console.log('User Level:', userLevel);
+            console.log('Unique Circles:', uniqueCircles);
+            console.log('Unique Divisions:', uniqueDivisions);
+            console.log('Unique Sub Divisions:', uniqueSubDivisions);
+            console.log('Unique Sections:', uniqueSections);
+
+            switch (userLevel) {
+                case 'zone':
+                    // For zone level, show all dropdowns starting with circle
+                    if (firstZone.zone_code) {
+                        setZoneCode(firstZone.zone_code);
+                        fetchCircleOptions(firstZone.zone_code);
+                    }
+                    break;
+
+                case 'circle':
+                    // For circle level
+                    if (firstZone.circle_code) {
+                        setZoneCode(firstZone.zone_code);
+
+                        // Set circle options with user's circle(s)
+                        const circleOptionsData = uniqueCircles.map(circle => ({
+                            circle,
+                            circle_code: userZones.find(z => z.circle === circle)?.circle_code || circle
+                        }));
+                        setCircleOptions(circleOptionsData);
+
+                        // If only one circle, set it automatically
+                        if (uniqueCircles.length === 1) {
+                            setCircle(circleOptionsData[0].circle_code);
+                            fetchDivisionOptions(circleOptionsData[0].circle_code);
+                        }
+                    }
+                    break;
+
+                case 'division':
+                    // For division level
+                    if (firstZone.div_code) {
+                        setZoneCode(firstZone.zone_code);
+
+                        // Set circle and division options
+                        const circleOptionsData = uniqueCircles.map(circle => ({
+                            circle,
+                            circle_code: userZones.find(z => z.circle === circle)?.circle_code || circle
+                        }));
+                        setCircleOptions(circleOptionsData);
+
+                        const divisionOptionsData = uniqueDivisions.map(division => ({
+                            division,
+                            div_code: userZones.find(z => z.division === division)?.div_code || division
+                        }));
+                        setDivisionName(divisionOptionsData);
+
+                        // If only one circle and division, set them automatically
+                        if (uniqueCircles.length === 1) {
+                            setCircle(circleOptionsData[0].circle_code);
+                        }
+                        if (uniqueDivisions.length === 1) {
+                            setDivision(divisionOptionsData[0].div_code);
+                            fetchSubDivisionOptions(divisionOptionsData[0].div_code);
+                        }
+                    }
+                    break;
+
+                case 'sub_division':
+                    // For sub-division level
+                    if (firstZone.sd_code) {
+                        setZoneCode(firstZone.zone_code);
+
+                        // Set circle, division, and sub-division options
+                        const circleOptionsData = uniqueCircles.map(circle => ({
+                            circle,
+                            circle_code: userZones.find(z => z.circle === circle)?.circle_code || circle
+                        }));
+                        setCircleOptions(circleOptionsData);
+
+                        const divisionOptionsData = uniqueDivisions.map(division => ({
+                            division,
+                            div_code: userZones.find(z => z.division === division)?.div_code || division
+                        }));
+                        setDivisionName(divisionOptionsData);
+
+                        const subDivisionOptionsData = uniqueSubDivisions.map(sub_division => ({
+                            sub_division,
+                            sd_code: userZones.find(z => z.sub_division === sub_division)?.sd_code || sub_division
+                        }));
+                        setSubDivisions(subDivisionOptionsData);
+
+                        // If only one value, set it automatically
+                        if (uniqueCircles.length === 1) {
+                            setCircle(circleOptionsData[0].circle_code);
+                        }
+                        if (uniqueDivisions.length === 1) {
+                            setDivision(divisionOptionsData[0].div_code);
+                        }
+                        if (uniqueSubDivisions.length === 1) {
+                            setSubDivision(subDivisionOptionsData[0].sd_code);
+                            fetchSectionOptions(subDivisionOptionsData[0].sd_code);
+                        }
+                    }
+                    break;
+
+                case 'section':
+                    // For section level
+                    if (firstZone.so_code) {
+                        setZoneCode(firstZone.zone_code);
+
+                        // Set all options
+                        const circleOptionsData = uniqueCircles.map(circle => ({
+                            circle,
+                            circle_code: userZones.find(z => z.circle === circle)?.circle_code || circle
+                        }));
+                        setCircleOptions(circleOptionsData);
+
+                        const divisionOptionsData = uniqueDivisions.map(division => ({
+                            division,
+                            div_code: userZones.find(z => z.division === division)?.div_code || division
+                        }));
+                        setDivisionName(divisionOptionsData);
+
+                        const subDivisionOptionsData = uniqueSubDivisions.map(sub_division => ({
+                            sub_division,
+                            sd_code: userZones.find(z => z.sub_division === sub_division)?.sd_code || sub_division
+                        }));
+                        setSubDivisions(subDivisionOptionsData);
+
+                        // For sections, create proper options from ALL user zones
+                        const sectionOptionsData = userZones.map(zone => ({
+                            section_office: zone.section_office,
+                            so_code: zone.so_code
+                        }));
+                        setSectionOptions(sectionOptionsData);
+
+                        console.log('Section options data:', sectionOptionsData);
+
+                        // If only one value, set it automatically
+                        if (uniqueCircles.length === 1) {
+                            setCircle(circleOptionsData[0].circle_code);
+                        }
+                        if (uniqueDivisions.length === 1) {
+                            setDivision(divisionOptionsData[0].div_code);
+                        }
+                        if (uniqueSubDivisions.length === 1) {
+                            setSubDivision(subDivisionOptionsData[0].sd_code);
+                        }
+                        // Don't auto-set section if multiple sections exist
+                        if (uniqueSections.length === 1) {
+                            setSection(sectionOptionsData[0].so_code);
+                        }
+                    }
+                    break;
+
+                default:
+                    // Default behavior for zone level
+                    if (firstZone.zone_code) {
+                        setZoneCode(firstZone.zone_code);
+                        fetchCircleOptions(firstZone.zone_code);
+                    }
+                    break;
+            }
+        }
+
+        const flagIdFunction = async (flagId, setState, requestUserName) => {
+            try {
+                const params = { flagId, requestUserName };
+                const response = await getDocumentDropdowns(params);
+                const options = response?.data || [];
+                setState(options);
+            } catch (error) {
+                console.error(`Error fetching options for flag ${flagId}:`, error.message);
+            }
+        };
+
         flagIdFunction(6, setRoles, usernm);
         flagIdFunction(7, setDocumentCategory, usernm);
 
         fetchDocumentCounts();
+    };
+
+    useEffect(() => {
+        initializeUserData();
     }, []);
+
+    const handleCircleChange = async (e) => {
+        const selectedCircleCode = e.target.value;
+        setCircle(selectedCircleCode);
+        setDivision('');
+        setSubDivision('');
+        setSection('');
+        setDivisionName([]);
+        setSubDivisions([]);
+        setSectionOptions([]);
+
+        if (selectedCircleCode) {
+            await fetchDivisionOptions(selectedCircleCode);
+        }
+    };
 
     const handleDivisionChange = async (e) => {
         const selectedDivCode = e.target.value;
         setDivision(selectedDivCode);
         setSubDivision('');
         setSection('');
-        setSection('');
         setSubDivisions([]);
-        setSection('');
         setSectionOptions([]);
 
         if (selectedDivCode) {
-            await flagIdFunction(2, setSubDivisions, userName, selectedDivCode);
+            await fetchSubDivisionOptions(selectedDivCode);
         }
     };
 
@@ -834,7 +1130,7 @@ const DocumentManagement = () => {
         setSectionOptions([]);
 
         if (selectedSdCode) {
-            await flagIdFunction(3, setSectionOptions, userName, null, selectedSdCode);
+            await fetchSectionOptions(selectedSdCode);
         }
     };
 
@@ -957,15 +1253,12 @@ const DocumentManagement = () => {
     };
 
     const handleResetFilters = () => {
-        setDivision('');
-        setSubDivision('');
-        setSection('');
+        // Reset to initial user data based on user level
+        initializeUserData();
         setAccountId('');
         setAccountSearchInput('');
         setSearchResults([]);
         setHasSearched(false);
-        setSubDivisions([]);
-        setSectionOptions([]);
     };
 
     const handleAddDocument = () => {
@@ -1005,6 +1298,118 @@ const DocumentManagement = () => {
         ));
     };
 
+    // Get unique values count for a specific level
+    const getUniqueValuesCount = (level) => {
+        const key = level === 'circle' ? 'circle' :
+            level === 'division' ? 'division' :
+                level === 'sub_division' ? 'sub_division' :
+                    'section_office';
+
+        return getUniqueValues(userZoneData, key).length;
+    };
+
+    // Render dropdown or disabled field based on user level and value count
+    const renderLocationField = (level, label, value, onChange, options, disabledByLevel) => {
+        const uniqueValues = getUniqueValues(userZoneData,
+            level === 'circle' ? 'circle' :
+                level === 'division' ? 'division' :
+                    level === 'sub_division' ? 'sub_division' :
+                        'section_office'
+        );
+
+        const shouldDisable = shouldDisableDropdown(level, uniqueValues);
+
+        console.log(`Rendering ${level}:`, {
+            uniqueValues,
+            shouldDisable,
+            optionsCount: options.length,
+            userLevel,
+            disabledByLevel
+        });
+
+        // SPECIAL CASE: If user is section level and has multiple sections, always show dropdown
+        if (userLevel === 'section' && level === 'section' && uniqueValues.length > 1) {
+            console.log('Special case: Section level user with multiple sections - showing dropdown');
+            return (
+                <Col md={3}>
+                    <FormGroup>
+                        <Label>{label}<span className="text-danger">*</span></Label>
+                        <Input
+                            type="select"
+                            value={value}
+                            onChange={onChange}
+                            disabled={!subDivision} // Only disable if no sub-division selected
+                        >
+                            <option value="">Select {label}</option>
+                            {options.map(option => {
+                                const displayValue = option.section_office;
+                                const codeValue = option.so_code;
+
+                                return (
+                                    <option key={codeValue} value={codeValue}>
+                                        {displayValue}
+                                    </option>
+                                );
+                            })}
+                        </Input>
+                    </FormGroup>
+                </Col>
+            );
+        }
+
+        if (shouldDisable) {
+            // Show disabled text field with comma-separated values
+            return (
+                <Col md={3}>
+                    <FormGroup>
+                        <Label>{label}<span className="text-danger">*</span></Label>
+                        <Input
+                            type="text"
+                            value={getDisabledDropdownValue(level)}
+                            disabled
+                            className="bg-light"
+                        />
+                    </FormGroup>
+                </Col>
+            );
+        } else {
+            // Show normal dropdown
+            const isDisabled = disabledByLevel || (level === 'division' && !circle) ||
+                (level === 'sub_division' && !division) ||
+                (level === 'section' && !subDivision);
+
+            return (
+                <Col md={3}>
+                    <FormGroup>
+                        <Label>{label}<span className="text-danger">*</span></Label>
+                        <Input
+                            type="select"
+                            value={value}
+                            onChange={onChange}
+                            disabled={isDisabled}
+                        >
+                            <option value="">Select {label}</option>
+                            {options.map(option => {
+                                const displayValue = option[level === 'circle' ? 'circle' :
+                                    level === 'division' ? 'division' :
+                                        level === 'sub_division' ? 'sub_division' : 'section_office'];
+                                const codeValue = option[level === 'circle' ? 'circle_code' :
+                                    level === 'division' ? 'div_code' :
+                                        level === 'sub_division' ? 'sd_code' : 'so_code'];
+
+                                return (
+                                    <option key={codeValue} value={codeValue}>
+                                        {displayValue}
+                                    </option>
+                                );
+                            })}
+                        </Input>
+                    </FormGroup>
+                </Col>
+            );
+        }
+    };
+
     return (
         <div className="page-content">
             <BreadCrumb title="Document Manual Upload" pageTitle="DMS" />
@@ -1021,7 +1426,6 @@ const DocumentManagement = () => {
                     errorMsg={response || 'An error occurred'}
                 />
 
-                {/* Scan Document Modal with Image Preview */}
                 <Modal isOpen={showScanModal} centered backdrop="static" size="lg">
                     <ModalHeader className="bg-primary text-white p-3" toggle={() => {
                         setShowScanModal(false);
@@ -1180,7 +1584,6 @@ const DocumentManagement = () => {
                                             const fieldName = getFormikFieldName(scannedDocument.docType);
 
                                             if (fieldName) {
-                                                // Directly set image URL instead of creating a File
                                                 formik.setFieldValue(fieldName, {
                                                     url: scannedDocument.imageUrl,
                                                     name: scannedDocument.fileName,
@@ -1197,7 +1600,6 @@ const DocumentManagement = () => {
                                                 });
                                             }
 
-                                            // Reset scan state
                                             setShowScanModal(false);
                                             setScannedDocument(null);
                                             setScanningInProgress(false);
@@ -1245,90 +1647,78 @@ const DocumentManagement = () => {
                                 <Row className="g-4 mb-3">
                                     <Col sm={12}>
                                         <Row>
-                                            <Col md={3}>
-                                                <FormGroup>
-                                                    <Label>Division<span className="text-danger">*</span></Label>
-                                                    <Input
-                                                        type="select"
-                                                        value={division}
-                                                        onChange={handleDivisionChange}
-                                                    >
-                                                        <option value="">Select Divisions</option>
-                                                        {divisionName.map(div => (
-                                                            <option key={div.div_code} value={div.div_code}>{div.division}</option>
-                                                        ))}
-                                                    </Input>
-                                                </FormGroup>
-                                            </Col>
+                                            {/* Circle Dropdown */}
+                                            {renderLocationField(
+                                                'circle',
+                                                'Circle',
+                                                circle,
+                                                handleCircleChange,
+                                                circleOptions,
+                                                false
+                                            )}
 
-                                            <Col md={3}>
-                                                <FormGroup>
-                                                    <Label>Sub Division<span className="text-danger">*</span></Label>
-                                                    <Input
-                                                        type="select"
-                                                        value={subDivision}
-                                                        onChange={handleSubDivisionChange}
-                                                        disabled={!division}
-                                                    >
-                                                        <option value="">All Sub Divisions</option>
-                                                        {subDivisions.map(subDiv => (
-                                                            <option key={subDiv.sd_code} value={subDiv.sd_code}>
-                                                                {subDiv.sub_division}
-                                                            </option>
-                                                        ))}
-                                                    </Input>
-                                                </FormGroup>
-                                            </Col>
+                                            {/* Division Dropdown */}
+                                            {renderLocationField(
+                                                'division',
+                                                'Division',
+                                                division,
+                                                handleDivisionChange,
+                                                divisionName,
+                                                shouldDisableDropdown('circle', getUniqueValues(userZoneData, 'circle'))
+                                            )}
 
-                                            <Col md={3}>
-                                                <FormGroup>
-                                                    <Label>Section<span className="text-danger">*</span></Label>
-                                                    <Input
-                                                        type="select"
-                                                        value={section}
-                                                        onChange={(e) => setSection(e.target.value)}
-                                                        disabled={!subDivision}
-                                                    >
-                                                        <option value="">All Sections</option>
-                                                        {sectionOptions.map(sec => (
-                                                            <option key={sec.so_code} value={sec.so_code}>
-                                                                {sec.section_office}
-                                                            </option>
-                                                        ))}
-                                                    </Input>
-                                                </FormGroup>
-                                            </Col>
-                                            <Col md={3}>
-                                                <FormGroup>
-                                                    <Label>Enter Account ID (min 5 chars)<span className="text-danger">*</span></Label>
-                                                    <Input
-                                                        type="text"
-                                                        value={accountSearchInput}
-                                                        onChange={handleAccountSearchChange}
-                                                        placeholder="Enter Account ID"
-                                                    />
-                                                    {showSuggestions && (
-                                                        <ul style={{ border: '1px solid #ccc', marginTop: '5px', padding: '5px', listStyle: 'none' }}>
-                                                            {loading ? (
-                                                                <li style={{ color: 'blue', fontStyle: 'italic' }}>Loading...</li>
-                                                            ) : accountSuggestions.length > 0 ? (
-                                                                accountSuggestions.map(acc => (
-                                                                    <li
-                                                                        key={acc.account_id}
-                                                                        style={{ cursor: 'pointer', padding: '2px 0' }}
-                                                                        onClick={() => handleAccountSuggestionClick(acc.account_id)}
-                                                                    >
-                                                                        {acc.account_id}
-                                                                    </li>
-                                                                ))
-                                                            ) : (
-                                                                <li style={{ color: 'red', fontStyle: 'italic' }}>No Data Found</li>
-                                                            )}
-                                                        </ul>
-                                                    )}
-                                                </FormGroup>
-                                            </Col>
+                                            {/* Sub Division Dropdown */}
+                                            {renderLocationField(
+                                                'sub_division',
+                                                'Sub Division',
+                                                subDivision,
+                                                handleSubDivisionChange,
+                                                subDivisions,
+                                                shouldDisableDropdown('division', getUniqueValues(userZoneData, 'division'))
+                                            )}
+
+                                            {/* Section Dropdown */}
+                                            {renderLocationField(
+                                                'section',
+                                                'Section',
+                                                section,
+                                                (e) => setSection(e.target.value),
+                                                sectionOptions,
+                                                shouldDisableDropdown('sub_division', getUniqueValues(userZoneData, 'sub_division'))
+                                            )}
                                         </Row>
+                                    </Col>
+                                </Row>
+                                <Row className="g-4 mb-3">
+                                    <Col md={4}>
+                                        <FormGroup>
+                                            <Label>Enter Account ID (min 5 chars)<span className="text-danger">*</span></Label>
+                                            <Input
+                                                type="text"
+                                                value={accountSearchInput}
+                                                onChange={handleAccountSearchChange}
+                                                placeholder="Enter Account ID"
+                                            />
+                                            {showSuggestions && (
+                                                <ul style={{ border: '1px solid #ccc', marginTop: '5px', padding: '5px', listStyle: 'none' }}>
+                                                    {loading ? (
+                                                        <li style={{ color: 'blue', fontStyle: 'italic' }}>Loading...</li>
+                                                    ) : accountSuggestions.length > 0 ? (
+                                                        accountSuggestions.map(acc => (
+                                                            <li
+                                                                key={acc.account_id}
+                                                                style={{ cursor: 'pointer', padding: '2px 0' }}
+                                                                onClick={() => handleAccountSuggestionClick(acc.account_id)}
+                                                            >
+                                                                {acc.account_id}
+                                                            </li>
+                                                        ))
+                                                    ) : (
+                                                        <li style={{ color: 'red', fontStyle: 'italic' }}>No Data Found</li>
+                                                    )}
+                                                </ul>
+                                            )}
+                                        </FormGroup>
                                     </Col>
                                 </Row>
                                 <Row className="mb-4">
@@ -1563,6 +1953,7 @@ const DocumentManagement = () => {
                     </Col>
                 </Row>
 
+                {/* Rest of the modal components remain the same */}
                 {/* Add/Edit Document Modal */}
                 <Modal isOpen={modalOpen} toggle={() => setModalOpen(!modalOpen)} size="lg">
                     <ModalHeader className="bg-primary text-white p-3" toggle={() => setModalOpen(false)}>
@@ -1744,18 +2135,6 @@ const DocumentManagement = () => {
                                                     <div className="d-flex alignItems-center gap-1">
                                                         {/* Buttons Container */}
                                                         <div className="d-flex" style={{ height: '38px' }}>
-                                                            {/* Scan Button */}
-                                                            {/* <Button
-                                                                color="outline-secondary"
-                                                                size="sm"
-                                                                className="d-flex alignItems-center justify-content-center"
-                                                                style={{ width: '80px', height: '100%' }}
-                                                                // onClick={() => simulateScan('Other')}
-                                                            >
-                                                                <i className="ri-scan-line me-1"></i>
-                                                                <span>Scan</span>
-                                                            </Button> */}
-
                                                             {/* Upload Button with checkmark */}
                                                             <label
                                                                 className={`btn btn-sm btn-outline-primary d-flex alignItems-center justify-content-center ms-2 position-relative`}
@@ -2043,6 +2422,7 @@ const DocumentManagement = () => {
                     </Form>
                 </Modal>
 
+                {/* Approved Modal, Rejected Modal, and Re-upload Modal components remain the same */}
                 {/* Approved Modal with API Integration */}
                 <Modal
                     isOpen={approvedModalOpen}
@@ -2826,6 +3206,7 @@ const DocumentManagement = () => {
                         </Button>
                     </ModalFooter>
                 </Modal>
+
             </Container>
         </div>
     );

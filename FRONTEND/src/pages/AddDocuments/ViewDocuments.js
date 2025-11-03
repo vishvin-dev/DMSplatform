@@ -4,7 +4,7 @@ import {
     Button, Badge, Input, Label, FormGroup, ListGroup, ListGroupItem,
     Alert, Spinner
 } from 'reactstrap';
-import { getDocumentDropdowns, viewDocument, view } from '../../helpers/fakebackend_helper';
+import { getDocumentDropdowns, viewDocument, view, getAllUserDropDownss } from '../../helpers/fakebackend_helper';
 import { ToastContainer } from 'react-toastify';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
@@ -41,10 +41,15 @@ const ViewDocuments = () => {
     const [divisionName, setDivisionName] = useState([]);
     const [subDivisions, setSubDivisions] = useState([]);
     const [sectionOptions, setSectionOptions] = useState([]);
+    
+    // New states for zone level
+    const [circle, setCircle] = useState('');
+    const [circles, setCircles] = useState([]);
 
     // User access level states
     const [userLevel, setUserLevel] = useState('');
     const [isFieldsDisabled, setIsFieldsDisabled] = useState({
+        circle: false,
         division: false,
         subDivision: false,
         section: false
@@ -56,7 +61,7 @@ const ViewDocuments = () => {
 
     const flagIdFunction = useCallback(async (params) => {
         try {
-            const res = await getDocumentDropdowns(params);
+            const res = await getAllUserDropDownss(params);
             return res?.data || [];
         } catch (error) {
             console.error(`Error fetching data for flag ${params.flagId}:`, error.message);
@@ -74,29 +79,45 @@ const ViewDocuments = () => {
         // Get the user's level from the first zone entry
         const userZone = zones[0];
         const level = userZone.level;
-        const circleCode = userZone.circle_code;
+        const zoneCode = userZone.zone_code;
         setUserLevel(level);
 
         console.log("User Level:", level);
-        console.log("Circle Code:", circleCode);
+        console.log("Zone Code:", zoneCode);
         console.log("All Zones:", zones);
 
-        // Fetch divisions using circle_code for all user levels
-        if (circleCode) {
-            try {
-                const divisions = await flagIdFunction({ 
-                    flagId: 1, 
-                    requestUserName: authUser.user.Email,
-                    circle_code: circleCode
-                });
-                setDivisionName(divisions);
-                console.log("Fetched divisions:", divisions);
-            } catch (error) {
-                console.error("Error fetching divisions:", error);
-            }
-        }
+        // Handle ZONE level user
+        if (level === 'zone') {
+            setIsFieldsDisabled({
+                circle: false,
+                division: false,
+                subDivision: false,
+                section: false
+            });
 
-        if (level === 'section') {
+            // Fetch circles using zone_code
+            if (zoneCode) {
+                try {
+                    const circlesData = await flagIdFunction({ 
+                        flagId: 7, 
+                        requestUserName: authUser.user.Email,
+                        zone_code: zoneCode
+                    });
+                    setCircles(circlesData);
+                    console.log("Fetched circles:", circlesData);
+                } catch (error) {
+                    console.error("Error fetching circles:", error);
+                }
+            }
+
+            // Don't set any default values for zone level
+            setCircle('');
+            setDivision('');
+            setSubDivision('');
+            setSection('');
+        }
+        // Handle other levels (existing code)
+        else if (level === 'section') {
             // Get unique divisions from zones
             const divisionData = [];
             const seenDivisions = new Set();
@@ -171,6 +192,7 @@ const ViewDocuments = () => {
             // Set default values and disable fields
             setDivision(userZone.div_code);
             setIsFieldsDisabled({
+                circle: true,
                 division: true,
                 subDivision: uniqueSubDivisions.length === 1,
                 section: false
@@ -185,8 +207,7 @@ const ViewDocuments = () => {
                 const sections = await flagIdFunction({
                     flagId: 3,
                     requestUserName: userName,
-                    sd_code: selectedSdCode,
-                    circle_code: circleCode
+                    sd_code: selectedSdCode
                 });
                 setSectionOptions(sections);
                 
@@ -216,6 +237,7 @@ const ViewDocuments = () => {
 
             setDivisionName(uniqueDivisions);
             setIsFieldsDisabled({
+                circle: true,
                 division: uniqueDivisions.length === 1,
                 subDivision: false,
                 section: false
@@ -230,8 +252,7 @@ const ViewDocuments = () => {
                 const subdivisions = await flagIdFunction({
                     flagId: 2,
                     requestUserName: userName,
-                    div_code: selectedDivCode,
-                    circle_code: circleCode
+                    div_code: selectedDivCode
                 });
                 setSubDivisions(subdivisions);
                 
@@ -247,8 +268,7 @@ const ViewDocuments = () => {
                     const sections = await flagIdFunction({
                         flagId: 3,
                         requestUserName: userName,
-                        sd_code: subdivisions[0].sd_code,
-                        circle_code: circleCode
+                        sd_code: subdivisions[0].sd_code
                     });
                     setSectionOptions(sections);
                     
@@ -266,6 +286,7 @@ const ViewDocuments = () => {
         else if (level === 'circle') {
             // For circle level, don't pre-populate anything and keep fields enabled
             setIsFieldsDisabled({
+                circle: true,
                 division: false,
                 subDivision: false,
                 section: false
@@ -297,16 +318,24 @@ const ViewDocuments = () => {
         };
     }, [loadDropdownDataFromSession]);
 
-    const resetSubsequentFilters = () => {
-        // Only reset fields that are not disabled
-        if (!isFieldsDisabled.subDivision) {
+    const resetSubsequentFilters = (resetLevel = 'circle') => {
+        if (resetLevel === 'circle') {
+            setDivision('');
+            setDivisionName([]);
             setSubDivision('');
             setSubDivisions([]);
-        }
-        if (!isFieldsDisabled.section) {
+            setSection('');
+            setSectionOptions([]);
+        } else if (resetLevel === 'division') {
+            setSubDivision('');
+            setSubDivisions([]);
+            setSection('');
+            setSectionOptions([]);
+        } else if (resetLevel === 'subDivision') {
             setSection('');
             setSectionOptions([]);
         }
+        
         setAccountSearchInput(''); 
         setaccount_id('');
         setHasSearched(false); 
@@ -315,33 +344,44 @@ const ViewDocuments = () => {
         setShowResults(false);
     };
 
-    // UPDATED: Handle division change with circle_code
+    // NEW: Handle circle change for zone level users
+    const handleCircleChange = async (e) => {
+        const selectedCircleCode = e.target.value;
+        setCircle(selectedCircleCode);
+        resetSubsequentFilters('circle');
+
+        if (selectedCircleCode) {
+            const divisions = await flagIdFunction({ 
+                flagId: 1, 
+                requestUserName: userName,
+                circle_code: selectedCircleCode
+            });
+            setDivisionName(divisions);
+        }
+    };
+
+    // UPDATED: Handle division change
     const handleDivisionChange = async (e) => {
         const selectedDivCode = e.target.value;
         setDivision(selectedDivCode);
-        resetSubsequentFilters();
-        
-        const authUser = JSON.parse(sessionStorage.getItem("authUser"));
-        const circleCode = authUser?.user?.zones?.[0]?.circle_code;
+        resetSubsequentFilters('division');
 
-        if (selectedDivCode && circleCode) {
+        if (selectedDivCode) {
             const subdivisions = await flagIdFunction({ 
                 flagId: 2, 
                 requestUserName: userName, 
-                div_code: selectedDivCode,
-                circle_code: circleCode
+                div_code: selectedDivCode
             });
             setSubDivisions(subdivisions);
 
-            if (subdivisions.length === 1 && userLevel !== 'circle') {
+            if (subdivisions.length === 1 && userLevel !== 'zone' && userLevel !== 'circle') {
                 setSubDivision(subdivisions[0].sd_code);
                 setIsFieldsDisabled(prev => ({ ...prev, subDivision: true }));
 
                 const sections = await flagIdFunction({ 
                     flagId: 3, 
                     requestUserName: userName, 
-                    sd_code: subdivisions[0].sd_code,
-                    circle_code: circleCode
+                    sd_code: subdivisions[0].sd_code
                 });
                 setSectionOptions(sections);
 
@@ -357,37 +397,26 @@ const ViewDocuments = () => {
         }
     };
 
-    // UPDATED: Handle sub-division change with circle_code
+    // UPDATED: Handle sub-division change
     const handleSubDivisionChange = async (e) => {
         const selectedSdCode = e.target.value;
         setSubDivision(selectedSdCode);
-        
-        // Reset account search fields when section changes
-        setAccountSearchInput('');
-        setaccount_id('');
-        setHasSearched(false);
-        setDocuments([]);
-        setConsumerInfo(null);
-        setShowResults(false);
+        resetSubsequentFilters('subDivision');
 
         if (!isFieldsDisabled.section) {
             setSection('');
             setSectionOptions([]);
         }
 
-        const authUser = JSON.parse(sessionStorage.getItem("authUser"));
-        const circleCode = authUser?.user?.zones?.[0]?.circle_code;
-
-        if (selectedSdCode && circleCode) {
+        if (selectedSdCode) {
             const sections = await flagIdFunction({ 
                 flagId: 3, 
                 requestUserName: userName, 
-                sd_code: selectedSdCode,
-                circle_code: circleCode
+                sd_code: selectedSdCode
             });
             setSectionOptions(sections);
 
-            if (sections.length === 1 && userLevel !== 'circle') {
+            if (sections.length === 1 && userLevel !== 'zone' && userLevel !== 'circle') {
                 setSection(sections[0].so_code);
                 setIsFieldsDisabled(prev => ({ ...prev, section: true }));
             } else {
@@ -469,7 +498,7 @@ const ViewDocuments = () => {
             );
         }
 
-        // For all other cases (including circle level), show normal dropdown options
+        // For all other cases (including zone and circle level), show normal dropdown options
         return (
             <>
                 <option value="">Select Sub Division</option>
@@ -526,7 +555,6 @@ const ViewDocuments = () => {
             const requestUserName = obj.user.Email;
 
             const roleId = obj.user.Role_Id;
-
 
             const params = {
                 flagId: 1,
@@ -590,12 +618,17 @@ const ViewDocuments = () => {
     };
 
     const handleResetFilters = () => {
-        // Reset only non-disabled fields
-        if (!isFieldsDisabled.division) {
-            setDivision('');
-            setDivisionName([]);
-        }
-        resetSubsequentFilters();
+        // Reset all fields
+        setCircle('');
+        setDivision('');
+        setSubDivision('');
+        setSection('');
+        setAccountSearchInput('');
+        setaccount_id('');
+        setHasSearched(false);
+        setDocuments([]);
+        setConsumerInfo(null);
+        setShowResults(false);
         
         // Reload dropdown data from session storage
         loadDropdownDataFromSession();
@@ -704,14 +737,35 @@ const ViewDocuments = () => {
                         </CardHeader>
                         <CardBody>
                             <Row className="g-3 mb-3">
-                                <Col md={4}>
+                                {/* Circle Field - Only show for zone level users */}
+                                {userLevel === 'zone' && (
+                                    <Col md={3}>
+                                        <FormGroup>
+                                            <Label>Circle <span className="text-danger">*</span></Label>
+                                            <Input
+                                                type="select"
+                                                value={circle}
+                                                onChange={handleCircleChange}
+                                                disabled={isFieldsDisabled.circle}
+                                            >
+                                                <option value="">Select Circle</option>
+                                                {circles.map(circleItem => (
+                                                    <option key={circleItem.circle_code} value={circleItem.circle_code}>
+                                                        {circleItem.circle}
+                                                    </option>
+                                                ))}
+                                            </Input>
+                                        </FormGroup>
+                                    </Col>
+                                )}
+                                <Col md={userLevel === 'zone' ? 3 : 4}>
                                     <FormGroup>
                                         <Label>Division <span className="text-danger">*</span></Label>
                                         <Input
                                             type="select"
                                             value={division}
                                             onChange={handleDivisionChange}
-                                            disabled={isFieldsDisabled.division}
+                                            disabled={isFieldsDisabled.division || (userLevel === 'zone' && !circle)}
                                         >
                                             <option value="">Select Division</option>
                                             {divisionName.map(div => (
@@ -720,7 +774,7 @@ const ViewDocuments = () => {
                                         </Input>
                                     </FormGroup>
                                 </Col>
-                                <Col md={4}>
+                                <Col md={userLevel === 'zone' ? 3 : 4}>
                                     <FormGroup>
                                         <Label>Sub Division <span className="text-danger">*</span></Label>
                                         <Input
@@ -733,13 +787,13 @@ const ViewDocuments = () => {
                                         </Input>
                                     </FormGroup>
                                 </Col>
-                                <Col md={4}>
+                                <Col md={userLevel === 'zone' ? 3 : 4}>
                                     <FormGroup>
                                         <Label>Section <span className="text-danger">*</span></Label>
                                         <Input
                                             type="select"
                                             value={section}
-                                            onChange={(e) => setSection(e.target.value)}
+                                            onChange={handleSectionChange}
                                             disabled={isFieldsDisabled.section || !subDivision}
                                         >
                                             <option value="">Select Section</option>
