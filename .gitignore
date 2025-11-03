@@ -49,3 +49,8 @@ __snapshots__/
 # Upload folders — ignore all uploads in backend
 BACKEND/uploads/
 
+
+
+# Ignore scanned/generated documents
+BACKEND/DmsscanDocument/
+SCAN/DmsSCANDOCS/

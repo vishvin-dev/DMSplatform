@@ -11,7 +11,7 @@ import { Server } from "socket.io";
 
 let io;
 
-// --- Wait until file size stops changing ---
+// ==================Wait until file size stops changing  (this is the file size variation function to stop this size of the file ok )==========================
 export async function waitForStableFile(filePath) {
   const { pollMs, attempts } = config.fileStabilityCheck;
   let lastSize = -1;
@@ -103,18 +103,18 @@ export async function processPdf(filePath) {
   try {
     console.log(`Processing PDF: ${fileName}`);
     const pdfDoc = await PDFDocument.load(fs.readFileSync(filePath));
-    const encryptedPdfBytes = await pdfDoc.save({
-      useObjectStreams: false,
-      password: "secret123",
-    });
-    fs.writeFileSync(finalPdf, encryptedPdfBytes);
+    // const encryptedPdfBytes = await pdfDoc.save({
+    //   useObjectStreams: false,
+    //   password: "secret123",
+    // });
+    fs.writeFileSync(fileName);
 
     io.emit("new-scan-processed", {
-      fileName: path.basename(finalPdf),
-      pdfUrl: `/processed/${path.basename(finalPdf)}`,
+      fileName: path.basename(fileName),
+      pdfUrl: `/processed/${path.basename(fileName)}`,
     });
 
-    console.log(`Processed & emitted encrypted PDF: ${finalPdf}`);
+    console.log(`Processed & emitted encrypted PDF: ${fileName}`);
   } catch (err) {
     console.error("PDF processing error:", err);
   }
@@ -159,7 +159,7 @@ export function initWatcher(server) {
     if (type === "image") {
       await processFile(filePath);
     } else if (type === "pdf") {
-      await processPdf(filePath);
+      console.log("PDF detected - skipping encryption process");
     } else {
       console.log("Ignored unsupported file:", filePath);
     }
