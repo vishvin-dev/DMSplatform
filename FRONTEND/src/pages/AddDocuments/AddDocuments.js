@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Button, Card, CardBody, CardHeader, Col, Container, ModalBody, ModalFooter, ModalHeader, Row, Label,
@@ -839,7 +838,7 @@ const DocumentManagement = () => {
         return values.join(', ');
     };
 
-    // Check if dropdown should be disabled based on user level and number of values
+    // Check if dropdown should be disabled based on user level and number of values - FIXED VERSION
     const shouldDisableDropdown = (level, values) => {
         const levelOrder = ['zone', 'circle', 'division', 'sub_division', 'section'];
         const userLevelIndex = levelOrder.indexOf(userLevel);
@@ -855,7 +854,7 @@ const DocumentManagement = () => {
 
         // If user level is higher than or equal to dropdown level, check number of values
         if (userLevelIndex >= dropdownLevelIndex) {
-            // For section level: disable if only one value, show dropdown if multiple values
+            // For section level: ALWAYS show dropdown if multiple values exist
             if (level === 'section') {
                 const shouldDisable = values.length === 1;
                 console.log(`Section level - values: ${values.length}, disable: ${shouldDisable}`);
@@ -892,7 +891,7 @@ const DocumentManagement = () => {
         return values.join(', ');
     };
 
-    // Initialize user data and dropdowns based on user level
+    // Initialize user data and dropdowns based on user level - FIXED VERSION
     const initializeUserData = () => {
         const obj = JSON.parse(sessionStorage.getItem("authUser"));
         const usernm = obj.user.Email;
@@ -917,6 +916,16 @@ const DocumentManagement = () => {
             console.log('Unique Divisions:', uniqueDivisions);
             console.log('Unique Sub Divisions:', uniqueSubDivisions);
             console.log('Unique Sections:', uniqueSections);
+
+            // For section level users, create section options from ALL user zones
+            if (userLevel === 'section') {
+                const sectionOptionsData = userZones.map(zone => ({
+                    section_office: zone.section_office,
+                    so_code: zone.so_code
+                }));
+                setSectionOptions(sectionOptionsData);
+                console.log('Section options for section level user:', sectionOptionsData);
+            }
 
             switch (userLevel) {
                 case 'zone':
@@ -1015,7 +1024,7 @@ const DocumentManagement = () => {
                     break;
 
                 case 'section':
-                    // For section level
+                    // For section level - we already set section options above
                     if (firstZone.so_code) {
                         setZoneCode(firstZone.zone_code);
 
@@ -1038,28 +1047,9 @@ const DocumentManagement = () => {
                         }));
                         setSubDivisions(subDivisionOptionsData);
 
-                        // For sections, create proper options from ALL user zones
-                        const sectionOptionsData = userZones.map(zone => ({
-                            section_office: zone.section_office,
-                            so_code: zone.so_code
-                        }));
-                        setSectionOptions(sectionOptionsData);
-
-                        console.log('Section options data:', sectionOptionsData);
-
-                        // If only one value, set it automatically
-                        if (uniqueCircles.length === 1) {
-                            setCircle(circleOptionsData[0].circle_code);
-                        }
-                        if (uniqueDivisions.length === 1) {
-                            setDivision(divisionOptionsData[0].div_code);
-                        }
-                        if (uniqueSubDivisions.length === 1) {
-                            setSubDivision(subDivisionOptionsData[0].sd_code);
-                        }
-                        // Don't auto-set section if multiple sections exist
+                        // Don't auto-set section if multiple sections exist - let user choose
                         if (uniqueSections.length === 1) {
-                            setSection(sectionOptionsData[0].so_code);
+                            setSection(sectionOptions[0].so_code);
                         }
                     }
                     break;
@@ -1308,7 +1298,7 @@ const DocumentManagement = () => {
         return getUniqueValues(userZoneData, key).length;
     };
 
-    // Render dropdown or disabled field based on user level and value count
+    // Render dropdown or disabled field based on user level and value count - FIXED VERSION
     const renderLocationField = (level, label, value, onChange, options, disabledByLevel) => {
         const uniqueValues = getUniqueValues(userZoneData,
             level === 'circle' ? 'circle' :
@@ -1326,36 +1316,6 @@ const DocumentManagement = () => {
             userLevel,
             disabledByLevel
         });
-
-        // SPECIAL CASE: If user is section level and has multiple sections, always show dropdown
-        if (userLevel === 'section' && level === 'section' && uniqueValues.length > 1) {
-            console.log('Special case: Section level user with multiple sections - showing dropdown');
-            return (
-                <Col md={3}>
-                    <FormGroup>
-                        <Label>{label}<span className="text-danger">*</span></Label>
-                        <Input
-                            type="select"
-                            value={value}
-                            onChange={onChange}
-                            disabled={!subDivision} // Only disable if no sub-division selected
-                        >
-                            <option value="">Select {label}</option>
-                            {options.map(option => {
-                                const displayValue = option.section_office;
-                                const codeValue = option.so_code;
-
-                                return (
-                                    <option key={codeValue} value={codeValue}>
-                                        {displayValue}
-                                    </option>
-                                );
-                            })}
-                        </Input>
-                    </FormGroup>
-                </Col>
-            );
-        }
 
         if (shouldDisable) {
             // Show disabled text field with comma-separated values
