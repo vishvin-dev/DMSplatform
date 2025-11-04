@@ -261,6 +261,7 @@ export const DOCUMENT_TYPE_UPDATE_URL = "/es-admin-svc/es/admin/document/update"
 //documenet upload of dms url
 export const DOCUMENET_UPLOADSS="/backend-service/documentUpload";
 export const POST_DOCUMENT_UPLOAD="/backend-service/documentUpload";
+export const POST_DOCUMENT_MANUAL_UPLOAD="/backend-service/documentUpload/mannualupload"
 export const POST_DOCUMENT_UPLOAD_VIEW="/backend-service/documentUpload";
 export const VIEW_DOCUMENT="/backend-service/documentUpload/documentView";
 export const QC_REVIEW="/backend-service/qcUpload/verifiedQc";
