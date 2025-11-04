@@ -19,7 +19,7 @@ import dayjs from 'dayjs';
 import Select from 'react-select';
 import {
   getAllUserDetails,
-  getAllUserDropDownss, // Changed from getManageUserDropdwons as per request
+  getAllUserDropDownss,
   updateMeterMangeUserDetails,
   updateManageUserPassword
 } from '../../helpers/fakebackend_helper';
@@ -269,8 +269,28 @@ const ManageUser = () => {
     flagIdFunction(4, setGenderName, usernm);
     flagIdFunction(5, setMaritalStatusName, usernm);
     flagIdFunction(6, setRoleName, usernm);
-    flagIdFunction(7, setCircles, usernm);
+    
+    // Fetch circles with hardcoded zone_code "Kalaburagi"
+    fetchCircles(usernm);
   }, []);
+
+  // Function to fetch circles with hardcoded zone_code
+  const fetchCircles = async (usernm) => {
+    try {
+      const params = { 
+        flagId: 7, 
+        requestUserName: usernm,
+        zone_code: "Kalaburagi" // Hardcoded as requested
+      };
+      const response = await getAllUserDropDownss(params);
+      const data = response?.data || [];
+      console.log('Fetched circles with Kalaburagi zone:', data);
+      setCircles(data);
+    } catch (error) {
+      console.error('Error fetching circles:', error.message);
+      setCircles([]);
+    }
+  };
 
   const handleCircleChange = async (circle_code) => {
     setTempCircle(circle_code);
@@ -285,6 +305,7 @@ const ManageUser = () => {
     if (circle_code) {
       const obj = JSON.parse(sessionStorage.getItem("authUser"));
       const usernm = obj.user.LoginName;
+      // Fetch divisions for selected circle
       await flagIdFunction(1, setDivisionName, usernm, { circle_code });
     }
   };
@@ -299,6 +320,7 @@ const ManageUser = () => {
     if (div_code) {
         const obj = JSON.parse(sessionStorage.getItem("authUser"));
         const usernm = obj.user.LoginName;
+        // Fetch sub-divisions for selected division
         await flagIdFunction(2, setSubDivisionName, usernm, { div_code });
     }
   };
@@ -311,6 +333,7 @@ const ManageUser = () => {
     if (sd_code && tempDivision) {
         const obj = JSON.parse(sessionStorage.getItem("authUser"));
         const usernm = obj.user.LoginName;
+        // Fetch section offices for selected sub-division
         await flagIdFunction(3, setSectionOfficeName, usernm, { div_code: tempDivision, sd_code });
     }
   };
@@ -355,6 +378,9 @@ const ManageUser = () => {
     setTempDivision('');
     setTempSubDivision('');
     setTempSectionOffice('');
+    setDivisionName([]);
+    setSubDivisionName([]);
+    setSectionOfficeName([]);
   };
 
   // Function to remove a zone
@@ -504,7 +530,7 @@ const ManageUser = () => {
         const payload = {
           flagId: 4,
           User_Id: values.User_Id,
-          isDisabled: values.isDisabled ? 1 : 0, // Ensure boolean is sent as 0 or 1 if needed
+          isDisabled: values.isDisabled ? 1 : 0,
           requestUserName: username
         };
 
@@ -1066,8 +1092,12 @@ const ManageUser = () => {
                                     '& .MuiInputBase-root': {
                                       borderRadius: '6px',
                                       fontSize: '0.85rem',
-                                      height: '38px'
+                                      height: '38px',
+                                      width: '100%'
                                     },
+                                    '& .MuiFormHelperText-root': {
+                                      marginLeft: 0
+                                    }
                                   }}
                                 />
                               )}
@@ -1208,7 +1238,7 @@ const ManageUser = () => {
                                     onClick={addZone}
                                     disabled={!tempCircle || !tempDivision || !tempSubDivision || !tempSectionOffice}
                                 >
-                                    + Add
+                                    + Add Location
                                 </Button>
                             </Col>
                           </Row>
