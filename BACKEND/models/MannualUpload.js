@@ -1,0 +1,72 @@
+import { pool } from "../Config/db.js";
+
+export const insertDocumentUpload = async (
+  DocumentName,
+  DocumentDescription,
+  MetaTags,
+  CreatedByUser_Id,
+  CreatedByUserName,
+  Account_Id,
+  Role_Id,
+  Category_Id,
+  Status_Id,
+  div_code,
+  sd_code,
+  so_code
+) => {
+  const query = `
+    INSERT INTO documentupload 
+    (DocumentName, DocumentDescription, MetaTags, CreatedByUser_Id, CreatedByUserName,
+     Account_Id, Role_Id, Category_Id, Status_Id, div_code, sd_code, so_code)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  const [result] = await pool.execute(query, [
+    DocumentName,
+    DocumentDescription,
+    MetaTags,
+    CreatedByUser_Id,
+    CreatedByUserName,
+    Account_Id,
+    Role_Id,
+    Category_Id,
+    Status_Id,
+    div_code,
+    sd_code,
+    so_code,
+  ]);
+
+  return result.insertId;
+};
+
+// Get latest version for the document
+export const getLatestVersion = async (documentId) => {
+  const [rows] = await pool.execute(
+    `SELECT VersionLabel FROM documentversion WHERE DocumentId = ? ORDER BY Version_Id DESC LIMIT 1`,
+    [documentId]
+  );
+  return rows.length ? rows[0].VersionLabel : null;
+};
+
+// Insert new version
+export const insertDocumentVersion = async (documentId, versionLabel, filePath, isLatest = 1) => {
+  // Set all other versions of this document as not latest
+  await pool.execute(`UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`, [documentId]);
+
+  const [result] = await pool.execute(
+    `
+    INSERT INTO documentversion (DocumentId, VersionLabel, FilePath, IsLatest)
+    VALUES (?, ?, ?, ?)
+    `,
+    [documentId, versionLabel, filePath, isLatest]
+  );
+
+  return result.insertId;
+};
+
+// Generate next version label (simple v1, v2, v3...)
+export const getNextVersionLabel = (latestVersion) => {
+  if (!latestVersion) return "v1";
+  const num = parseInt(latestVersion.replace("v", ""), 10);
+  return `v${num + 1}`;
+};
