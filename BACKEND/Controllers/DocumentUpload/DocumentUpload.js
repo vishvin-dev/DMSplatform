@@ -8,7 +8,7 @@ import {
  markOldVersionNotLatest, updateDocumentStatus, resolveRejection, saveDraft, fetchDraftDocumentByAccountId, finalizeDrafts
 } from "../../models/DocumentUpload.js"
 
-import { insertDocumentUpload, getLatestVersion, insertDocumentVersion, getNextVersionLabel } from "../../models/MannualUpload.js"
+import { insertDocumentUpload, getLatestVersion, insertDocumentVersion, getNextVersionLabel, getDocsMetaInfo } from "../../models/MannualUpload.js"
 
 //this is the doucment uploading things
 export const DocumentUpload = async (req, res) => {
@@ -560,80 +560,80 @@ export const DocumentUpload = async (req, res) => {
 };
 
 //this is the document View
-export const DocumentView = async (req, res) => {
-    const { flagId, DocumentId, accountId, roleId } = req.body;
+// export const DocumentView = async (req, res) => {
+//     const { flagId, DocumentId, accountId, roleId } = req.body;
 
-    try {
-        if (parseInt(flagId) === 1) {
-            if (!accountId) {
-                return res.status(400).json({ status: "error", message: "accountId is required" });
-            }
-            const results = await getDocumentsView(accountId, roleId);
-            return res.status(200).json({
-                status: "success",
-                message: "Document Data fetched successfully",
-                data: results,
-            });
-        }
-        else if (parseInt(flagId) === 2) {
-            if (!DocumentId) {
-                return res.status(400).json({ status: "error", message: "DocumentId is required" });
-            }
-            const documentData = await getSingleDocumentById(DocumentId);
-            if (!documentData || documentData.length === 0) {
-                return res.status(404).json({ status: "error", message: "Document not found" });
-            }
-            const rawFilePath = path.resolve(documentData[0].FilePath);
-            const fileName = path.basename(rawFilePath);
+//     try {
+//         if (parseInt(flagId) === 1) {
+//             if (!accountId) {
+//                 return res.status(400).json({ status: "error", message: "accountId is required" });
+//             }
+//             const results = await getDocumentsView(accountId, roleId);
+//             return res.status(200).json({
+//                 status: "success",
+//                 message: "Document Data fetched successfully",
+//                 data: results,
+//             });
+//         }
+//         else if (parseInt(flagId) === 2) {
+//             if (!DocumentId) {
+//                 return res.status(400).json({ status: "error", message: "DocumentId is required" });
+//             }
+//             const documentData = await getSingleDocumentById(DocumentId);
+//             if (!documentData || documentData.length === 0) {
+//                 return res.status(404).json({ status: "error", message: "Document not found" });
+//             }
+//             const rawFilePath = path.resolve(documentData[0].FilePath);
+//             const fileName = path.basename(rawFilePath);
 
-            if (!fs.existsSync(rawFilePath)) {
-                return res.status(404).json({ status: "error", message: "File not found on server" });
-            }
-            const mimeType = mime.lookup(rawFilePath) || "application/octet-stream";
-            const stream = fs.createReadStream(rawFilePath);
+//             if (!fs.existsSync(rawFilePath)) {
+//                 return res.status(404).json({ status: "error", message: "File not found on server" });
+//             }
+//             const mimeType = mime.lookup(rawFilePath) || "application/octet-stream";
+//             const stream = fs.createReadStream(rawFilePath);
 
-            res.setHeader("Content-Type", mimeType);
-            res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-            res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+//             res.setHeader("Content-Type", mimeType);
+//             res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+//             res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 
-            stream.on("error", (err) => {
-                console.error("Stream Error:", err);
-                return res.status(500).json({ status: "error", message: "Error streaming file" });
-            });
-            stream.pipe(res);
-        }
-        else if (parseInt(flagId) === 3) {
-            if (!DocumentId) {
-                return res.status(400).json({ status: "error", message: "DocumentId is required" });
-            }
-            const documentData = await getSingleDocumentByIdByDraft(DocumentId);
-            if (!documentData || documentData.length === 0) {
-                return res.status(404).json({ status: "error", message: "Document not found" });
-            }
-            const rawFilePath = path.resolve(documentData[0].FilePath);
-            const fileName = path.basename(rawFilePath);
+//             stream.on("error", (err) => {
+//                 console.error("Stream Error:", err);
+//                 return res.status(500).json({ status: "error", message: "Error streaming file" });
+//             });
+//             stream.pipe(res);
+//         }
+//         else if (parseInt(flagId) === 3) {
+//             if (!DocumentId) {
+//                 return res.status(400).json({ status: "error", message: "DocumentId is required" });
+//             }
+//             const documentData = await getSingleDocumentByIdByDraft(DocumentId);
+//             if (!documentData || documentData.length === 0) {
+//                 return res.status(404).json({ status: "error", message: "Document not found" });
+//             }
+//             const rawFilePath = path.resolve(documentData[0].FilePath);
+//             const fileName = path.basename(rawFilePath);
 
-            if (!fs.existsSync(rawFilePath)) {
-                return res.status(404).json({ status: "error", message: "File not found on server" });
-            }
-            const mimeType = mime.lookup(rawFilePath) || "application/octet-stream";
-            const stream = fs.createReadStream(rawFilePath);
+//             if (!fs.existsSync(rawFilePath)) {
+//                 return res.status(404).json({ status: "error", message: "File not found on server" });
+//             }
+//             const mimeType = mime.lookup(rawFilePath) || "application/octet-stream";
+//             const stream = fs.createReadStream(rawFilePath);
 
-            res.setHeader("Content-Type", mimeType);
-            res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-            res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+//             res.setHeader("Content-Type", mimeType);
+//             res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+//             res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 
-            stream.on("error", (err) => {
-                console.error("Stream Error:", err);
-                return res.status(500).json({ status: "error", message: "Error streaming file" });
-            });
-            stream.pipe(res);
-        }
-    } catch (error) {
-        console.error("Error:", error);
-        return res.status(500).json({ status: "error", message: "Internal Server Error" });
-    }
-};
+//             stream.on("error", (err) => {
+//                 console.error("Stream Error:", err);
+//                 return res.status(500).json({ status: "error", message: "Error streaming file" });
+//             });
+//             stream.pipe(res);
+//         }
+//     } catch (error) {
+//         console.error("Error:", error);
+//         return res.status(500).json({ status: "error", message: "Internal Server Error" });
+//     }
+// };
 
 //==============================THIS IS THE MANNUAL CONTROLLERS=========================================================
 export const MannualUpload = async (req, res) => {
@@ -727,6 +727,27 @@ export const ScanUpload = async (req, res) => {
     }
 }
 
+// =========================================================================================================================
+export const DocumentView = async (req, res) => {
+    const { flagId, DocumentId, Account_Id } = req.body;
+
+    try {
+        if (parseInt(flagId) === 1) {
+            if (!Account_Id) {
+                return res.status(400).json({ status: "error", message: "accountId is required" });
+            }
+            const results = await getDocsMetaInfo(Account_Id);
+            return res.status(200).json({
+                status: "success",
+                message: "Document Data fetched successfully",
+                data: results,
+            });
+        }
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).json({ status: "error", message: "Internal Server Error" });
+    }
+};
 
 
 
