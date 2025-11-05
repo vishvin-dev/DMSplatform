@@ -8,7 +8,7 @@ import {
     markOldVersionNotLatest, updateDocumentStatus, resolveRejection, saveDraft, fetchDraftDocumentByAccountId, finalizeDrafts
 } from "../../models/DocumentUpload.js"
 
-import { insertDocumentUpload, getLatestVersion, insertDocumentVersion, getNextVersionLabel, getDocsMetaInfo,getDocsVieww } from "../../models/MannualUpload.js"
+import { insertDocumentUpload, getLatestVersion, insertDocumentVersion, getNextVersionLabel, getDocsMetaInfo, getDocsVieww } from "../../models/MannualUpload.js"
 
 //this is the doucment uploading things
 export const DocumentUpload = async (req, res) => {
@@ -746,9 +746,37 @@ export const DocumentView = async (req, res) => {
                 data: results,
             });
         }
-        else if(parseInt(flagId)===2){
-            const result=await getDocsVieww(DocumentId)
-            return res.status(200).json({data:result})
+        else if (parseInt(flagId) === 2) {
+
+            const result = await getDocsVieww(DocumentId);
+
+            if (!result || result.length === 0) {
+                return res.status(404).json({ error: "No file found for this DocumentId" });
+            }
+
+            const filePath = result[0].FilePath;
+
+            if (!fs.existsSync(filePath)) {
+                return res.status(404).json({ error: "File does not exist on server" });
+            }
+
+            // --- Security headers ---
+            if (!fs.existsSync(filePath)) {
+                return res.status(404).json({ error: "File does not exist on server" });
+            }
+
+            // --- Set headers before sending the file ---
+            res.set({
+                "Content-Type": "application/pdf",
+                "Content-Disposition": `inline; filename="${path.basename(filePath)}"`,
+                "Cache-Control": "private, no-store, max-age=0",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+            });
+
+            // Send the file
+            res.sendFile(path.resolve(filePath));
+
         }
     } catch (error) {
         console.error("Error:", error);

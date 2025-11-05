@@ -8,7 +8,7 @@ const router = express.Router();
 router.post("/", uploadMultiple , authenticateToken, DocumentUpload);
 
 //===================THIS IS THE VIEW OF THE DOCUMENT============================================
-router.post("/documentView", authenticateToken, DocumentView);
+router.post("/documentView", DocumentView);
 //====================THIS IS THE MANNUAL UPLOAD OK ============================================= 
 router.post("/mannualUpload", upload.single("mannualFile") , authenticateToken, MannualUpload);
 //====================THIS IS THE SCANN UPLOAD OK ===============================================

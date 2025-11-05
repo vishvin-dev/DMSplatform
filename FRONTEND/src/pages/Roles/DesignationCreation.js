@@ -665,81 +665,156 @@
 // export default DesignationCreation;
 
 // / frontend/src/components/ScannerPreview.jsx
-import { useEffect, useState } from "react";
-import { io } from "socket.io-client";
+// import { useEffect, useState } from "react";
+// import { io } from "socket.io-client";
 
-export default function ScannerPreview() {
-  const [scans, setScans] = useState([]);
+// export default function ScannerPreview() {
+//   const [scans, setScans] = useState([]);
 
-  useEffect(() => {
-    const socket = io("http://localhost:5000", {
-      transports: ["websocket", "polling"],
-    });
+//   useEffect(() => {
+//     const socket = io("http://localhost:5000", {
+//       transports: ["websocket", "polling"],
+//     });
 
-    socket.on("new-scan-processed", (scan) => {
-      // ✅ If merged PDF → show only that, remove earlier single images
-      if (scan.pdfUrl || scan.mergedFile) {
-        setScans([{ ...scan, pdfUrl: scan.pdfUrl || scan.mergedFile }]);
-      }
-      // ✅ If single image scan → just append
-      else if (scan.imageUrl) {
-        setScans((prev) => [scan, ...prev]);
-      }
-    });
+//     socket.on("new-scan-processed", (scan) => {
+//       // ✅ If merged PDF → show only that, remove earlier single images
+//       if (scan.pdfUrl || scan.mergedFile) {
+//         setScans([{ ...scan, pdfUrl: scan.pdfUrl || scan.mergedFile }]);
+//       }
+//       // ✅ If single image scan → just append
+//       else if (scan.imageUrl) {
+//         setScans((prev) => [scan, ...prev]);
+//       }
+//     });
 
-    return () => socket.disconnect();
-  }, []);
+//     return () => socket.disconnect();
+//   }, []);
+
+//   return (
+//     <div className="p-5 m-5">
+//       <h2 className="text-xl font-bold mb-4">Scanner Preview</h2>
+
+//       {scans.length === 0 ? (
+//         <p className="text-gray-500">No scans yet…</p>
+//       ) : (
+//         <ul className="space-y-6">
+//           {scans.map((scan, idx) => (
+//             <li key={idx} className="p-4 border rounded-lg shadow bg-white">
+//               <h3 className="font-semibold mb-2">{scan.fileName || "Scan"}</h3>
+
+//               {/* ✅ Show image preview if single-side scan */}
+//               {scan.imageUrl && (
+//                 <img
+//                   src={`http://localhost:5000${scan.imageUrl}`}
+//                   alt={scan.fileName}
+//                   className="rounded-lg shadow-md"
+//                   style={{ maxWidth: "400px", height: "auto", display: "block" }}
+//                 />
+//               )}
+
+//               {/* ✅ Show PDF preview if merged two-sided scan */}
+//               {scan.pdfUrl && (
+//                 <div className="mt-4">
+//                   <a
+//                     href={`http://localhost:5000${scan.pdfUrl}`}
+//                     target="_blank"
+//                     rel="noopener noreferrer"
+//                     className="text-blue-600 underline"
+//                   >
+//                     Open Merged PDF
+//                   </a>
+
+//                   <iframe
+//                     src={`http://localhost:5000${scan.pdfUrl}`}
+//                     style={{
+//                       width: "100%",
+//                       height: "500px",
+//                       marginTop: "10px",
+//                       border: "1px solid #ddd",
+//                     }}
+//                     title={scan.fileName}
+//                   ></iframe>
+//                 </div>
+//               )}
+//             </li>
+//           ))}
+//         </ul>
+//       )}
+//     </div>
+//   );
+// }
+
+import React, { useState } from "react";
+import axios from "axios";
+
+const DocumentViewer = () => {
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleViewPdf = async (documentId) => {
+    try {
+      setLoading(true);
+      setError("");
+      setPdfUrl(null);
+
+      const response = await axios.post(
+        "http://localhost:9000/backend-service/documentUpload/documentView",
+        { DocumentId: documentId, flagId: 2 },
+        {
+          responseType: "blob", // Important
+        }
+      );
+
+      // Convert blob to object URL
+      const file = new Blob([response], { type: "application/pdf" });
+      const fileUrl = URL.createObjectURL(file);
+      setPdfUrl(fileUrl);
+    } catch (err) {
+      console.error("Error viewing PDF:", err);
+      setError("Unable to load document.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="p-5 m-5">
-      <h2 className="text-xl font-bold mb-4">Scanner Preview</h2>
+    <div style={{ padding: "20px" }}>
+      <h3>📄 Document Viewer</h3>
 
-      {scans.length === 0 ? (
-        <p className="text-gray-500">No scans yet…</p>
-      ) : (
-        <ul className="space-y-6">
-          {scans.map((scan, idx) => (
-            <li key={idx} className="p-4 border rounded-lg shadow bg-white">
-              <h3 className="font-semibold mb-2">{scan.fileName || "Scan"}</h3>
+      <button
+        onClick={() => handleViewPdf(5)}
+        disabled={loading}
+        style={{
+          padding: "8px 16px",
+          backgroundColor: "#007bff",
+          color: "white",
+          border: "none",
+          borderRadius: "6px",
+          cursor: "pointer",
+        }}
+      >
+        {loading ? "Loading..." : "View PDF"}
+      </button>
 
-              {/* ✅ Show image preview if single-side scan */}
-              {scan.imageUrl && (
-                <img
-                  src={`http://localhost:5000${scan.imageUrl}`}
-                  alt={scan.fileName}
-                  className="rounded-lg shadow-md"
-                  style={{ maxWidth: "400px", height: "auto", display: "block" }}
-                />
-              )}
+      {error && <p style={{ color: "red" }}>{error}</p>}
 
-              {/* ✅ Show PDF preview if merged two-sided scan */}
-              {scan.pdfUrl && (
-                <div className="mt-4">
-                  <a
-                    href={`http://localhost:5000${scan.pdfUrl}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 underline"
-                  >
-                    Open Merged PDF
-                  </a>
-
-                  <iframe
-                    src={`http://localhost:5000${scan.pdfUrl}`}
-                    style={{
-                      width: "100%",
-                      height: "500px",
-                      marginTop: "10px",
-                      border: "1px solid #ddd",
-                    }}
-                    title={scan.fileName}
-                  ></iframe>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+      {pdfUrl && (
+        <div style={{ marginTop: "20px" }}>
+          <iframe
+            src={pdfUrl}
+            title="PDF Viewer"
+            width="100%"
+            height="600px"
+            style={{
+              border: "1px solid #ccc",
+              borderRadius: "8px",
+            }}
+          />
+        </div>
       )}
     </div>
   );
-}
+};
+
+export default DocumentViewer;
