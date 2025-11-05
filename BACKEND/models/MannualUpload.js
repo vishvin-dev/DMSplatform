@@ -85,4 +85,16 @@ export const getDocsMetaInfo = async (Account_Id) => {
     }
 }
 
+export const getDocsVieww = async (DocumentId) => {
+    try {
+        const [result] = await pool.execute(`
+            
+            `, [DocumentId]);
+        return result
+    } catch (error) {
+        console.log("Error in the fetchig the view of Document", error)
+        throw error
+    }
+}
+
 
