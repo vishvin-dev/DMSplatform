@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Card, CardBody, CardHeader, Col, Container, Row,
-  Input, Table, Spinner, Badge, Button
+  Input, Table, Spinner, Badge, Alert
 } from 'reactstrap';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
 import { LoginAudit } from '../../helpers/fakebackend_helper';
@@ -9,42 +9,45 @@ import { LoginAudit } from '../../helpers/fakebackend_helper';
 const SORT_ARROW_SIZE = 13; // px
 
 function SortArrows({ direction, active }) {
-    return (
-        <span style={{ marginLeft: 6, display: 'inline-block', verticalAlign: 'middle', height: 28 }}>
-            <svg width={SORT_ARROW_SIZE} height={SORT_ARROW_SIZE} viewBox="0 0 13 13" style={{ display: 'block' }}>
-                <polyline
-                    points="3,8 6.5,4 10,8"
-                    fill="none"
-                    stroke={active && direction === 'asc' ? '#1064ea' : '#c1c5ca'}
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                />
-            </svg>
-            <svg width={SORT_ARROW_SIZE} height={SORT_ARROW_SIZE} viewBox="0 0 13 13" style={{ display: 'block', marginTop: -2 }}>
-                <polyline
-                    points="3,5 6.5,9 10,5"
-                    fill="none"
-                    stroke={active && direction === 'desc' ? '#1064ea' : '#c1c5ca'}
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                />
-            </svg>
-        </span>
-    );
+  // ... (SortArrows component code is unchanged) ...
+  return (
+    <span style={{ marginLeft: 6, display: 'inline-block', verticalAlign: 'middle', height: 28 }}>
+      <svg width={SORT_ARROW_SIZE} height={SORT_ARROW_SIZE} viewBox="0 0 13 13" style={{ display: 'block' }}>
+        <polyline
+          points="3,8 6.5,4 10,8"
+          fill="none"
+          stroke={active && direction === 'asc' ? '#1064ea' : '#c1c5ca'}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <svg width={SORT_ARROW_SIZE} height={SORT_ARROW_SIZE} viewBox="0 0 13 13" style={{ display: 'block', marginTop: -2 }}>
+        <polyline
+          points="3,5 6.5,9 10,5"
+          fill="none"
+          stroke={active && direction === 'desc' ? '#1064ea' : '#c1c5ca'}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
 }
-
-
 
 const LoginAuditLogs = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
   const [searchText, setSearchText] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(5);
+
+  const [loginName, setLoginName] = useState(null);
+  // const [userId, setUserId] = useState(null); // No longer needed for this component
 
   const columns = [
     { key: 'DeviceDateTime', label: 'Login Time', sortable: true },
@@ -61,38 +64,86 @@ const LoginAuditLogs = () => {
     { key: 'Status', label: 'Status', sortable: false }
   ];
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const requestPayload = {
-          flagId: 1,
-          requestUserName: "adminuser"
-        };
-        const response = await LoginAudit(requestPayload);
-        if (response?.status === "success" && Array.isArray(response.result)) {
-          setData(response.result);
-        } else {
-          setError(response?.message || "Unexpected data format from server");
-        }
-      } catch (err) {
-        setError(err.message || "Failed to fetch login audit data");
-      } finally {
-        setLoading(false);
+  // --- MODIFIED: This function ONLY fetches data (Flag 1) ---
+  const fetchData = useCallback(async () => {
+    if (!loginName) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      const requestPayload = {
+        flagId: 1,
+        requestUserName: loginName
+      };
+      const response = await LoginAudit(requestPayload);
+      if (response?.status === "success" && Array.isArray(response.result)) {
+        setData(response.result);
+      } else {
+        setError(response?.message || "Unexpected data format from server");
+        setData([]);
       }
-    };
-    fetchData();
-  }, []);
+    } catch (err) {
+      setError(err.message || "Failed to fetch login audit data");
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [loginName]); // Now only depends on loginName
+
+  useEffect(() => {
+    let sessionError = null;
+    try {
+      const authUser = sessionStorage.getItem('authUser');
+      if (authUser) {
+        const parsedData = JSON.parse(authUser);
+        const findSessionProps = (data) => {
+          if (data && data.LoginName && data.User_Id !== undefined) {
+            return { loginName: data.LoginName, userId: data.User_Id };
+          }
+          if (data && data.result && data.result.LoginName && data.result.User_Id !== undefined) {
+            return { loginName: data.result.LoginName, userId: data.result.User_Id };
+          }
+          if (data && data.user && data.user.LoginName && data.user.User_Id !== undefined) {
+            return { loginName: data.user.LoginName, userId: data.user.User_Id };
+          }
+          return null;
+        };
+
+        const props = findSessionProps(parsedData);
+        if (props) {
+          setLoginName(props.loginName);
+          // setUserId(props.userId); // No longer needed
+        } else {
+          sessionError = "Session data is invalid. Could not find 'LoginName'.";
+        }
+      } else {
+        sessionError = "User not logged in (no 'authUser' in session).";
+      }
+    } catch (e) {
+      sessionError = `Failed to parse session data. Error: ${e.message}`;
+    }
+
+    if (sessionError) {
+      setError(sessionError);
+      setLoading(false);
+    }
+  }, []); 
+  useEffect(() => {
+    if (loginName) {
+      fetchData(); // Only fetch data.
+    }
+  }, [loginName, fetchData]); 
 
   const formatDateTime = (dateTimeString) => {
+  
     if (!dateTimeString) return 'N/A';
     try {
       const date = new Date(dateTimeString);
       return date.toLocaleString('en-IN', {
-        year: 'numeric', 
-        month: 'short', 
+        year: 'numeric',
+        month: 'short',
         day: 'numeric',
-        hour: '2-digit', 
+        hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
       });
@@ -102,11 +153,13 @@ const LoginAuditLogs = () => {
   };
 
   const formatCoordinate = (coord) => {
+    //
     if (!coord && coord !== 0) return 'N/A';
     return parseFloat(coord).toFixed(4);
   };
 
   const getStatusBadge = (isDisabled) => (
+    
     <Badge className={`text-uppercase ${isDisabled ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success'}`}>
       {isDisabled ? 'Inactive' : 'Active'}
     </Badge>
@@ -115,6 +168,7 @@ const LoginAuditLogs = () => {
   document.title = `Audit Logs | DMS`;
 
   const sortData = (data, key, direction) => {
+ 
     if (!key || !direction) return data;
     return [...data].sort((a, b) => {
       if (['DeviceDateTime', 'CreatedOn', 'UpdatedOn'].includes(key)) {
@@ -122,7 +176,7 @@ const LoginAuditLogs = () => {
         const dateB = new Date(b[key]).getTime();
         return direction === 'asc' ? dateA - dateB : dateB - dateA;
       }
-      
+
       const aValue = a[key] === null || a[key] === undefined ? '' : a[key];
       const bValue = b[key] === null || b[key] === undefined ? '' : b[key];
       let aVal = typeof aValue === 'string' ? aValue.toLowerCase() : aValue;
@@ -140,11 +194,12 @@ const LoginAuditLogs = () => {
   };
 
   const filteredData = useMemo(() => {
+   
     if (!searchText) return data;
     const lower = searchText.toLowerCase();
     return data.filter(item => {
       if (!item) return false;
-      
+
       const searchFields = [
         item.RequestUserName,
         item.IPAddress,
@@ -153,24 +208,27 @@ const LoginAuditLogs = () => {
         item.BrowserVersion,
         item.OSName
       ];
-      
-      return searchFields.some(field => 
+
+      return searchFields.some(field =>
         field && field.toString().toLowerCase().includes(lower)
       );
     });
   }, [data, searchText]);
 
   const sortedData = useMemo(() => {
+
     return sortData(filteredData, sortConfig.key, sortConfig.direction);
   }, [filteredData, sortConfig]);
 
   const pageCount = pageSize === -1 ? 1 : Math.ceil(sortedData.length / pageSize);
   const paginatedData = useMemo(() => {
+    // ... (paginatedData logic is unchanged) ...
     if (pageSize === -1) return sortedData;
     return sortedData.slice(page * pageSize, (page + 1) * pageSize);
   }, [sortedData, page, pageSize]);
 
   const renderTableHeader = () => (
+    // ... (renderTableHeader function is unchanged) ...
     <tr>
       {columns.map((col, idx) => {
         if (!col.sortable) {
@@ -187,8 +245,8 @@ const LoginAuditLogs = () => {
                 prev.key !== col.key
                   ? { key: col.key, direction: 'asc' }
                   : prev.direction === 'asc'
-                  ? { key: col.key, direction: 'desc' }
-                  : { key: null, direction: null }
+                    ? { key: col.key, direction: 'desc' }
+                    : { key: null, direction: null }
               );
               setPage(0);
             }}
@@ -209,6 +267,7 @@ const LoginAuditLogs = () => {
   );
 
   const renderPagination = () => {
+    // ... (renderPagination function is unchanged) ...
     return (
       <div style={{ margin: '18px 0 12px 0' }}>
         <div style={{
@@ -305,7 +364,7 @@ const LoginAuditLogs = () => {
   };
 
   const renderTableRows = () => {
-    if (loading) {
+    if (loading && data.length === 0) { // Show loading only on initial load
       return (
         <tr>
           <td colSpan={columns.length} className="text-center py-4">
@@ -314,7 +373,7 @@ const LoginAuditLogs = () => {
         </tr>
       );
     }
-    if (error) {
+    if (error && data.length === 0) { // Show error only if there's no data
       return (
         <tr>
           <td colSpan={columns.length} className="text-danger text-center py-4">{error}</td>
@@ -369,14 +428,23 @@ const LoginAuditLogs = () => {
                   }}
                 />
               </Col>
+              {/* --- Logout Button has been removed --- */}
             </Row>
+
+            {/* Show table-level error, e.g., session error or fetch error */}
+            {error && !loading && (
+              <Alert color="danger">
+                {error}
+              </Alert>
+            )}
+
             <div className="table-responsive">
               <Table bordered hover>
                 <thead className="table-light">{renderTableHeader()}</thead>
                 <tbody>{renderTableRows()}</tbody>
               </Table>
             </div>
-            {filteredData.length > 0 && !loading && renderPagination()}
+            {filteredData.length > 0 && renderPagination()}
           </CardBody>
         </Card>
       </Container>

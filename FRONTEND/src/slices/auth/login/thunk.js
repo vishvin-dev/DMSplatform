@@ -13,13 +13,43 @@ const browserInfo = detect();
 
 import { loginSuccess, logoutUserSuccess, apiError, reset_login_flag, setNotification } from './reducer';
 
-// src/slices/thunks.js
+// HELPER FUNCTION FOR GEOLOCATION
+/**
+ * Gets the user's current geolocation.
+ * @returns {Promise<{latitude: number, longitude: number}>} A promise that resolves with coordinates.
+ * Defaults to {0, 0} if permission is denied or API is unavailable.
+ */
+const getGeolocation = () => {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+            resolve({ latitude: 0, longitude: 0 });
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                resolve({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                });
+            },
+            () => {
+                // Resolve with defaults so login flow is not blocked
+                resolve({ latitude: 0, longitude: 0 }); 
+            },
+            {
+                timeout: 5000, // 5 seconds
+                enableHighAccuracy: false
+            }
+        );
+    });
+};
 
 export const loginUser = (user, history) => async (dispatch) => {
     try {
         let response;
 
-        // This logic handles different authentication methods based on your environment variables.
+        // ... (your existing login logic) ...
         if (process.env.REACT_APP_DEFAULTAUTH === "firebase") {
             const fireBaseBackend = getFirebaseBackend();
             response = await fireBaseBackend.loginUser(user.email, user.password);
@@ -43,6 +73,41 @@ export const loginUser = (user, history) => async (dispatch) => {
             setAuthorization();
             dispatch(loginSuccess(data));
 
+            
+            try {
+                
+                const location = await getGeolocation();
+
+                // Construct the payload for flagId: 2
+                const auditPayload = {
+                    flagId: 2,
+                    UserID: data.user.User_Id,
+                    HostName: "TBD", 
+                    Device: "TBD",   
+                    MacAddress: "TBD", 
+                    IPAddress: "TBD", 
+                    OSName: browserInfo.os || "Unknown",
+                    BrowserName: browserInfo.name || "Unknown",
+                    BrowserVersion: browserInfo.version || "Unknown",
+                    Latitude: location.latitude,
+                    Longitude: location.longitude,
+                    RequestUserName: user.email,
+                };
+                
+             
+                const auditResponse = await LoginAudit(auditPayload);
+
+                
+                if (auditResponse && auditResponse.loginDetailId) {
+                
+                    sessionStorage.setItem("trackingResult", auditResponse.loginDetailId);
+                }
+
+            } catch (auditError) {
+                
+            }
+            
+
             if (data?.user?.isForcePasswordChange) {
                 history("/ForceResetPassword");
             } else {
@@ -56,64 +121,48 @@ export const loginUser = (user, history) => async (dispatch) => {
             dispatch(apiError({ message: errorMessage }));
         }
     } catch (error) {
-        // This log helps you see the exact error structure from your server in the browser console.
-        console.error("🔴 THUNK CATCH BLOCK: Full server error response:", error.response);
-
-        let errorMessage = "An unknown error occurred. Please try again."; // Default fallback message
-
-        // **MODIFIED ERROR EXTRACTION LOGIC**
-        // This block now robustly finds the error message from the backend response.
+        let errorMessage = "An unknown error occurred. Please try again."; 
+        
         if (error.response && error.response.data) {
             const errorData = error.response.data;
-
-            // Priority 1: Check for a 'message' field, as in {"message":"Invalid password."}
             if (typeof errorData.message === 'string') {
                 errorMessage = errorData.message;
-            }
-            // Priority 2: Check for a 'detail' field (common in Django REST Framework)
-            else if (typeof errorData.detail === 'string') {
+            } else if (typeof errorData.detail === 'string') {
                 errorMessage = errorData.detail;
-            }
-            // Priority 3: Check for an 'error' field
-            else if (typeof errorData.error === 'string') {
+            } else if (typeof errorData.error === 'string') {
                 errorMessage = errorData.error;
-            }
-            // Priority 4: Check if the entire response data is just a string
-            else if (typeof errorData === 'string') {
+            } else if (typeof errorData === 'string') {
                 errorMessage = errorData;
             }
         } else if (error.message) {
-            // Fallback for generic network issues (e.g., server is down)
             errorMessage = error.message;
         }
-console.log("🔵 THUNK DISPATCHING: Extracted error message:", errorMessage);
-        // Dispatch the extracted error message to the Redux store.
         dispatch(apiError({ message: errorMessage }));
     }
 };
 
 export const logoutUser = (history) => async (dispatch) => {
     try {
-        const authUser = JSON.parse(sessionStorage.getItem("authUser"));
+        
         const userLoginDetailId = sessionStorage.getItem("trackingResult");
-        const userEmailFromSession = authUser?.user?.Email;
-
+        
         if (userLoginDetailId) {
+            
             const payload = {
                 flagId: 3,
                 UserLoginDetailID: userLoginDetailId,
-                RequestUserName: userEmailFromSession,
             };
             try {
                 await LoginAudit(payload);
             } catch (err) {
-                // Logout audit API call failed, but proceed with logout
+                
             }
         }
 
+        
         sessionStorage.removeItem("authUser");
-        sessionStorage.removeItem("trackingResult");
-
+        sessionStorage.removeItem("trackingResult"); 
+        
         dispatch(logoutUserSuccess(true));
 
         if (history) {
