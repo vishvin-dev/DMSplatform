@@ -17,7 +17,7 @@ export const getAccountId = async (section, account_id) => {
 export const getConsumerDetails = async (account_id) => {
   const [result] = await pool.execute(
     `
-        SELECT account_id, rr_no, consumer_name, consumer_address, phone 
+        SELECT account_id, rr_no, consumer_name, consumer_address, phone,tariff
         FROM consumer_details 
         WHERE account_id = ?`,
     [account_id]

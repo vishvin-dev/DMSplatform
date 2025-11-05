@@ -279,10 +279,18 @@ export const getMenuPagesByRole = async (roleId) => {
 // this is all fecthing things of DIV, SUB_DIV, SECTION, GENDER, MARTITALSTATUS, ROLES,DOCUMENTLIST
 //Divison
 
-export const getCircle = async () => {
+export const getCircle = async (zone_code) => {
     const [result] = await pool.execute(
-        `SELECT DISTINCT circle, circle_code FROM zone_codes ORDER BY circle;`
+          `SELECT DISTINCT circle, circle_code FROM zone_codes WHERE zone_code = ?;`,
+        [zone_code]
     );
+    return result;
+}
+
+export const getZone=async()=>{
+    const [result]=await pool.execute(
+        `SELECT DISTINCT zone, zone_code  FROM zone_codes ORDER BY ZONE;;`
+    )
     return result;
 }
 export const getDivisions = async (circle_code) => {

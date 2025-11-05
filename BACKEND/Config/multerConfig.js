@@ -13,7 +13,7 @@ const getUploadFolder = (req) => {
   } else if (req.originalUrl.includes("documentUpload")) {
     return networkFolder;
   } else if (req.originalUrl.includes("IndentProjectHead")) {
-    // ✅ New route for Indent Final Approved Files
+    //  New route for Indent Final Approved Files
     return indentNetworkFolder;
   } else {
     return "uploads/other";

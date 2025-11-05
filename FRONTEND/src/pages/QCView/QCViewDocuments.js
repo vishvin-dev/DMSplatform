@@ -634,15 +634,15 @@ const QCViewDocuments = () => {
                     blob: response
                 });
             }
-            else if (response.data && response.data instanceof Blob) {
-                const fileUrl = URL.createObjectURL(response.data);
-                const fileType = response.data.type.split('/')[1] || doc.DocumentName?.split('.').pop() || 'unknown';
+            else if (response && response instanceof Blob) {
+                const fileUrl = URL.createObjectURL(response);
+                const fileType = response.type.split('/')[1] || doc.DocumentName?.split('.').pop() || 'unknown';
 
                 setPreviewContent({
                     url: fileUrl,
                     type: fileType,
                     name: doc.DocumentName,
-                    blob: response.data
+                    blob: response
                 });
             }
             else {
