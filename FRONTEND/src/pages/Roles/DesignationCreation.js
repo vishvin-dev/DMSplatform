@@ -783,7 +783,7 @@ const DocumentViewer = () => {
       <h3>📄 Document Viewer</h3>
 
       <button
-        onClick={() => handleViewPdf(5)}
+        onClick={() => handleViewPdf(4)}
         disabled={loading}
         style={{
           padding: "8px 16px",
