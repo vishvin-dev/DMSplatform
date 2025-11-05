@@ -49,18 +49,26 @@ export const getLatestVersion = async (documentId) => {
 };
 
 // =======================================================Insert new version=========================================================
-export const insertDocumentVersion = async (documentId, versionLabel, filePath, isLatest = 1) => {
-    // Set all other versions of this document as not latest
+export const insertDocumentVersion = async (
+    documentId,
+    versionLabel,
+    filePath,
+    DocumentName,
+    DocumentDescription,
+    MetaTags,
+    UploadedByUser_Id,
+    isLatest = 1
+) => {
+    // Mark old versions as not latest
     await pool.execute(`UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`, [documentId]);
-
     const [result] = await pool.execute(
         `
-    INSERT INTO documentversion (DocumentId, VersionLabel, FilePath, IsLatest)
-    VALUES (?, ?, ?, ?)
-    `,
-        [documentId, versionLabel, filePath, isLatest]
+        INSERT INTO documentversion 
+        (DocumentId, VersionLabel, FilePath, IsLatest, DocumentName, DocumentDescription, MetaTags, UploadedByUser_Id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [documentId, versionLabel, filePath, isLatest, DocumentName, DocumentDescription, MetaTags, UploadedByUser_Id]
     );
-
     return result.insertId;
 };
 
@@ -71,13 +79,68 @@ export const getNextVersionLabel = (latestVersion) => {
     return `v${num + 1}`;
 };
 
-
 //================================================THIS IS THE VIEW OF THE MEAT INFORMATION OK ========================================
-export const getDocsMetaInfo = async (Account_Id) => {
+export const getDocsMetaInfo = async (accountId) => {
     try {
         const [result] = await pool.execute(`
-            SELECT * FROM documentupload WHERE Account_Id=?;
-            `, [Account_Id]);
+            SELECT 
+                du.DocumentId,
+                du.DocumentName,
+                du.DocumentDescription,
+                du.MetaTags,
+                dv.Version_Id,
+                dv.VersionLabel,
+                dv.IsLatest,
+                dv.FilePath,
+                dv.UploadedAt,
+                dv.ChangeReason,
+                du.Account_Id,
+                du.CreatedByUser_Id,
+                du.CreatedByUserName,
+                du.CreatedAt,
+                du.Category_Id,
+                cat.CategoryName,
+                du.Status_Id,
+                stat.StatusName,
+
+                -- Consumer Info
+                cd.consumer_name,
+                cd.phone,
+                cd.consumer_address,
+                cd.rr_no,
+                cd.tariff,
+
+                -- Zone / Division / Subdivision / Section
+                zc.zone,
+                zc.division AS division_name,
+                zc.sub_division AS subdivision_name,
+                zc.section_office AS section_name
+
+            FROM 
+                documentupload du
+            JOIN 
+                documentcategorymaster cat ON du.Category_Id = cat.Category_Id
+            JOIN 
+                documentstatusmaster stat ON du.Status_Id = stat.Status_Id
+            LEFT JOIN 
+                consumer_details cd ON du.Account_Id = cd.account_id
+            JOIN 
+                documentworkflowhistory wfh ON wfh.DocumentId = du.DocumentId AND wfh.IsLatest = 1
+            JOIN 
+                documentversion dv ON dv.DocumentId = du.DocumentId -- AND dv.IsLatest = 1
+            LEFT JOIN
+                zone_codes zc 
+                ON  zc.div_code = du.div_code
+                AND zc.sd_code = du.sd_code
+                AND zc.so_code = du.so_code
+            WHERE 
+                du.Account_Id = ?
+                AND wfh.Status_Id = 2 -- Approved
+            ORDER BY
+                dv.IsLatest DESC,     -- Latest version first
+                dv.UploadedAt DESC;
+
+            `, [accountId]);
         return result
     } catch (error) {
         console.log("Error in the fetchig the Details of Document", error)
@@ -85,17 +148,18 @@ export const getDocsMetaInfo = async (Account_Id) => {
     }
 }
 
-    export const getDocsVieww = async (DocumentId) => {
-        try {
-            const [result] = await pool.execute(`
+//================================================THIS IS THE DOCUMENT VIEW OK ===========================================
+export const getDocsVieww = async (DocumentId) => {
+    try {
+        const [result] = await pool.execute(`
                     SELECT FilePath FROM documentversion 
                     WHERE DocumentId = ? AND IsLatest = 1 LIMIT 1;
                 `, [DocumentId]);
-            return result
-        } catch (error) {
-            console.log("Error in the fetchig the view of Document", error)
-            throw error
-        }
+        return result
+    } catch (error) {
+        console.log("Error in the fetchig the view of Document", error)
+        throw error
     }
+}
 
 

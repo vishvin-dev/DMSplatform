@@ -9,6 +9,7 @@ import {
 } from "../../models/DocumentUpload.js"
 
 import { insertDocumentUpload, getLatestVersion, insertDocumentVersion, getNextVersionLabel, getDocsMetaInfo, getDocsVieww } from "../../models/MannualUpload.js"
+import { count } from "console";
 
 //this is the doucment uploading things
 export const DocumentUpload = async (req, res) => {
@@ -701,8 +702,18 @@ export const MannualUpload = async (req, res) => {
             fs.mkdirSync(dirPath, { recursive: true });
         }
 
-        //  Step 4: Insert new version record
-        const versionId = await insertDocumentVersion(documentId, nextVersion, filePath, 1);
+        // Step 4: Insert version record (with meta info)
+        const versionId = await insertDocumentVersion(
+            documentId,
+            nextVersion,
+            filePath,
+            DocumentName,
+            DocumentDescription,
+            MetaTags,
+            CreatedByUser_Id,
+            1
+        );
+
 
         return res.status(200).json({
             status: "success",
@@ -732,17 +743,18 @@ export const ScanUpload = async (req, res) => {
 
 // =========================================================================================================================
 export const DocumentView = async (req, res) => {
-    const { flagId, DocumentId, Account_Id } = req.body;
+    const { flagId, DocumentId, accountId } = req.body;
 
     try {
         if (parseInt(flagId) === 1) {
-            if (!Account_Id) {
+            if (!accountId) {
                 return res.status(400).json({ status: "error", message: "accountId is required" });
             }
-            const results = await getDocsMetaInfo(Account_Id);
+            const results = await getDocsMetaInfo(accountId);
             return res.status(200).json({
                 status: "success",
                 message: "Document Data fetched successfully",
+                count:results.length,
                 data: results,
             });
         }
