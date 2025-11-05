@@ -13,7 +13,7 @@ app.use(bodyParser.json());
 
 app.use(cors({
   origin: "*",
-  exposedHeaders: ["Content-Disposition", "content-disposition"] // Add both casing versions
+  exposedHeaders: ["Content-Disposition", "content-type"], // Add both casing versions
 }));
 
 
