@@ -1401,7 +1401,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     Card, CardBody, CardHeader, Col, Container, Row,
     Button, Badge, Input, Label, FormGroup, ListGroup, ListGroupItem,
-    Alert, Spinner
+    Alert, Spinner, Modal, ModalHeader, ModalBody, ModalFooter
 } from 'reactstrap';
 import { getDocumentDropdowns, viewDocument, view, getAllUserDropDownss } from '../../helpers/fakebackend_helper';
 import { ToastContainer } from 'react-toastify';
@@ -1418,6 +1418,7 @@ const ViewDocuments = () => {
     const [selectedFile, setSelectedFile] = useState(null);
     const [previewContent, setPreviewContent] = useState(null);
     const [previewError, setPreviewError] = useState(null);
+    const [previewModal, setPreviewModal] = useState(false);
 
     // Modal states
     const [successModal, setSuccessModal] = useState(false);
@@ -1919,20 +1920,18 @@ const ViewDocuments = () => {
 
     const getFileIcon = (type) => {
         const icons = {
-            pdf: 'ri-file-pdf-line text-danger',
-            doc: 'ri-file-word-line text-primary',
-            docx: 'ri-file-word-line text-primary',
-            xls: 'ri-file-excel-line text-success',
-            xlsx: 'ri-file-excel-line text-success',
-            ppt: 'ri-file-ppt-line text-warning',
-            pptx: 'ri-file-ppt-line text-warning',
-            jpg: 'ri-image-line text-info',
-            jpeg: 'ri-image-line text-info',
-            png: 'ri-image-line text-info',
-            gif: 'ri-image-line text-info'
+            pdf: 'ri-file-pdf-fill text-danger',
+            jpg: 'ri-image-fill text-info',
+            jpeg: 'ri-image-fill text-info',
+            png: 'ri-image-fill text-info',
+            gif: 'ri-image-fill text-info',
+            doc: 'ri-file-word-fill text-primary',
+            docx: 'ri-file-word-fill text-primary',
+            xls: 'ri-file-excel-fill text-success',
+            xlsx: 'ri-file-excel-fill text-success',
+            default: 'ri-file-fill text-secondary'
         };
-
-        return <i className={`${icons[type] || 'ri-file-line text-secondary'} fs-3`}></i>;
+        return <i className={`${icons[type] || icons.default} me-2`}></i>;
     };
 
     const formatDate = (dateString) => {
@@ -1941,40 +1940,94 @@ const ViewDocuments = () => {
         return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
     };
 
+    // FIXED handleFileSelect function with proper blob handling
     const handleFileSelect = async (file) => {
         setSelectedFile(file);
         setPreviewLoading(true);
         setPreviewContent(null);
         setPreviewError(null);
+        setPreviewModal(true);
 
         try {
-            const response = await view(
-                {
-                    flagId: 2,
-                    DocumentId: file.documentId,
-                },
-                {
-                    responseType: "blob",
-                    headers: { "Content-Type": "application/json" },
-                    transformResponse: [(data, headers) => ({ data, headers })],
-                }
-            );
+            console.log('📄 Starting document preview for DocumentId:', file.documentId);
+            
+            const requestPayload = {
+                flagId: 2,
+                DocumentId: file.documentId,
+                requestUserName: userName,
+                preview: false
+            };
+            
+            console.log('🚀 API Request Payload:', requestPayload);
 
-            const blob = response.data;
-            const fileUrl = URL.createObjectURL(blob);
-            const fileType = blob.type.split('/')[1] || file.type || 'unknown';
+            // Use the view function from fakebackend_helper
+            const response = await view(requestPayload);
 
-            setPreviewContent({
-                url: fileUrl,
-                type: fileType,
-                name: file.name
-            });
+            console.log('✅ API Response received:', response);
+
+            let blobData = null;
+
+            // Handle different response formats
+            if (response && response instanceof Blob) {
+                blobData = response;
+                console.log('✅ Blob data received from response');
+            } else if (response instanceof Blob) {
+                blobData = response;
+                console.log('✅ Blob data received directly');
+            } else if (response && response) {
+                // If data exists but isn't a blob, try to create blob from it
+                console.log('⚠️ Response data is not a Blob, attempting to create blob');
+                blobData = new Blob([response], { type: 'application/pdf' });
+            } else {
+                console.error('❌ Unexpected response format:', response);
+                throw new Error("Invalid preview response format - expected Blob data");
+            }
+
+            if (blobData) {
+                const fileUrl = URL.createObjectURL(blobData);
+                const fileType = blobData.type || 'application/pdf';
+                
+                console.log('📁 File type:', fileType);
+                console.log('🔗 Object URL created');
+
+                setPreviewContent({
+                    url: fileUrl,
+                    type: fileType,
+                    name: file.name,
+                    blob: blobData
+                });
+            }
         } catch (error) {
-            console.error("Preview error:", error);
+            console.error("❌ Preview error:", error);
             setPreviewError(error.message || "Failed to load preview");
+            setResponse(error.message || "Failed to load document");
+            setErrorModal(true);
         } finally {
             setPreviewLoading(false);
         }
+    };
+
+    const closePreview = () => {
+        if (previewContent?.url) {
+            URL.revokeObjectURL(previewContent.url);
+        }
+        setPreviewModal(false);
+        setPreviewContent(null);
+        setPreviewError(null);
+    };
+
+    const handleDownload = () => {
+        if (!previewContent?.blob) return;
+
+        const blob = previewContent.blob;
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = previewContent.name || 'document';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
     };
 
     const handleDocumentAction = async (documentId) => {
@@ -2003,7 +2056,7 @@ const ViewDocuments = () => {
                 console.warn("Content-Disposition header missing — using fallback filename.");
             }
 
-            const blob = response.data;
+            const blob = response;
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
@@ -2018,12 +2071,231 @@ const ViewDocuments = () => {
         }
     };
 
+    // Enhanced LazyPreviewContent component with proper document preview
+    const LazyPreviewContent = ({ file }) => {
+        const [previewLoaded, setPreviewLoaded] = useState(false);
+        const [detailsLoaded, setDetailsLoaded] = useState(false);
+
+        useEffect(() => {
+            const previewTimer = setTimeout(() => {
+                setPreviewLoaded(true);
+            }, 1200);
+
+            return () => clearTimeout(previewTimer);
+        }, []);
+        
+        useEffect(() => {
+            if (previewLoaded) {
+                const detailsTimer = setTimeout(() => {
+                    setDetailsLoaded(true);
+                }, 1000);
+
+                return () => clearTimeout(detailsTimer);
+            }
+        }, [previewLoaded]);
+        
+        // Enhanced PDF/Image viewer
+        const renderPreviewContent = () => {
+            if (!previewLoaded) {
+                return (
+                    <div className="text-center h-100 d-flex flex-column justify-content-center align-items-center"
+                        style={{ minHeight: '400px' }}>
+                        <div className="spinner-border text-primary" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                        </div>
+                        <p className="mt-2">Loading preview...</p>
+                    </div>
+                );
+            }
+
+            if (previewLoading) {
+                return (
+                    <div className="text-center h-100 d-flex flex-column justify-content-center align-items-center"
+                        style={{ minHeight: '400px' }}>
+                        <div className="spinner-border text-primary" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                        </div>
+                        <p className="mt-2">Loading document content...</p>
+                    </div>
+                );
+            }
+
+            if (previewError) {
+                return (
+                    <Alert color="danger" className="m-3 fade-in">
+                        <i className="ri-error-warning-line me-2"></i>
+                        {previewError}
+                    </Alert>
+                );
+            }
+
+            if (previewContent) {
+                const isPDF = previewContent.type.includes('pdf');
+                const isImage = previewContent.type.includes('image');
+                
+                return (
+                    <div className="d-flex flex-column h-100">
+                        {/* Preview Header */}
+                        <div className="d-flex justify-content-between align-items-center p-3 border-bottom">
+                            <h6 className="mb-0">
+                                <i className="ri-file-text-line me-2"></i>
+                                {previewContent.name}
+                            </h6>
+                            <Button
+                                color="primary"
+                                size="sm"
+                                onClick={handleDownload}
+                            >
+                                <i className="ri-download-line me-1"></i> Download
+                            </Button>
+                        </div>
+                        
+                        {/* Preview Content */}
+                        <div className="flex-grow-1 preview-content">
+                            {isPDF ? (
+                                <div className="pdf-viewer-container fade-in h-100">
+                                    <iframe
+                                        src={`${previewContent.url}#toolbar=1&navpanes=1&scrollbar=1`}
+                                        title="PDF Viewer"
+                                        className="w-100 h-100"
+                                        style={{ border: 'none' }}
+                                    />
+                                </div>
+                            ) : isImage ? (
+                                <div className="text-center fade-in p-3 h-100 d-flex align-items-center justify-content-center">
+                                    <img
+                                        src={previewContent.url}
+                                        alt="Document Preview"
+                                        className="img-fluid"
+                                        style={{
+                                            maxHeight: '100%',
+                                            maxWidth: '100%',
+                                            objectFit: 'contain'
+                                        }}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
+                                    <i className="ri-file-line display-4 text-muted"></i>
+                                    <h5 className="mt-3">Preview not available</h5>
+                                    <p className="text-muted">
+                                        This file type ({previewContent.type}) cannot be previewed in the browser.
+                                    </p>
+                                    <Button
+                                        color="primary"
+                                        onClick={handleDownload}
+                                        className="mt-2"
+                                    >
+                                        <i className="ri-download-line me-1"></i> Download File
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="text-center text-muted py-5 h-100 d-flex flex-column justify-content-center fade-in">
+                    <i className="ri-file-line display-4"></i>
+                    <h5 className="mt-3">No document selected</h5>
+                    <p>Select a file from the list to preview it here</p>
+                </div>
+            );
+        };
+        
+        return (
+            <Row>
+                <Col lg={6} className="h-100 d-flex flex-column">
+                    <Card className="h-100 slide-in-left delay-3 fixed-height-card">
+                        <CardHeader className="bg-light p-3 position-relative"
+                            style={{
+                                borderTop: '3px solid #405189'
+                            }}>
+                            <h5 className="mb-0">Document Preview</h5>
+                        </CardHeader>
+                        <CardBody className="p-0 preview-container">
+                            <div className="preview-scrollable">
+                                {renderPreviewContent()}
+                            </div>
+                        </CardBody>
+                    </Card>
+                </Col>
+                <Col lg={6}>
+                    {!detailsLoaded ? (
+                        <Card className="h-100 shadow-sm">
+                            <CardHeader className="bg-light p-3 position-relative card-header border-top-primary">
+                                <h6 className="mb-0 d-flex align-items-center">
+                                    <i className="ri-information-line me-2"></i> Document Details
+                                </h6>
+                            </CardHeader>
+                            <CardBody className="py-5 d-flex justify-content-center">
+                                <Spinner color="primary" />
+                            </CardBody>
+                        </Card>
+                    ) : (
+                        <Card className="h-100 shadow-sm">
+                            <CardHeader className="bg-light p-3 position-relative card-header border-top-primary">
+                                <h6 className="mb-0 d-flex align-items-center">
+                                    <i className="ri-information-line me-2"></i> Document Details
+                                </h6>
+                            </CardHeader>
+
+                            <CardBody className="py-3 px-4">
+                                <Row>
+                                    {/* Left Column */}
+                                    <Col md={6}>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Document Name:</Label>
+                                            <p className="mb-1 text-break">{file.name}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Category:</Label>
+                                            <p className="mb-1">{file.category || 'N/A'}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Description:</Label>
+                                            <p className="mb-1 text-break">{file.description || 'N/A'}</p>
+                                        </div>
+                                    </Col>
+
+                                    {/* Right Column */}
+                                    <Col md={6}>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Uploaded By:</Label>
+                                            <p className="mb-1">{file.createdBy || 'N/A'}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Upload Date:</Label>
+                                            <p className="mb-1">{file.createdAt}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Status:</Label>
+                                            <p className="mb-1">
+                                                <Badge color="success" className="badge-soft-success">
+                                                    {file.status}
+                                                </Badge>
+                                            </p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">File Type:</Label>
+                                            <p className="mb-1 text-capitalize">{file.type || 'N/A'}</p>
+                                        </div>
+                                    </Col>
+                                </Row>
+                            </CardBody>
+                        </Card>
+                    )}
+                </Col>
+            </Row>
+        );
+    };
+
     return (
         <React.Fragment>
-            
             <ToastContainer closeButton={false} />
             <div className="page-content">
-                <BreadCrumb  title="Document Search"pageTitle="DMS" />
+                <BreadCrumb title="Document Search" pageTitle="DMS" />
                 <Container fluid>
                     <SuccessModal
                         show={successModal}
@@ -2513,9 +2785,9 @@ const ViewDocuments = () => {
                                                     <div className="flex-grow-1 preview-content">
                                                         {previewContent.type.match(/pdf/) ? (
                                                             <div className="pdf-viewer-container fade-in h-100">
-                                                                <embed
-                                                                    src={`${previewContent.url}#toolbar=0&navpanes=0&scrollbar=0`}
-                                                                    type="application/pdf"
+                                                                <iframe
+                                                                    src={`${previewContent.url}#toolbar=1&navpanes=1&scrollbar=1`}
+                                                                    title="PDF Viewer"
                                                                     className="w-100 h-100"
                                                                     style={{ border: 'none' }}
                                                                 />
@@ -2526,17 +2798,24 @@ const ViewDocuments = () => {
                                                                     src={previewContent.url}
                                                                     alt="Document Preview"
                                                                     className="img-fluid"
-                                                                    style={{ maxHeight: '100%', maxWidth: '100%' }}
+                                                                    style={{ 
+                                                                        maxHeight: '100%', 
+                                                                        maxWidth: '100%',
+                                                                        objectFit: 'contain'
+                                                                    }}
                                                                 />
                                                             </div>
                                                         ) : (
                                                             <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
                                                                 <i className="ri-file-line display-4 text-muted"></i>
                                                                 <h5 className="mt-3">Preview not available</h5>
-                                                                <p>This file type ({previewContent.type}) cannot be previewed in the browser.</p>
+                                                                <p className="text-muted">
+                                                                    This file type ({previewContent.type}) cannot be previewed in the browser.
+                                                                </p>
                                                                 <Button
                                                                     color="primary"
-                                                                    onClick={() => handleDocumentAction(selectedFile.documentId)}
+                                                                    onClick={handleDownload}
+                                                                    className="mt-2"
                                                                 >
                                                                     <i className="ri-download-line me-1"></i> Download File
                                                                 </Button>
@@ -2559,6 +2838,46 @@ const ViewDocuments = () => {
                     )}
                 </Container>
             </div>
+
+            {/* Document Preview Modal */}
+            <Modal
+                isOpen={previewModal}
+                toggle={closePreview}
+                size="xl"
+                centered
+                className="document-preview-modal"
+                style={{ maxWidth: '95%' }}
+            >
+                <ModalHeader className="bg-primary text-white p-3" toggle={closePreview}>
+                    <span className="modal-title text-white">
+                        <i className="ri-file-text-line me-2"></i>
+                        {selectedFile?.name || 'Document Preview'}
+                    </span>
+                </ModalHeader>
+                <ModalBody style={{
+                    maxHeight: '70vh',
+                    overflowY: 'auto',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column'
+                }}>
+                    {selectedFile && <LazyPreviewContent file={selectedFile} />}
+                </ModalBody>
+                <ModalFooter style={{ borderTop: 'none' }}>
+                    <Button color="secondary" onClick={closePreview}>
+                        <i className="ri-close-line me-1"></i>
+                        Close
+                    </Button>
+                    <Button
+                        color="primary"
+                        onClick={handleDownload}
+                        disabled={!previewContent}
+                    >
+                        <i className="ri-download-line me-1"></i>
+                        Download
+                    </Button>
+                </ModalFooter>
+            </Modal>
 
             {/* Add some custom CSS */}
             <style>
@@ -2679,11 +2998,13 @@ const ViewDocuments = () => {
                     overflow: hidden;
                 }
 
-                .pdf-viewer-container embed {
+                .pdf-viewer-container iframe {
                     width: 100%;
                     height: 100%;
+                    min-height: 500px;
+                    border: none;
+                    background: #f8f9fa;
                 }
-
 
                 .document-details {
                     height: 100%;
@@ -2757,6 +3078,10 @@ const ViewDocuments = () => {
                     }
                 }
 
+                .border-top-primary { border-top: 3px solid #405189 !important; }
+                .preview-content { background: #f8f9fa; border-radius: 8px; }
+                .spinner-border { width: 3rem; height: 3rem; }
+
                 /* Responsive adjustments */
                 @media (max-width: 991px) {
                     .results-container {
@@ -2772,6 +3097,10 @@ const ViewDocuments = () => {
                     .results-container .col-lg-3:first-child .fixed-height-card:first-child,
                     .results-container .col-lg-3:first-child .fixed-height-card:last-child {
                         height: 350px;
+                    }
+                    
+                    .pdf-viewer-container iframe {
+                        min-height: 400px;
                     }
                 }
                 `}
