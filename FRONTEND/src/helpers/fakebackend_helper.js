@@ -370,6 +370,7 @@ export const getDocument = () => api.get(url.DOCUMENT_TYPE_GET_URL);
 // thi is the dms document upload api
 export const getDocumentDropdowns=(data) => api.create(url.DOCUMENET_UPLOADSS, data);
 export const postDocumentUpload =(data) => api.createMultiPart(url.POST_DOCUMENT_UPLOAD,data);
+export const postDocumentManualUpload=(data) => api.createMultiPart(url.POST_DOCUMENT_MANUAL_UPLOAD,data);
 export const viewDocument = (data) => api.create(url.VIEW_DOCUMENT, data);
 export const postDocumentUploadview =(data) => api.create(url.POST_DOCUMENT_UPLOAD_VIEW,data);
 
