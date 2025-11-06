@@ -2387,7 +2387,7 @@ const QCViewDocuments = () => {
             // Handle different response formats
             if (response && response instanceof Blob) {
                 blobData = response;
-                console.log('✅ Blob data received from response.data');
+                console.log('✅ Blob data received from response');
             } else if (response instanceof Blob) {
                 blobData = response;
                 console.log('✅ Blob data received directly');
@@ -3522,19 +3522,3 @@ const QCViewDocuments = () => {
 };
 
 export default QCViewDocuments;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
