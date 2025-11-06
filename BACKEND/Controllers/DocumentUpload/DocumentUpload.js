@@ -685,7 +685,7 @@ export const MannualUpload = async (req, res) => {
                 Account_Id,
                 Role_Id,
                 Category_Id,
-                Status_Id,
+                // Status_Id,
                 div_code,
                 sd_code,
                 so_code
@@ -709,6 +709,7 @@ export const MannualUpload = async (req, res) => {
         // Step 4: Insert version record (with meta info)
         const versionId = await insertDocumentVersion(
             documentId,
+            Status_Id,
             nextVersion,
             filePath,
             DocumentName,
@@ -747,7 +748,8 @@ export const ScanUpload = async (req, res) => {
 
 // =========================================================================================================================
 export const DocumentView = async (req, res) => {
-    const { flagId, DocumentId, accountId } = req.body;
+    const { flagId, Version_Id , accountId } = req.body;
+    
 
     try {
         if (parseInt(flagId) === 1) {
@@ -764,10 +766,10 @@ export const DocumentView = async (req, res) => {
         }
         else if (parseInt(flagId) === 2) {
 
-            const result = await getDocsVieww(DocumentId);
+            const result = await getDocsVieww(Version_Id);
 
             if (!result || result.length === 0) {
-                return res.status(404).json({ error: "No file found for this DocumentId" });
+                return res.status(404).json({ error: "No file found for this Version_Id " });
             }
 
             const filePath = result[0].FilePath;

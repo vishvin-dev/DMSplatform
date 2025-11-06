@@ -154,7 +154,7 @@ export const verifiedQc = async (req, res) => {
 
 export const Qcupload = async (req, res) => {
     try {
-        const { flagId, User_Id, so_code, DocumentId, Role_Id, comment } = req.body;
+        const { flagId, User_Id, so_code, DocumentId, Version_Id, Role_Id, comment } = req.body;
 
         if (!flagId) {
             return res.status(400).json({ status: "failed", message: "flagId is required" });
@@ -162,7 +162,7 @@ export const Qcupload = async (req, res) => {
         // This is flagId will fetch all the pending ,approved and the rejected counts ok 
         let results
         if (parseInt(flagId) === 1) {
-            results = await getAllCounts(so_code);
+            results = await getAllCounts(User_Id, so_code);
             return res.status(200).json({
                 status: "success",
                 message: "All QC Data Fetched Successfully",
@@ -203,7 +203,7 @@ export const Qcupload = async (req, res) => {
 
         //======THIS WHEN WE CLCIK TO THE APPROVED BUTTON THEN IT TO BE APPROVED OK=============
         else if (parseInt(flagId) === 5) {
-            results = await clickToApproved(User_Id, DocumentId, Role_Id)
+            results = await clickToApproved(User_Id, Version_Id , Role_Id)
             return res.status(200).json({
                 status: "success",
                 message: "Document Approved Successfully",

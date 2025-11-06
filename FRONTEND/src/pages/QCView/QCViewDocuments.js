@@ -2171,10 +2171,13 @@ const QCViewDocuments = () => {
 
     // Fetch document counts using qcApproveReject API
     const fetchDocumentCounts = async () => {
+        const authUser = JSON.parse(sessionStorage.getItem("authUser"));
+        const userId= authUser.user.User_Id 
         try {
             const payload = {
                 flagId: 1,
-                so_code: section
+                so_code: section,
+                User_Id:userId
             };
 
             const response = await qcApproveReject(payload);
