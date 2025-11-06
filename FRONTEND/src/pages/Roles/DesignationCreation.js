@@ -752,15 +752,18 @@ const DocumentViewer = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleViewPdf = async (documentId) => {
+  const handleViewPdf = async (Version_Id) => {
     try {
       setLoading(true);
       setError("");
       setPdfUrl(null);
-
+      const data = {
+        Version_Id: Version_Id, flagId: 2
+      }
       const response = await axios.post(
-        "http://localhost:9000/backend-service/documentUpload/documentView",
-        { DocumentId: documentId, flagId: 2, preview: false },
+        "http://192.168.23.229:9000/backend-service/documentUpload/documentView",
+        data,
+
         {
           responseType: "blob", // Important
         }
@@ -783,7 +786,7 @@ const DocumentViewer = () => {
       <h3>📄 Document Viewer</h3>
 
       <button
-        onClick={() => handleViewPdf(21)}
+        onClick={() => handleViewPdf(56)}
         disabled={loading}
         style={{
           padding: "8px 16px",

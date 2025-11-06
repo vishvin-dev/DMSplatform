@@ -41,7 +41,7 @@
 //     const [divisionName, setDivisionName] = useState([]);
 //     const [subDivisions, setSubDivisions] = useState([]);
 //     const [sectionOptions, setSectionOptions] = useState([]);
-    
+
 //     // New states for zone level
 //     const [circle, setCircle] = useState('');
 //     const [circles, setCircles] = useState([]);
@@ -73,7 +73,7 @@
 //     const loadDropdownDataFromSession = useCallback(async () => {
 //         const authUser = JSON.parse(sessionStorage.getItem("authUser"));
 //         const zones = authUser?.user?.zones || [];
-        
+
 //         if (zones.length === 0) return;
 
 //         // Get the user's level from the first zone entry
@@ -172,7 +172,7 @@
 //                 div_code: userZone.div_code, 
 //                 division: userZone.division 
 //             }];
-            
+
 //             // Get unique subdivisions from zones (in case there are multiple)
 //             const uniqueSubDivisions = [];
 //             const seenSubDivisions = new Set();
@@ -188,7 +188,7 @@
 
 //             setDivisionName(divisionData);
 //             setSubDivisions(uniqueSubDivisions);
-            
+
 //             // Set default values and disable fields
 //             setDivision(userZone.div_code);
 //             setIsFieldsDisabled({
@@ -197,12 +197,12 @@
 //                 subDivision: uniqueSubDivisions.length === 1,
 //                 section: false
 //             });
-            
+
 //             // If only one subdivision, auto-select it and load sections
 //             if (uniqueSubDivisions.length === 1) {
 //                 const selectedSdCode = uniqueSubDivisions[0].sd_code;
 //                 setSubDivision(selectedSdCode);
-                
+
 //                 // Load sections for the auto-selected subdivision
 //                 const sections = await flagIdFunction({
 //                     flagId: 3,
@@ -210,7 +210,7 @@
 //                     sd_code: selectedSdCode
 //                 });
 //                 setSectionOptions(sections);
-                
+
 //                 // If only one section, auto-select it too
 //                 if (sections.length === 1) {
 //                     setSection(sections[0].so_code);
@@ -242,12 +242,12 @@
 //                 subDivision: false,
 //                 section: false
 //             });
-            
+
 //             // If only one division, auto-select it and load subdivisions
 //             if (uniqueDivisions.length === 1) {
 //                 const selectedDivCode = uniqueDivisions[0].div_code;
 //                 setDivision(selectedDivCode);
-                
+
 //                 // Load subdivisions for the auto-selected division
 //                 const subdivisions = await flagIdFunction({
 //                     flagId: 2,
@@ -255,7 +255,7 @@
 //                     div_code: selectedDivCode
 //                 });
 //                 setSubDivisions(subdivisions);
-                
+
 //                 // If only one subdivision, auto-select it too
 //                 if (subdivisions.length === 1) {
 //                     setSubDivision(subdivisions[0].sd_code);
@@ -263,7 +263,7 @@
 //                         ...prev,
 //                         subDivision: true
 //                     }));
-                    
+
 //                     // Load sections for the auto-selected subdivision
 //                     const sections = await flagIdFunction({
 //                         flagId: 3,
@@ -271,7 +271,7 @@
 //                         sd_code: subdivisions[0].sd_code
 //                     });
 //                     setSectionOptions(sections);
-                    
+
 //                     // If only one section, auto-select it too
 //                     if (sections.length === 1) {
 //                         setSection(sections[0].so_code);
@@ -304,7 +304,7 @@
 //             const userEmail = authUser?.user?.Email;
 //             if (userEmail) {
 //                 setUserName(userEmail);
-                
+
 //                 // Load dropdown data based on user's access level
 //                 await loadDropdownDataFromSession();
 //             }
@@ -335,7 +335,7 @@
 //             setSection('');
 //             setSectionOptions([]);
 //         }
-        
+
 //         setAccountSearchInput(''); 
 //         setaccount_id('');
 //         setHasSearched(false); 
@@ -428,7 +428,7 @@
 //     const handleSectionChange = (e) => {
 //         const selectedSectionCode = e.target.value;
 //         setSection(selectedSectionCode);
-        
+
 //         // Reset account search fields when section changes
 //         setAccountSearchInput('');
 //         setaccount_id('');
@@ -629,7 +629,7 @@
 //         setDocuments([]);
 //         setConsumerInfo(null);
 //         setShowResults(false);
-        
+
 //         // Reload dropdown data from session storage
 //         loadDropdownDataFromSession();
 //     };
@@ -713,7 +713,7 @@
 
 //     return (
 //         <React.Fragment>
-            
+
 //             <ToastContainer closeButton={false} />
 //             <div className="page-content">
 //                 <BreadCrumb  title="Document Search"pageTitle="DMS" />
@@ -1305,35 +1305,35 @@
 //                     opacity: 0;
 //                     transform: translateX(-20px);
 //                 }
-                
+
 //                 .slide-in-right {
 //                     animation: slideInRight 0.5s ease-out forwards;
 //                     opacity: 0;
 //                     transform: translateX(20px);
 //                 }
-                
+
 //                 .fade-in {
 //                     animation: fadeIn 0.5s ease-out forwards;
 //                     opacity: 0;
 //                 }
-                
+
 //                 .fade-in-list-item {
 //                     animation: fadeIn 0.5s ease-out forwards;
 //                     opacity: 0;
 //                 }
-                
+
 //                 .delay-1 {
 //                     animation-delay: 0.2s;
 //                 }
-                
+
 //                 .delay-2 {
 //                     animation-delay: 0.4s;
 //                 }
-                
+
 //                 .delay-3 {
 //                     animation-delay: 0.6s;
 //                 }
-                
+
 //                 @keyframes slideInLeft {
 //                     from {
 //                         opacity: 0;
@@ -1344,7 +1344,7 @@
 //                         transform: translateX(0);
 //                     }
 //                 }
-                
+
 //                 @keyframes slideInRight {
 //                     from {
 //                         opacity: 0;
@@ -1355,7 +1355,7 @@
 //                         transform: translateX(0);
 //                     }
 //                 }
-                
+
 //                 @keyframes fadeIn {
 //                     from {
 //                         opacity: 0;
@@ -1371,12 +1371,12 @@
 //                         height: auto;
 //                         min-height: auto;
 //                     }
-                    
+
 //                     .fixed-height-card {
 //                         height: 400px;
 //                         margin-bottom: 20px;
 //                     }
-                    
+
 //                     .results-container .col-lg-3:first-child .fixed-height-card:first-child,
 //                     .results-container .col-lg-3:first-child .fixed-height-card:last-child {
 //                         height: 350px;
@@ -1401,7 +1401,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     Card, CardBody, CardHeader, Col, Container, Row,
     Button, Badge, Input, Label, FormGroup, ListGroup, ListGroupItem,
-    Alert, Spinner, Modal, ModalHeader, ModalBody, ModalFooter
+    Alert, Spinner
 } from 'reactstrap';
 import { getDocumentDropdowns, viewDocument, view, getAllUserDropDownss } from '../../helpers/fakebackend_helper';
 import { ToastContainer } from 'react-toastify';
@@ -1418,7 +1418,6 @@ const ViewDocuments = () => {
     const [selectedFile, setSelectedFile] = useState(null);
     const [previewContent, setPreviewContent] = useState(null);
     const [previewError, setPreviewError] = useState(null);
-    const [previewModal, setPreviewModal] = useState(false);
 
     // Modal states
     const [successModal, setSuccessModal] = useState(false);
@@ -1445,7 +1444,7 @@ const ViewDocuments = () => {
     const [divisionOptions, setDivisionOptions] = useState([]);
     const [subDivisionOptions, setSubDivisionOptions] = useState([]);
     const [sectionOptions, setSectionOptions] = useState([]);
-    
+
     // User access level states
     const [userLevel, setUserLevel] = useState('');
     const [userAccessData, setUserAccessData] = useState([]);
@@ -1548,7 +1547,7 @@ const ViewDocuments = () => {
             const userData = authUser.user.zones[0];
             setUserLevel(userData.level || '');
             setUserAccessData(authUser.user.zones);
-            
+
             // Set initial values based on user level
             if (userData.level === 'zone') {
                 setZone(userData.zone_code || '');
@@ -1584,12 +1583,12 @@ const ViewDocuments = () => {
         const obj = JSON.parse(sessionStorage.getItem("authUser"));
         const usernm = obj.user.Email;
         setUserName(usernm);
-        
+
         // Fetch zones for zone level users
         if (userLevel === 'zone') {
             fetchZones(usernm);
         }
-        
+
         // Fetch data based on user level
         if (userLevel === 'zone' && userAccessData[0]?.zone_code) {
             // Zone level - fetch circles using zone_code
@@ -1696,7 +1695,7 @@ const ViewDocuments = () => {
         const selectedSectionObj = sectionOptions.find(s => s.so_code === selectedSection);
         setSection(selectedSection);
         setDisplaySection(selectedSectionObj ? selectedSectionObj.section_office : selectedSection);
-        
+
         // Reset account search fields when section changes
         setAccountSearchInput('');
         setaccount_id('');
@@ -1711,7 +1710,7 @@ const ViewDocuments = () => {
         const levelHierarchy = ['zone', 'circle', 'division', 'subdivision', 'section'];
         const userLevelIndex = levelHierarchy.indexOf(userLevel);
         const fieldLevelIndex = levelHierarchy.indexOf(fieldLevel);
-        
+
         return userLevelIndex >= fieldLevelIndex;
     };
 
@@ -1824,7 +1823,7 @@ const ViewDocuments = () => {
                 // Then show documents after a short delay
                 setTimeout(() => {
                     const transformedDocuments = response.data.map(doc => ({
-                        id: doc.DocumentId,
+                        id: doc.DocumentId + '_' + doc.Version_Id, // Unique ID combining DocumentId and Version_Id
                         name: doc.DocumentName,
                         description: doc.DocumentDescription,
                         createdBy: doc.CreatedByUserName,
@@ -1834,6 +1833,9 @@ const ViewDocuments = () => {
                         url: doc.FilePath,
                         type: doc.FilePath.split('.').pop().toLowerCase(),
                         documentId: doc.DocumentId,
+                        versionId: doc.Version_Id, // This is the key field for API calls
+                        versionLabel: doc.VersionLabel,
+                        isLatest: doc.IsLatest,
                         updatedOn: formatDate(doc.UpdatedOn)
                     }));
 
@@ -1863,7 +1865,7 @@ const ViewDocuments = () => {
         const authUser = JSON.parse(sessionStorage.getItem("authUser"));
         if (authUser?.user?.zones && authUser.user.zones.length > 0) {
             const userData = authUser.user.zones[0];
-            
+
             if (userLevel === 'zone') {
                 setZone(userData.zone_code || '');
                 setDisplayZone(userData.zone_name || userData.zone_code);
@@ -1909,7 +1911,7 @@ const ViewDocuments = () => {
                 setDisplaySection(userData.section_office || userData.so_code);
             }
         }
-        
+
         setAccountSearchInput('');
         setaccount_id('');
         setHasSearched(false);
@@ -1940,355 +1942,160 @@ const ViewDocuments = () => {
         return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
     };
 
-    // FIXED handleFileSelect function with proper blob handling
     const handleFileSelect = async (file) => {
         setSelectedFile(file);
         setPreviewLoading(true);
         setPreviewContent(null);
         setPreviewError(null);
-        setPreviewModal(true);
 
         try {
-            console.log('📄 Starting document preview for DocumentId:', file.documentId);
-            
+            console.log('📄 Starting document preview for Version_Id:', file.versionId);
+            console.log('📋 Selected file details:', {
+                documentId: file.documentId,
+                versionId: file.versionId,
+                versionLabel: file.versionLabel,
+                isLatest: file.isLatest,
+                fileName: file.name
+            });
+
+            // Validate versionId is available
+            if (!file.versionId) {
+                throw new Error("Version_Id is required for document preview");
+            }
+
             const requestPayload = {
                 flagId: 2,
-                DocumentId: file.documentId,
+                Version_Id: file.versionId, // Using Version_Id instead of DocumentId
                 requestUserName: userName,
-                preview: false
             };
-            
-            console.log('🚀 API Request Payload:', requestPayload);
 
-            // Use the view function from fakebackend_helper
+            console.log('🚀 API Request Payload with Version_Id:', requestPayload);
+
+            // Call the view API with Version_Id
             const response = await view(requestPayload);
 
             console.log('✅ API Response received:', response);
+            console.log('📊 Response type:', typeof response);
 
             let blobData = null;
 
             // Handle different response formats
-            if (response && response instanceof Blob) {
-                blobData = response;
-                console.log('✅ Blob data received from response');
-            } else if (response instanceof Blob) {
+            if (response instanceof Blob) {
                 blobData = response;
                 console.log('✅ Blob data received directly');
-            } else if (response && response) {
-                // If data exists but isn't a blob, try to create blob from it
-                console.log('⚠️ Response data is not a Blob, attempting to create blob');
-                blobData = new Blob([response], { type: 'application/pdf' });
+            } else if (response && response.data instanceof Blob) {
+                blobData = response.data;
+                console.log('✅ Blob data received from response.data');
+            } else if (response && response.blob) {
+                blobData = response.blob;
+                console.log('✅ Blob data received from response.blob');
+            } else if (response && typeof response === 'object') {
+                // If response is an object but not a blob, check for data property
+                console.log('🔍 Response object structure:', Object.keys(response));
+                if (response.data && response.data instanceof Blob) {
+                    blobData = response.data;
+                } else {
+                    throw new Error("Invalid response format - expected Blob data");
+                }
             } else {
                 console.error('❌ Unexpected response format:', response);
                 throw new Error("Invalid preview response format - expected Blob data");
             }
 
-            if (blobData) {
-                const fileUrl = URL.createObjectURL(blobData);
-                const fileType = blobData.type || 'application/pdf';
-                
-                console.log('📁 File type:', fileType);
-                console.log('🔗 Object URL created');
-
-                setPreviewContent({
-                    url: fileUrl,
-                    type: fileType,
-                    name: file.name,
-                    blob: blobData
-                });
+            // Validate the blob
+            if (!blobData || blobData.size === 0) {
+                throw new Error("Received empty or invalid file data");
             }
+
+            console.log('📦 Blob details:', {
+                size: blobData.size,
+                type: blobData.type,
+                isBlob: blobData instanceof Blob
+            });
+
+            // Create object URL and set preview content
+            const fileUrl = URL.createObjectURL(blobData);
+            const fileType = blobData.type || 'application/pdf';
+
+            console.log('📁 File type:', fileType);
+            console.log('🔗 Object URL created:', fileUrl);
+
+            setPreviewContent({
+                url: fileUrl,
+                type: fileType,
+                name: file.name,
+                blob: blobData
+            });
+
         } catch (error) {
             console.error("❌ Preview error:", error);
-            setPreviewError(error.message || "Failed to load preview");
-            setResponse(error.message || "Failed to load document");
+            const errorMessage = error.message || "Failed to load document preview";
+            setPreviewError(errorMessage);
+            setResponse(errorMessage);
             setErrorModal(true);
         } finally {
             setPreviewLoading(false);
         }
     };
 
-    const closePreview = () => {
-        if (previewContent?.url) {
-            URL.revokeObjectURL(previewContent.url);
-        }
-        setPreviewModal(false);
-        setPreviewContent(null);
-        setPreviewError(null);
-    };
-
-    const handleDownload = () => {
-        if (!previewContent?.blob) return;
-
-        const blob = previewContent.blob;
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = previewContent.name || 'document';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-    };
-
-    const handleDocumentAction = async (documentId) => {
+    const handleDownload = async (file) => {
         try {
-            const response = await view(
-                {
-                    flagId: 2,
-                    DocumentId: documentId,
-                },
-                {
-                    responseType: "blob",
-                    headers: { "Content-Type": "application/json" },
-                    transformResponse: [(data, headers) => ({ data, headers })],
-                }
-            );
+            console.log('📥 Starting download for Version_Id:', file.versionId);
 
-            const contentDisposition = response.headers?.["content-disposition"];
-            let fileName = `document_${documentId}.pdf`;
-
-            if (contentDisposition) {
-                const match = contentDisposition.match(/filename="?([^"]+)"?/);
-                if (match && match[1]) {
-                    fileName = decodeURIComponent(match[1]);
-                }
-            } else {
-                console.warn("Content-Disposition header missing — using fallback filename.");
+            if (!file.versionId) {
+                throw new Error("Version_Id is required for download");
             }
 
-            const blob = response;
-            const url = window.URL.createObjectURL(blob);
+            const requestPayload = {
+                flagId: 2,
+                Version_Id: file.versionId, // Using Version_Id instead of DocumentId
+                requestUserName: userName,
+            };
+
+            console.log('🚀 Download API Request Payload:', requestPayload);
+
+            const response = await view(requestPayload);
+
+            let blobData = null;
+
+            // Handle response formats same as preview
+            if (response instanceof Blob) {
+                blobData = response;
+            } else if (response && response.data instanceof Blob) {
+                blobData = response.data;
+            } else if (response && response.blob) {
+                blobData = response.blob;
+            } else if (response && typeof response === 'object' && response.data instanceof Blob) {
+                blobData = response.data;
+            } else {
+                throw new Error("Invalid download response format");
+            }
+
+            if (!blobData || blobData.size === 0) {
+                throw new Error("Received empty file for download");
+            }
+
+            const url = window.URL.createObjectURL(blobData);
             const link = document.createElement("a");
             link.href = url;
+
+            // Create a better filename
+            const fileExtension = file.type || 'pdf';
+            const fileName = `${file.name || 'document'}_v${file.versionLabel || file.versionId}.${fileExtension}`;
+
             link.download = fileName;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
+
+            console.log('✅ Download completed successfully');
+
         } catch (err) {
-            console.error("Download failed:", err);
-            alert("Failed to download file");
+            console.error("❌ Download failed:", err);
+            setResponse("Failed to download file: " + err.message);
+            setErrorModal(true);
         }
-    };
-
-    // Enhanced LazyPreviewContent component with proper document preview
-    const LazyPreviewContent = ({ file }) => {
-        const [previewLoaded, setPreviewLoaded] = useState(false);
-        const [detailsLoaded, setDetailsLoaded] = useState(false);
-
-        useEffect(() => {
-            const previewTimer = setTimeout(() => {
-                setPreviewLoaded(true);
-            }, 1200);
-
-            return () => clearTimeout(previewTimer);
-        }, []);
-        
-        useEffect(() => {
-            if (previewLoaded) {
-                const detailsTimer = setTimeout(() => {
-                    setDetailsLoaded(true);
-                }, 1000);
-
-                return () => clearTimeout(detailsTimer);
-            }
-        }, [previewLoaded]);
-        
-        // Enhanced PDF/Image viewer
-        const renderPreviewContent = () => {
-            if (!previewLoaded) {
-                return (
-                    <div className="text-center h-100 d-flex flex-column justify-content-center align-items-center"
-                        style={{ minHeight: '400px' }}>
-                        <div className="spinner-border text-primary" role="status">
-                            <span className="visually-hidden">Loading...</span>
-                        </div>
-                        <p className="mt-2">Loading preview...</p>
-                    </div>
-                );
-            }
-
-            if (previewLoading) {
-                return (
-                    <div className="text-center h-100 d-flex flex-column justify-content-center align-items-center"
-                        style={{ minHeight: '400px' }}>
-                        <div className="spinner-border text-primary" role="status">
-                            <span className="visually-hidden">Loading...</span>
-                        </div>
-                        <p className="mt-2">Loading document content...</p>
-                    </div>
-                );
-            }
-
-            if (previewError) {
-                return (
-                    <Alert color="danger" className="m-3 fade-in">
-                        <i className="ri-error-warning-line me-2"></i>
-                        {previewError}
-                    </Alert>
-                );
-            }
-
-            if (previewContent) {
-                const isPDF = previewContent.type.includes('pdf');
-                const isImage = previewContent.type.includes('image');
-                
-                return (
-                    <div className="d-flex flex-column h-100">
-                        {/* Preview Header */}
-                        <div className="d-flex justify-content-between align-items-center p-3 border-bottom">
-                            <h6 className="mb-0">
-                                <i className="ri-file-text-line me-2"></i>
-                                {previewContent.name}
-                            </h6>
-                            <Button
-                                color="primary"
-                                size="sm"
-                                onClick={handleDownload}
-                            >
-                                <i className="ri-download-line me-1"></i> Download
-                            </Button>
-                        </div>
-                        
-                        {/* Preview Content */}
-                        <div className="flex-grow-1 preview-content">
-                            {isPDF ? (
-                                <div className="pdf-viewer-container fade-in h-100">
-                                    <iframe
-                                        src={`${previewContent.url}#toolbar=1&navpanes=1&scrollbar=1`}
-                                        title="PDF Viewer"
-                                        className="w-100 h-100"
-                                        style={{ border: 'none' }}
-                                    />
-                                </div>
-                            ) : isImage ? (
-                                <div className="text-center fade-in p-3 h-100 d-flex align-items-center justify-content-center">
-                                    <img
-                                        src={previewContent.url}
-                                        alt="Document Preview"
-                                        className="img-fluid"
-                                        style={{
-                                            maxHeight: '100%',
-                                            maxWidth: '100%',
-                                            objectFit: 'contain'
-                                        }}
-                                    />
-                                </div>
-                            ) : (
-                                <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
-                                    <i className="ri-file-line display-4 text-muted"></i>
-                                    <h5 className="mt-3">Preview not available</h5>
-                                    <p className="text-muted">
-                                        This file type ({previewContent.type}) cannot be previewed in the browser.
-                                    </p>
-                                    <Button
-                                        color="primary"
-                                        onClick={handleDownload}
-                                        className="mt-2"
-                                    >
-                                        <i className="ri-download-line me-1"></i> Download File
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                );
-            }
-
-            return (
-                <div className="text-center text-muted py-5 h-100 d-flex flex-column justify-content-center fade-in">
-                    <i className="ri-file-line display-4"></i>
-                    <h5 className="mt-3">No document selected</h5>
-                    <p>Select a file from the list to preview it here</p>
-                </div>
-            );
-        };
-        
-        return (
-            <Row>
-                <Col lg={6} className="h-100 d-flex flex-column">
-                    <Card className="h-100 slide-in-left delay-3 fixed-height-card">
-                        <CardHeader className="bg-light p-3 position-relative"
-                            style={{
-                                borderTop: '3px solid #405189'
-                            }}>
-                            <h5 className="mb-0">Document Preview</h5>
-                        </CardHeader>
-                        <CardBody className="p-0 preview-container">
-                            <div className="preview-scrollable">
-                                {renderPreviewContent()}
-                            </div>
-                        </CardBody>
-                    </Card>
-                </Col>
-                <Col lg={6}>
-                    {!detailsLoaded ? (
-                        <Card className="h-100 shadow-sm">
-                            <CardHeader className="bg-light p-3 position-relative card-header border-top-primary">
-                                <h6 className="mb-0 d-flex align-items-center">
-                                    <i className="ri-information-line me-2"></i> Document Details
-                                </h6>
-                            </CardHeader>
-                            <CardBody className="py-5 d-flex justify-content-center">
-                                <Spinner color="primary" />
-                            </CardBody>
-                        </Card>
-                    ) : (
-                        <Card className="h-100 shadow-sm">
-                            <CardHeader className="bg-light p-3 position-relative card-header border-top-primary">
-                                <h6 className="mb-0 d-flex align-items-center">
-                                    <i className="ri-information-line me-2"></i> Document Details
-                                </h6>
-                            </CardHeader>
-
-                            <CardBody className="py-3 px-4">
-                                <Row>
-                                    {/* Left Column */}
-                                    <Col md={6}>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Document Name:</Label>
-                                            <p className="mb-1 text-break">{file.name}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Category:</Label>
-                                            <p className="mb-1">{file.category || 'N/A'}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Description:</Label>
-                                            <p className="mb-1 text-break">{file.description || 'N/A'}</p>
-                                        </div>
-                                    </Col>
-
-                                    {/* Right Column */}
-                                    <Col md={6}>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Uploaded By:</Label>
-                                            <p className="mb-1">{file.createdBy || 'N/A'}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Upload Date:</Label>
-                                            <p className="mb-1">{file.createdAt}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Status:</Label>
-                                            <p className="mb-1">
-                                                <Badge color="success" className="badge-soft-success">
-                                                    {file.status}
-                                                </Badge>
-                                            </p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">File Type:</Label>
-                                            <p className="mb-1 text-capitalize">{file.type || 'N/A'}</p>
-                                        </div>
-                                    </Col>
-                                </Row>
-                            </CardBody>
-                        </Card>
-                    )}
-                </Col>
-            </Row>
-        );
     };
 
     return (
@@ -2469,9 +2276,7 @@ const ViewDocuments = () => {
                                         )}
                                     </FormGroup>
                                 </Col>
-                            
 
-                        
                                 <Col md={8}>
                                     <FormGroup className="mb-0">
                                         <Label>
@@ -2680,6 +2485,18 @@ const ViewDocuments = () => {
                                                             </div>
                                                         </div>
                                                     </div>
+
+                                                    <div className="col-12 mb-3">
+                                                        <div className="d-flex align-items-center">
+                                                            <i className="ri-git-branch-line me-1 text-primary fs-6"></i>
+                                                            <div className="d-flex align-items-center gap-3">
+                                                                <Label className="fw-medium text-muted x-small mb-0">Version:</Label>
+                                                                <Badge color="info" className="badge-soft-info x-small">
+                                                                    {selectedFile.versionLabel} {selectedFile.isLatest && '(Latest)'}
+                                                                </Badge>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ) : (
@@ -2709,7 +2526,7 @@ const ViewDocuments = () => {
                                                 <ListGroup flush style={{ minHeight: '100%' }}>
                                                     {documents.map((doc, index) => (
                                                         <div
-                                                            key={index}
+                                                            key={doc.id} // Using the combined ID
                                                             className="fade-in-list-item"
                                                             style={{ animationDelay: `${0.1 * index}s` }}
                                                         >
@@ -2732,14 +2549,19 @@ const ViewDocuments = () => {
                                                                     <small className="text-muted">
                                                                         {doc.createdAt} • {doc.category}
                                                                     </small>
+                                                                    <br />
+                                                                    <small className="text-info">
+                                                                        Version: {doc.versionLabel} {doc.isLatest && '(Latest)'}
+                                                                    </small>
                                                                 </div>
                                                                 <Button
                                                                     color="link"
                                                                     size="sm"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        handleDocumentAction(doc.documentId);
+                                                                        handleDownload(doc);
                                                                     }}
+                                                                    title="Download"
                                                                 >
                                                                     <i className="ri-download-line"></i>
                                                                 </Button>
@@ -2765,6 +2587,18 @@ const ViewDocuments = () => {
                                             borderTop: '3px solid #405189'
                                         }}>
                                         <h5 className="mb-0">Document Preview</h5>
+                                        {selectedFile && (
+                                            <div className="position-absolute top-50 end-0 translate-middle-y me-3">
+                                                <Button
+                                                    color="primary"
+                                                    size="sm"
+                                                    onClick={() => handleDownload(selectedFile)}
+                                                    disabled={!previewContent}
+                                                >
+                                                    <i className="ri-download-line me-1"></i> Download
+                                                </Button>
+                                            </div>
+                                        )}
                                     </CardHeader>
                                     <CardBody className="p-0 preview-container">
                                         <div className="preview-scrollable">
@@ -2798,8 +2632,8 @@ const ViewDocuments = () => {
                                                                     src={previewContent.url}
                                                                     alt="Document Preview"
                                                                     className="img-fluid"
-                                                                    style={{ 
-                                                                        maxHeight: '100%', 
+                                                                    style={{
+                                                                        maxHeight: '100%',
                                                                         maxWidth: '100%',
                                                                         objectFit: 'contain'
                                                                     }}
@@ -2814,7 +2648,7 @@ const ViewDocuments = () => {
                                                                 </p>
                                                                 <Button
                                                                     color="primary"
-                                                                    onClick={handleDownload}
+                                                                    onClick={() => handleDownload(selectedFile)}
                                                                     className="mt-2"
                                                                 >
                                                                     <i className="ri-download-line me-1"></i> Download File
@@ -2838,46 +2672,6 @@ const ViewDocuments = () => {
                     )}
                 </Container>
             </div>
-
-            {/* Document Preview Modal */}
-            <Modal
-                isOpen={previewModal}
-                toggle={closePreview}
-                size="xl"
-                centered
-                className="document-preview-modal"
-                style={{ maxWidth: '95%' }}
-            >
-                <ModalHeader className="bg-primary text-white p-3" toggle={closePreview}>
-                    <span className="modal-title text-white">
-                        <i className="ri-file-text-line me-2"></i>
-                        {selectedFile?.name || 'Document Preview'}
-                    </span>
-                </ModalHeader>
-                <ModalBody style={{
-                    maxHeight: '70vh',
-                    overflowY: 'auto',
-                    padding: '16px',
-                    display: 'flex',
-                    flexDirection: 'column'
-                }}>
-                    {selectedFile && <LazyPreviewContent file={selectedFile} />}
-                </ModalBody>
-                <ModalFooter style={{ borderTop: 'none' }}>
-                    <Button color="secondary" onClick={closePreview}>
-                        <i className="ri-close-line me-1"></i>
-                        Close
-                    </Button>
-                    <Button
-                        color="primary"
-                        onClick={handleDownload}
-                        disabled={!previewContent}
-                    >
-                        <i className="ri-download-line me-1"></i>
-                        Download
-                    </Button>
-                </ModalFooter>
-            </Modal>
 
             {/* Add some custom CSS */}
             <style>

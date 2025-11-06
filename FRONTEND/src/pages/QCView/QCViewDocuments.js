@@ -93,7 +93,7 @@
 //     const [hasSearched, setHasSearched] = useState(false);
 //     const [searchLoading, setSearchLoading] = useState(false);
 //     const [showTable, setShowTable] = useState(false);
-    
+
 //     // Store original sections for proper filtering
 //     const [originalSectionOptions, setOriginalSectionOptions] = useState([]);
 
@@ -161,7 +161,7 @@
 //     const loadDropdownDataFromSession = useCallback(async () => {
 //         const authUser = JSON.parse(sessionStorage.getItem("authUser"));
 //         const zones = authUser?.user?.zones || [];
-        
+
 //         if (zones.length === 0) {
 //             setDropdownsInitialized(true);
 //             setDropdownsLoading(false);
@@ -175,7 +175,7 @@
 //         try {
 //             if (level === 'section') {
 //                 const divisionData = [{ div_code: userZone.div_code, division: userZone.division }];
-                
+
 //                 // Get unique subdivisions
 //                 const uniqueSubDivisions = [];
 //                 const seenSubDivisions = new Set();
@@ -193,10 +193,10 @@
 //                 setSubDivisions(uniqueSubDivisions);
 //                 setSectionOptions(allSections);
 //                 setOriginalSectionOptions(allSections); // Store original sections
-                
+
 //                 setDivision(userZone.div_code);
 //                 setIsFieldsDisabled({ division: true, subDivision: false, section: false });
-                
+
 //                 // Show dropdowns if there are multiple subdivisions
 //                 if (uniqueSubDivisions.length > 1) {
 //                     setShouldShowDropdowns(true);
@@ -213,7 +213,7 @@
 //                 }
 //             } else if (level === 'subdivision') {
 //                 const divisionData = [{ div_code: userZone.div_code, division: userZone.division }];
-                
+
 //                 const uniqueSubDivisions = [];
 //                 const seenSubDivisions = new Set();
 //                 zones.forEach(zone => {
@@ -225,18 +225,18 @@
 
 //                 setDivisionName(divisionData);
 //                 setSubDivisions(uniqueSubDivisions);
-                
+
 //                 setDivision(userZone.div_code);
 //                 setIsFieldsDisabled({ division: true, subDivision: uniqueSubDivisions.length === 1, section: false });
-                
+
 //                 if (uniqueSubDivisions.length === 1) {
 //                     const selectedSdCode = uniqueSubDivisions[0].sd_code;
 //                     setSubDivision(selectedSdCode);
-                    
+
 //                     const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: selectedSdCode });
 //                     setSectionOptions(sections);
 //                     setOriginalSectionOptions(sections); // Store original sections
-                    
+
 //                     if (sections.length === 1) {
 //                         setSection(sections[0].so_code);
 //                         setIsFieldsDisabled(prev => ({ ...prev, section: true }));
@@ -259,22 +259,22 @@
 
 //                 setDivisionName(uniqueDivisions);
 //                 setIsFieldsDisabled({ division: uniqueDivisions.length === 1, subDivision: false, section: false });
-                
+
 //                 if (uniqueDivisions.length === 1) {
 //                     const selectedDivCode = uniqueDivisions[0].div_code;
 //                     setDivision(selectedDivCode);
-                    
+
 //                     const subdivisions = await flagIdFunction({ flagId: 2, requestUserName: userName, div_code: selectedDivCode });
 //                     setSubDivisions(subdivisions);
-                    
+
 //                     if (subdivisions.length === 1) {
 //                         setSubDivision(subdivisions[0].sd_code);
 //                         setIsFieldsDisabled(prev => ({ ...prev, subDivision: true }));
-                        
+
 //                         const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: subdivisions[0].sd_code });
 //                         setSectionOptions(sections);
 //                         setOriginalSectionOptions(sections); // Store original sections
-                        
+
 //                         if (sections.length === 1) {
 //                             setSection(sections[0].so_code);
 //                             setIsFieldsDisabled(prev => ({ ...prev, section: true }));
@@ -364,7 +364,7 @@
 //         setPage(0);
 //         setActiveTab('');
 //         setStatusCounts({ pending: 0, approved: 0, rejected: 0 });
-        
+
 //         // Reload dropdown data from session
 //         loadDropdownDataFromSession();
 //     };
@@ -403,10 +403,10 @@
 //             setErrorModal(true);
 //             return;
 //         }
-        
+
 //         setSearchLoading(true);
 //         setHasSearched(false);
-        
+
 //         try {
 //             await fetchDocumentCounts();
 //             setHasSearched(true);
@@ -429,7 +429,7 @@
 //             };
 
 //             const response = await qcApproveReject(payload);
-            
+
 //             if (response.status === "success" && response.results && response.results.length > 0) {
 //                 const counts = response.results[0];
 //                 setStatusCounts({
@@ -527,7 +527,7 @@
 //             setLoading(false);
 //         }
 //     };
-    
+
 //     // Refresh handler to reload current tab data and all counts
 //     const handleRefresh = async () => {
 //         if (activeTab) {
@@ -657,7 +657,7 @@
 //             setPreviewLoading(false);
 //         }
 //     };
-    
+
 //     const closePreview = () => {
 //         if (previewContent?.url) {
 //             URL.revokeObjectURL(previewContent.url);
@@ -677,7 +677,7 @@
 //         setRejectionModal(false);
 //         setRejectionReason(''); // Also clear reason on close
 //     };
-    
+
 //     const handleDownload = () => {
 //         if (!previewContent?.blob) return;
 
@@ -707,7 +707,7 @@
 //             console.log('API Payload:', payload); // For debugging
 
 //             const response = await qcApproveReject(payload);
-            
+
 //             if (response.status === "success") {
 //                 setPreviewModal(false);
 //                 closeRejectionModal(); // Use the new handler to close and clear
@@ -751,7 +751,7 @@
 //             console.log('Reject API Payload:', payload); // For debugging
 
 //             const response = await qcApproveReject(payload);
-            
+
 //             if (response.status === "success") {
 //                 setPreviewModal(false);
 //                 closeRejectionModal(); // Close and clear rejection modal
@@ -779,7 +779,7 @@
 //         if (!sortConfig.key || !sortConfig.direction) return filteredDocuments;
 //         return sortData(filteredDocuments, sortConfig.key, sortConfig.direction);
 //     }, [filteredDocuments, sortConfig]);
-    
+
 //     const pageCount = pageSize === -1 ? 1 : Math.ceil(sortedData.length / pageSize);
 //     const paginatedData = useMemo(() => {
 //         if (pageSize === -1) return sortedData;
@@ -861,7 +861,7 @@
 //             })}
 //         </tr>
 //     );
-    
+
 //     const renderTableRows = () => {
 //         if (loading || dropdownsLoading) {
 //             return (
@@ -1049,7 +1049,7 @@
 
 //             return () => clearTimeout(previewTimer);
 //         }, []);
-        
+
 //         useEffect(() => {
 //             if (previewLoaded) {
 //                 const detailsTimer = setTimeout(() => {
@@ -1059,7 +1059,7 @@
 //                 return () => clearTimeout(detailsTimer);
 //             }
 //         }, [previewLoaded]);
-        
+
 //         return (
 //             <Row>
 //                 <Col lg={6} className="h-100 d-flex flex-column">
@@ -1287,7 +1287,7 @@
 //                                                     </FormGroup>
 //                                                 </Col>
 //                                             )}
-                                            
+
 //                                             {!isFieldsDisabled.subDivision && subDivisions.length > 1 && (
 //                                                 <Col md={3}>
 //                                                     <FormGroup>
@@ -1307,7 +1307,7 @@
 //                                                     </FormGroup>
 //                                                 </Col>
 //                                             )}
-                                            
+
 //                                             {/* Section dropdown - Fixed filtering logic */}
 //                                             {sectionOptions.length > 1 && (
 //                                                 <Col md={3}>
@@ -1328,7 +1328,7 @@
 //                                                     </FormGroup>
 //                                                 </Col>
 //                                             )}
-                                            
+
 //                                             <Col md={3} className="d-flex align-items-end">
 //                                                 <div className="d-flex gap-2 w-100">
 //                                                     <FormGroup className="mb-0 flex-grow-1">
@@ -1395,7 +1395,7 @@
 //                                                         {statusCounts.pending}
 //                                                     </Badge>
 //                                                 </Button>
-                                                
+
 //                                                 <Button
 //                                                     color={activeTab === 'approved' ? 'success' : 'outline-success'}
 //                                                     onClick={() => handleTabChange('approved')}
@@ -1412,7 +1412,7 @@
 //                                                         {statusCounts.approved}
 //                                                     </Badge>
 //                                                 </Button>
-                                                
+
 //                                                 <Button
 //                                                     color={activeTab === 'rejected' ? 'danger' : 'outline-danger'}
 //                                                     onClick={() => handleTabChange('rejected')}
@@ -1842,7 +1842,7 @@ const QCViewDocuments = () => {
     const [hasSearched, setHasSearched] = useState(false);
     const [searchLoading, setSearchLoading] = useState(false);
     const [showTable, setShowTable] = useState(false);
-    
+
     // Store original sections for proper filtering
     const [originalSectionOptions, setOriginalSectionOptions] = useState([]);
 
@@ -1910,7 +1910,7 @@ const QCViewDocuments = () => {
     const loadDropdownDataFromSession = useCallback(async () => {
         const authUser = JSON.parse(sessionStorage.getItem("authUser"));
         const zones = authUser?.user?.zones || [];
-        
+
         if (zones.length === 0) {
             setDropdownsInitialized(true);
             setDropdownsLoading(false);
@@ -1924,7 +1924,7 @@ const QCViewDocuments = () => {
         try {
             if (level === 'section') {
                 const divisionData = [{ div_code: userZone.div_code, division: userZone.division }];
-                
+
                 // Get unique subdivisions
                 const uniqueSubDivisions = [];
                 const seenSubDivisions = new Set();
@@ -1942,10 +1942,10 @@ const QCViewDocuments = () => {
                 setSubDivisions(uniqueSubDivisions);
                 setSectionOptions(allSections);
                 setOriginalSectionOptions(allSections); // Store original sections
-                
+
                 setDivision(userZone.div_code);
                 setIsFieldsDisabled({ division: true, subDivision: false, section: false });
-                
+
                 // Show dropdowns if there are multiple subdivisions
                 if (uniqueSubDivisions.length > 1) {
                     setShouldShowDropdowns(true);
@@ -1962,7 +1962,7 @@ const QCViewDocuments = () => {
                 }
             } else if (level === 'subdivision') {
                 const divisionData = [{ div_code: userZone.div_code, division: userZone.division }];
-                
+
                 const uniqueSubDivisions = [];
                 const seenSubDivisions = new Set();
                 zones.forEach(zone => {
@@ -1974,18 +1974,18 @@ const QCViewDocuments = () => {
 
                 setDivisionName(divisionData);
                 setSubDivisions(uniqueSubDivisions);
-                
+
                 setDivision(userZone.div_code);
                 setIsFieldsDisabled({ division: true, subDivision: uniqueSubDivisions.length === 1, section: false });
-                
+
                 if (uniqueSubDivisions.length === 1) {
                     const selectedSdCode = uniqueSubDivisions[0].sd_code;
                     setSubDivision(selectedSdCode);
-                    
+
                     const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: selectedSdCode });
                     setSectionOptions(sections);
                     setOriginalSectionOptions(sections); // Store original sections
-                    
+
                     if (sections.length === 1) {
                         setSection(sections[0].so_code);
                         setIsFieldsDisabled(prev => ({ ...prev, section: true }));
@@ -2008,22 +2008,22 @@ const QCViewDocuments = () => {
 
                 setDivisionName(uniqueDivisions);
                 setIsFieldsDisabled({ division: uniqueDivisions.length === 1, subDivision: false, section: false });
-                
+
                 if (uniqueDivisions.length === 1) {
                     const selectedDivCode = uniqueDivisions[0].div_code;
                     setDivision(selectedDivCode);
-                    
+
                     const subdivisions = await flagIdFunction({ flagId: 2, requestUserName: userName, div_code: selectedDivCode });
                     setSubDivisions(subdivisions);
-                    
+
                     if (subdivisions.length === 1) {
                         setSubDivision(subdivisions[0].sd_code);
                         setIsFieldsDisabled(prev => ({ ...prev, subDivision: true }));
-                        
+
                         const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: subdivisions[0].sd_code });
                         setSectionOptions(sections);
                         setOriginalSectionOptions(sections); // Store original sections
-                        
+
                         if (sections.length === 1) {
                             setSection(sections[0].so_code);
                             setIsFieldsDisabled(prev => ({ ...prev, section: true }));
@@ -2113,7 +2113,7 @@ const QCViewDocuments = () => {
         setPage(0);
         setActiveTab('');
         setStatusCounts({ pending: 0, approved: 0, rejected: 0 });
-        
+
         // Reload dropdown data from session
         loadDropdownDataFromSession();
     };
@@ -2152,10 +2152,10 @@ const QCViewDocuments = () => {
             setErrorModal(true);
             return;
         }
-        
+
         setSearchLoading(true);
         setHasSearched(false);
-        
+
         try {
             await fetchDocumentCounts();
             setHasSearched(true);
@@ -2178,7 +2178,7 @@ const QCViewDocuments = () => {
             };
 
             const response = await qcApproveReject(payload);
-            
+
             if (response.status === "success" && response.results && response.results.length > 0) {
                 const counts = response.results[0];
                 setStatusCounts({
@@ -2276,7 +2276,7 @@ const QCViewDocuments = () => {
             setLoading(false);
         }
     };
-    
+
     // Refresh handler to reload current tab data and all counts
     const handleRefresh = async () => {
         if (activeTab) {
@@ -2357,7 +2357,7 @@ const QCViewDocuments = () => {
         setPage(0);
     };
 
-    // FIXED handleFileSelect function with proper blob handling
+    // FIXED handleFileSelect function using only response (no response.data)
     const handleFileSelect = async (doc) => {
         setCurrentDoc(doc);
         setPreviewLoading(true);
@@ -2367,44 +2367,44 @@ const QCViewDocuments = () => {
 
         try {
             console.log('📄 Starting document preview for DocumentId:', doc.DocumentId);
-            
+
             const requestPayload = {
                 flagId: 2,
                 DocumentId: doc.DocumentId,
                 requestUserName: userInfo.email,
                 preview: false
             };
-            
+
             console.log('🚀 API Request Payload:', requestPayload);
 
             // Use the view function from fakebackend_helper
             const response = await view(requestPayload);
 
             console.log('✅ API Response received:', response);
+            console.log('📦 Response type:', typeof response);
+            console.log('🔍 Is response a Blob?', response instanceof Blob);
 
             let blobData = null;
 
-            // Handle different response formats
-            if (response && response instanceof Blob) {
+            // Handle response directly (no response.data)
+            if (response instanceof Blob) {
                 blobData = response;
-                console.log('✅ Blob data received from response');
-            } else if (response instanceof Blob) {
-                blobData = response;
-                console.log('✅ Blob data received directly');
-            } else if (response && response) {
-                // If data exists but isn't a blob, try to create blob from it
-                console.log('⚠️ Response data is not a Blob, attempting to create blob');
+                console.log('✅ Response is directly a Blob');
+            } else if (response) {
+                // If response exists but isn't a blob, try to create blob from it
+                console.log('⚠️ Response is not a Blob, creating blob from response');
                 blobData = new Blob([response], { type: 'application/pdf' });
             } else {
                 console.error('❌ Unexpected response format:', response);
-                throw new Error("Invalid preview response format - expected Blob data");
+                throw new Error("Invalid preview response format - expected Blob");
             }
 
             if (blobData) {
                 const fileUrl = URL.createObjectURL(blobData);
                 const fileType = blobData.type || 'application/pdf';
-                
+
                 console.log('📁 File type:', fileType);
+                console.log('📁 Blob size:', blobData.size);
                 console.log('🔗 Object URL created');
 
                 setPreviewContent({
@@ -2423,7 +2423,7 @@ const QCViewDocuments = () => {
             setPreviewLoading(false);
         }
     };
-    
+
     const closePreview = () => {
         if (previewContent?.url) {
             URL.revokeObjectURL(previewContent.url);
@@ -2443,7 +2443,7 @@ const QCViewDocuments = () => {
         setRejectionModal(false);
         setRejectionReason(''); // Also clear reason on close
     };
-    
+
     const handleDownload = () => {
         if (!previewContent?.blob) return;
 
@@ -2473,13 +2473,13 @@ const QCViewDocuments = () => {
             console.log('API Payload:', payload); // For debugging
 
             const response = await qcApproveReject(payload);
-            
+
             if (response.status === "success") {
                 setPreviewModal(false);
                 closeRejectionModal(); // Use the new handler to close and clear
 
-                setResponse(response.message || (status === 'Approved' 
-                    ? 'Document approved successfully' 
+                setResponse(response.message || (status === 'Approved'
+                    ? 'Document approved successfully'
                     : 'Document rejected successfully'));
                 setSuccessModal(true);
 
@@ -2517,7 +2517,7 @@ const QCViewDocuments = () => {
             console.log('Reject API Payload:', payload); // For debugging
 
             const response = await qcApproveReject(payload);
-            
+
             if (response.status === "success") {
                 setPreviewModal(false);
                 closeRejectionModal(); // Close and clear rejection modal
@@ -2545,7 +2545,7 @@ const QCViewDocuments = () => {
         if (!sortConfig.key || !sortConfig.direction) return filteredDocuments;
         return sortData(filteredDocuments, sortConfig.key, sortConfig.direction);
     }, [filteredDocuments, sortConfig]);
-    
+
     const pageCount = pageSize === -1 ? 1 : Math.ceil(sortedData.length / pageSize);
     const paginatedData = useMemo(() => {
         if (pageSize === -1) return sortedData;
@@ -2627,7 +2627,7 @@ const QCViewDocuments = () => {
             })}
         </tr>
     );
-    
+
     const renderTableRows = () => {
         if (loading || dropdownsLoading) {
             return (
@@ -2816,7 +2816,7 @@ const QCViewDocuments = () => {
 
             return () => clearTimeout(previewTimer);
         }, []);
-        
+
         useEffect(() => {
             if (previewLoaded) {
                 const detailsTimer = setTimeout(() => {
@@ -2826,7 +2826,7 @@ const QCViewDocuments = () => {
                 return () => clearTimeout(detailsTimer);
             }
         }, [previewLoaded]);
-        
+
         // Enhanced PDF/Image viewer
         const renderPreviewContent = () => {
             if (!previewLoaded) {
@@ -2865,7 +2865,7 @@ const QCViewDocuments = () => {
             if (previewContent) {
                 const isPDF = previewContent.type.includes('pdf');
                 const isImage = previewContent.type.includes('image');
-                
+
                 return (
                     <div className="d-flex flex-column h-100">
                         {/* Preview Header */}
@@ -2882,7 +2882,7 @@ const QCViewDocuments = () => {
                                 <i className="ri-download-line me-1"></i> Download
                             </Button>
                         </div>
-                        
+
                         {/* Preview Content */}
                         <div className="flex-grow-1 preview-content">
                             {isPDF ? (
@@ -2936,7 +2936,7 @@ const QCViewDocuments = () => {
                 </div>
             );
         };
-        
+
         return (
             <Row>
                 <Col lg={6} className="h-100 d-flex flex-column">
@@ -3082,9 +3082,9 @@ const QCViewDocuments = () => {
                                                 <Col md={3}>
                                                     <FormGroup>
                                                         <Label>Division<span className="text-danger">*</span></Label>
-                                                        <Input 
-                                                            type="select" 
-                                                            value={division} 
+                                                        <Input
+                                                            type="select"
+                                                            value={division}
                                                             onChange={handleDivisionChange}
                                                         >
                                                             <option value="">Select Division</option>
@@ -3097,14 +3097,14 @@ const QCViewDocuments = () => {
                                                     </FormGroup>
                                                 </Col>
                                             )}
-                                            
+
                                             {!isFieldsDisabled.subDivision && subDivisions.length > 1 && (
                                                 <Col md={3}>
                                                     <FormGroup>
                                                         <Label>Sub Division<span className="text-danger">*</span></Label>
-                                                        <Input 
-                                                            type="select" 
-                                                            value={subDivision} 
+                                                        <Input
+                                                            type="select"
+                                                            value={subDivision}
                                                             onChange={handleSubDivisionChange}
                                                         >
                                                             <option value="">Select Sub Division</option>
@@ -3117,15 +3117,15 @@ const QCViewDocuments = () => {
                                                     </FormGroup>
                                                 </Col>
                                             )}
-                                            
+
                                             {/* Section dropdown - Fixed filtering logic */}
                                             {sectionOptions.length > 1 && (
                                                 <Col md={3}>
                                                     <FormGroup>
                                                         <Label>Section<span className="text-danger">*</span></Label>
-                                                        <Input 
-                                                            type="select" 
-                                                            value={section} 
+                                                        <Input
+                                                            type="select"
+                                                            value={section}
                                                             onChange={handleSectionChange}
                                                         >
                                                             <option value="">Select Section</option>
@@ -3138,12 +3138,12 @@ const QCViewDocuments = () => {
                                                     </FormGroup>
                                                 </Col>
                                             )}
-                                            
+
                                             <Col md={3} className="d-flex align-items-end">
                                                 <div className="d-flex gap-2 w-100">
                                                     <FormGroup className="mb-0 flex-grow-1">
-                                                        <Button 
-                                                            color="primary" 
+                                                        <Button
+                                                            color="primary"
                                                             size="sm"
                                                             className="w-100"
                                                             onClick={handleSearchClick}
@@ -3164,8 +3164,8 @@ const QCViewDocuments = () => {
                                                         </Button>
                                                     </FormGroup>
                                                     <FormGroup className="mb-0">
-                                                        <Button 
-                                                            color="warning" 
+                                                        <Button
+                                                            color="warning"
                                                             size="sm"
                                                             onClick={handleReset}
                                                             disabled={searchLoading || dropdownsLoading}
@@ -3195,7 +3195,7 @@ const QCViewDocuments = () => {
                                                     className="position-relative px-4 py-3"
                                                     style={{ minWidth: '150px' }}
                                                 >
-                                                    <i className="ri-time-line me-2"></i> 
+                                                    <i className="ri-time-line me-2"></i>
                                                     Pending Documents
                                                     <Badge
                                                         color="danger" pill
@@ -3205,14 +3205,14 @@ const QCViewDocuments = () => {
                                                         {statusCounts.pending}
                                                     </Badge>
                                                 </Button>
-                                                
+
                                                 <Button
                                                     color={activeTab === 'approved' ? 'success' : 'outline-success'}
                                                     onClick={() => handleTabChange('approved')}
                                                     className="position-relative px-4 py-3"
                                                     style={{ minWidth: '150px' }}
                                                 >
-                                                    <i className="ri-checkbox-circle-line me-2"></i> 
+                                                    <i className="ri-checkbox-circle-line me-2"></i>
                                                     Approved Documents
                                                     <Badge
                                                         color="success" pill
@@ -3222,14 +3222,14 @@ const QCViewDocuments = () => {
                                                         {statusCounts.approved}
                                                     </Badge>
                                                 </Button>
-                                                
+
                                                 <Button
                                                     color={activeTab === 'rejected' ? 'danger' : 'outline-danger'}
                                                     onClick={() => handleTabChange('rejected')}
                                                     className="position-relative px-4 py-3"
                                                     style={{ minWidth: '150px' }}
                                                 >
-                                                    <i className="ri-close-circle-line me-2"></i> 
+                                                    <i className="ri-close-circle-line me-2"></i>
                                                     Rejected Documents
                                                     <Badge
                                                         color="warning" pill
@@ -3313,8 +3313,8 @@ const QCViewDocuments = () => {
                                         <i className="ri-search-line display-4 text-primary mb-3"></i>
                                         <h5>Ready to Search Documents</h5>
                                         <p className="text-muted mb-3">Click the button below to load your quality control documents</p>
-                                        <Button 
-                                            color="primary" 
+                                        <Button
+                                            color="primary"
                                             size="lg"
                                             onClick={handleSearchClick}
                                             disabled={searchLoading}

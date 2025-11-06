@@ -383,7 +383,7 @@ export const qcApproveReject = (data) => api.create(url.GET_QC_DOCUMENT, data);
 export const view = (data, config = {}) =>
   api.create(url.VIEW_DOCUMENT, data, {
     ...config,
-    responseType: config.responseType || 'blob' 
+    responseType: 'blob' 
   });
 
 export const qcReviewed = (data) => api.create(url.QC_REVIEW, data);
