@@ -659,7 +659,11 @@ export const MannualUpload = async (req, res) => {
         if (!req.file) {
             return res.status(400).json({ message: "File is required" });
         }
-
+        if (!div_code || !so_code || !sd_code) {
+            return res.status(400).json({
+                error: "div_code, sd_code, and so_code are required."
+            });
+        }
         //  Step 1: Check if document already exists for this Account_Id
         const [existingDocs] = await pool.execute(
             `SELECT DocumentId FROM documentupload WHERE Account_Id = ? LIMIT 1`,
@@ -754,7 +758,7 @@ export const DocumentView = async (req, res) => {
             return res.status(200).json({
                 status: "success",
                 message: "Document Data fetched successfully",
-                count:results.length,
+                count: results.length,
                 data: results,
             });
         }
