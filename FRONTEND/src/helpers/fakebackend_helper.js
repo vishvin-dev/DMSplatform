@@ -378,8 +378,14 @@ export const qcView = (data) => api.create(url.GET_QC_DOCUMENT, data);
 export const qcPreview = (data, config = {}) => api.create(url.GET_QC_DOCUMENT, data, config);
 export const qcApproveReject = (data) => api.create(url.GET_QC_DOCUMENT, data);
 
+// export const view = (data, config = {}) =>
+//   api.create(url.VIEW_DOCUMENT, data, config);
 export const view = (data, config = {}) =>
-  api.create(url.VIEW_DOCUMENT, data, config);
+  api.create(url.VIEW_DOCUMENT, data, {
+    ...config,
+    responseType: config.responseType || 'blob' 
+  });
+
 export const qcReviewed = (data) => api.create(url.QC_REVIEW, data);
 export const singleZoneUpload =(data) => api.create(url.SINGLE_ZONE_UPLOAD,data);
 export const singleConsumerUpload =(data) => api.create (url.SINGLE_CONSUMER_UPLOAD,data);
