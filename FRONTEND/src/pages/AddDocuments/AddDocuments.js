@@ -3886,87 +3886,88 @@ const DocumentManagement = () => {
 
     // Formik form setup - Simplified for single file upload
     const formik = useFormik({
-        initialValues: {
-            docName: '',
-            selectedCategory: '',
-            selectedRole: '',
-            description: '',
-            metaTags: '',
-            mannualFile: null,
-        },
-        validationSchema: documentSchema,
-        validateOnChange: true,
-        validateOnBlur: true,
-        onSubmit: async (values) => {
-            console.log("Formik values on submit:", values);
-            try {
-                setUploadLoading(true);
-                const authUser = JSON.parse(sessionStorage.getItem("authUser"));
-                const userId = authUser?.user?.User_Id;
-                const userEmail = authUser?.user?.Email;
-                // ✅ Get div_code from session storage
-                const userDivCode = authUser?.user?.zones?.[0]?.div_code || '';
+    initialValues: {
+        docName: '',
+        selectedCategory: '',
+        selectedRole: '',
+        description: '',
+        metaTags: '',
+        mannualFile: null,
+    },
+    validationSchema: documentSchema,
+    validateOnChange: true,
+    validateOnBlur: true,
+    onSubmit: async (values) => {
+        console.log("Formik values on submit:", values);
+        try {
+            setUploadLoading(true);
+            const authUser = JSON.parse(sessionStorage.getItem("authUser"));
+            const userId = authUser?.user?.User_Id;
+            const userEmail = authUser?.user?.Email;
+            // Get div_code and sd_code from session storage
+            const userDivCode = authUser?.user?.zones?.[0]?.div_code || '';
+            const userSdCode = authUser?.user?.zones?.[0]?.sd_code || '';
 
-                const formData = new FormData();
-                formData.append('Account_Id', account_id || accountSearchInput);
-                formData.append('DocumentName', values.docName.trim());
-                formData.append('DocumentDescription', values.description.trim());
-                formData.append('MetaTags', values.metaTags.trim());
-                formData.append('CreatedByUser_Id', userId);
-                formData.append('CreatedByUserName', userEmail);
-                formData.append('Category_Id', values.selectedCategory);
-                formData.append('Status_Id', '1'); 
-                formData.append('mannualFile', values.mannualFile); 
-                formData.append('div_code', userDivCode);
+            const formData = new FormData();
+            formData.append('Account_Id', account_id || accountSearchInput);
+            formData.append('DocumentName', values.docName.trim());
+            formData.append('DocumentDescription', values.description.trim());
+            formData.append('MetaTags', values.metaTags.trim());
+            formData.append('CreatedByUser_Id', userId);
+            formData.append('CreatedByUserName', userEmail);
+            formData.append('Category_Id', values.selectedCategory);
+            formData.append('Status_Id', '1'); // Hardcoded as per requirement
+            formData.append('mannualFile', values.mannualFile); // Single file upload
+            formData.append('div_code', userDivCode); // Use div_code from session storage
+            formData.append('sd_code', userSdCode); // Use sd_code from session storage
 
-                // Add other location codes if available
-                if (subDivision) formData.append('sd_code', subDivision);
-                if (section) formData.append('so_code', section);
+            // Add other location codes if available
+            if (section) formData.append('so_code', section);
 
-                if (values.selectedRole) {
-                    formData.append('Role_Id', values.selectedRole);
-                }
-
-                console.log("FormData being sent:", {
-                    account_id: account_id || accountSearchInput,
-                    DocumentName: values.docName.trim(),
-                    DocumentDescription: values.description.trim(),
-                    MetaTags: values.metaTags.trim(),
-                    CreatedByUser_Id: userId,
-                    CreatedByUserName: userEmail,
-                    Category_Id: values.selectedCategory,
-                    Status_Id: '1',
-                    div_code: userDivCode,
-                    sd_code: subDivision || '',
-                    so_code: section || '',
-                    Role_Id: values.selectedRole || '',
-                    hasFile: !!values.mannualFile
-                });
-
-                const response = await postDocumentManualUpload(formData);
-                if (response?.status === 'success') {
-                    const responseData = response?.message;
-                    if (account_id) {
-                        await handleSearch();
-                    }
-                    resetForm();
-                    setModalOpen(false);
-                    setResponse(responseData);
-                    setSuccessModal(true);
-                    await fetchDocumentCounts();
-                } else {
-                    setResponse(response?.message || 'Failed to upload document');
-                    setErrorModal(true);
-                }
-            } catch (error) {
-                console.error('Error uploading document:', error);
-                setResponse('Error uploading document. Please try again.');
-                setErrorModal(true);
-            } finally {
-                setUploadLoading(false);
+            if (values.selectedRole) {
+                formData.append('Role_Id', values.selectedRole);
             }
+
+            console.log("FormData being sent:", {
+                account_id: account_id || accountSearchInput,
+                DocumentName: values.docName.trim(),
+                DocumentDescription: values.description.trim(),
+                MetaTags: values.metaTags.trim(),
+                CreatedByUser_Id: userId,
+                CreatedByUserName: userEmail,
+                Category_Id: values.selectedCategory,
+                Status_Id: '1',
+                div_code: userDivCode,
+                sd_code: userSdCode,
+                so_code: section || '',
+                Role_Id: values.selectedRole || '',
+                hasFile: !!values.mannualFile
+            });
+
+            const response = await postDocumentManualUpload(formData);
+            if (response?.status === 'success') {
+                const responseData = response?.message;
+                if (account_id) {
+                    await handleSearch();
+                }
+                resetForm();
+                setModalOpen(false);
+                setResponse(responseData);
+                setSuccessModal(true);
+                await fetchDocumentCounts();
+            } else {
+                setResponse(response?.message || 'Failed to upload document');
+                setErrorModal(true);
+            }
+        } catch (error) {
+            console.error('Error uploading document:', error);
+            setResponse('Error uploading document. Please try again.');
+            setErrorModal(true);
+        } finally {
+            setUploadLoading(false);
         }
-    });
+    }
+});
 
     const handleFileUpload = (e) => {
         const file = e.currentTarget.files[0];
