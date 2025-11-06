@@ -154,7 +154,7 @@ export const verifiedQc = async (req, res) => {
 
 export const Qcupload = async (req, res) => {
     try {
-        const { flagId, User_Id, so_code, DocumentId, Version_Id, Role_Id, comment } = req.body;
+        const { flagId, User_Id, so_code, Version_Id, Role_Id, comment } = req.body;
 
         if (!flagId) {
             return res.status(400).json({ status: "failed", message: "flagId is required" });
@@ -211,7 +211,7 @@ export const Qcupload = async (req, res) => {
         }
         //======THIS WHEN WE CLCIK TO THE Rejected BUTTON THEN IT TO BE REJECTED OK=============
         else if (parseInt(flagId) === 6) {
-            results = await clickToReject(User_Id, DocumentId, comment)
+            results = await clickToReject(User_Id, Version_Id, comment)
             return res.status(200).json({
                 status: "success",
                 message: "Document Rejected Successfully",

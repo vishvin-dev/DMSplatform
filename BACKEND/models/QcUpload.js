@@ -499,6 +499,7 @@ export const getRejectUpdateDocuments = async (User_Id, roleId, DocumentId, Reje
 
 
 //==============THIS IS THE ALL QC COUNTS WHEN THE So_code SEND ok (Approved, Pending, Rejected)=======================
+
 export const getAllCounts = async (User_Id, so_code) => {
     try {
         const [result] = await pool.execute(
@@ -712,38 +713,57 @@ export const clickToApproved = async (User_Id, Version_Id, Role_Id) => {
 };
 
 
-//==========================THIS WHEN WE CLICK TO THE REJECTED BUTTONS THEN IT TO BE REJECTED OK============================
-export const clickToReject = async (User_Id, DocumentId, comment) => {
+//==========================THIS WHEN WE CLICK TO THE REJECTED BUTTONS THEN IT TO BE REJECTED OK=============================
+export const clickToReject = async (User_Id, Version_Id, comment) => {
     try {
-        // 1️ Update document as Rejected
+        // 1️ Update the specific version status to Rejected
         await pool.execute(
             `
-      UPDATE DocumentUpload
-      SET Status_Id = 3,
-          UpdatedOn = NOW()
-      WHERE DocumentId = ?
-      `,
-            [DocumentId]
+            UPDATE documentversion
+            SET Status_Id = 3, UploadedAt = NOW()
+            WHERE Version_Id = ?
+            `,
+            [Version_Id]
         );
 
-        // 2️ Insert into rejection queue
+        // 2️ Mark old rejection entries for this version as resolved (optional)
+        await pool.execute(
+            `
+            UPDATE documentrejectionqueue
+            SET IsResolved = 1
+            WHERE Version_Id = ?
+            `,
+            [Version_Id]
+        );
+
+        // 3️ Insert new rejection record for this version
         const [result] = await pool.execute(
             `
-      INSERT INTO DocumentRejectionQueue
-        (DocumentId, Status_Id, RejectedByUser_Id, UploaderUser_Id, RejectedOn, RejectionComment, IsResolved)
-      SELECT ?, 3, ?, du.CreatedByUser_Id, NOW(), ?, 0
-      FROM DocumentUpload du
-      WHERE du.DocumentId = ?
-      `,
-            [DocumentId, User_Id, comment, DocumentId]
+            INSERT INTO documentrejectionqueue
+                (DocumentId, Version_Id, Status_Id, RejectedByUser_Id, UploaderUser_Id, RejectedOn, RejectionComment, IsResolved)
+            VALUES
+                (
+                    (SELECT DocumentId FROM documentversion WHERE Version_Id = ?),
+                    ?, 
+                    3, 
+                    ?, 
+                    (SELECT UploadedByUser_Id FROM documentversion WHERE Version_Id = ?),
+                    NOW(),
+                    ?,
+                    0
+                )
+            `,
+            [Version_Id, Version_Id, User_Id, Version_Id, comment]
         );
 
         return { success: true, rejectionId: result.insertId };
+
     } catch (error) {
-        console.error("Error rejecting document:", error);
+        console.error("Error rejecting version:", error);
         throw error;
     }
 };
+
 
 
 
