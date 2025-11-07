@@ -344,117 +344,241 @@ export const getRejectUpdateDocuments = async (User_Id, roleId, DocumentId, Reje
 
 //this is the fecthing back to the dcouments who uploaded according to the sectionwise 
 
+//==================THIS IS FECTHING BACK APPROVED DOCUMENTS TO THE UPLOADER============================
+export const getBackAllApprovedDocumentsCounts = async (so_code, User_Id) => {
+    try {
+        const [result] = await pool.execute(
+            `
+            SELECT 
+                COUNT(DISTINCT du.DocumentId) AS ApprovedCount
+            FROM 
+                documentupload du
+            JOIN 
+                documentversion dv 
+                    ON du.DocumentId = dv.DocumentId 
+                    AND dv.Status_Id = 2            
+            JOIN 
+                documentworkflowhistory wfh 
+                    ON dv.Version_Id = wfh.Version_Id 
+                    AND wfh.Status_Id = 2           
+                        
+            WHERE 
+                du.so_code = ?                     
+                AND du.CreatedByUser_Id = ?;
+            `,
+            [so_code,User_Id]
+        );
 
-// export const getBackAllApprovedDocuments = async (User_Id) => {
-//     try {
-//         const [result] = await pool.execute(
-//             `
-//             SELECT 
-//                 dv.DocumentId,
-//                 dv.Version_Id AS VersionId,
-//                 dv.VersionLabel,
-//                 dv.FilePath,
-//                 du.documentName,
-//                 du.Status_Id,
-//                 wf.ActionTime AS ApprovedOn,
-//                 wf.Comment AS ApprovalComment,
-//                 u.LoginName AS ApprovedBy,
-//                 dsm.StatusName,
-//                 cd.division,
-//                 cd.sub_division,
-//                 cd.section,
-//                 cd.rr_no,                      
-//                 cd.consumer_name,             
-//                 cd.consumer_address 
-//             FROM 
-//                 DocumentVersion dv
-//             JOIN DocumentUpload du ON dv.DocumentId = du.DocumentId
-//             JOIN DocumentWorkflowHistory wf ON dv.DocumentId = wf.DocumentId
-//             JOIN User u ON wf.ActionByUser_Id = u.User_Id
-//             JOIN DocumentStatusMaster dsm ON du.Status_Id = dsm.Status_Id
-//             JOIN consumer_details cd ON du.Account_Id = cd.account_id
-//             WHERE 
-//                 du.Status_Id = 2                  -- Only Approved documents
-//                 AND dv.IsLatest = 1               -- Only latest version
-//                 AND du.CreatedByUser_Id = ?       -- Uploaded by current user
-//                 AND wf.Status_Id = 2              -- Approved workflow entry
-//                 AND wf.IsLatest = 1               -- Only latest workflow
-//             `,
-//             [User_Id]
-//         );
+        return result;
+    } catch (error) {
+        console.error("Error fetching approved documents:", error);
+        throw error;
+    }
+};
+export const getBackAllApprovedDocuments = async (so_code,User_Id,) => {
+    try {
+        const [result] = await pool.execute(
+            `
+                SELECT 
+                    -- Document Info
+                    du.DocumentId,
+                    du.DocumentName,
+                    du.DocumentDescription,
+                    du.MetaTags,
+                    du.Account_Id,
+                    du.CreatedByUser_Id,
+                    du.CreatedByUserName,
+                    du.CreatedAt,
+                    du.Category_Id,
+                    cat.CategoryName,
+                    du.div_code,
+                    du.sd_code,
+                    du.so_code,
 
-//         return result;
-//     } catch (error) {
-//         console.error("Error fetching approved documents:", error);
-//         throw error;
-//     }
-// };
+                    -- Version Info
+                    dv.Version_Id,
+                    dv.VersionLabel,
+                    dv.UploadedByUser_Id,
+                    dv.UploadedAt,
+                    dv.IsLatest,
+                    dv.ChangeReason,
+                    dv.Status_Id AS VersionStatus_Id,
 
+                    --  Workflow Info (Approved by QC)
+                    wfh.Workflow_Id,
+                    wfh.ActionByUser_Id AS ApprovedByUser_Id,
+                    wfh.ActionTime AS ApprovedOn,
+                    wfh.Comment AS ApprovalComment,
+                    wfh.Status_Id AS WorkflowStatus_Id,
 
-// export const getBackAllRejectedDocuments = async (User_Id) => {
-//     try {
-//         const [result] = await pool.execute(
-//             `
-//                     SELECT 
-//                 drq.Rejection_Id,
-//                 drq.DocumentId,
-//                 du.DocumentName,
-//                 dv.FilePath,  
-//                 du.Account_Id,
-//                 dv.VersionLabel,
-//                 u.Email AS UploadedBy,
-//                 ru.Email AS RejectedBy,
-//                 drq.RejectedOn,
-//                 drq.RejectionComment,
-//                 dsm.StatusName,
-//                 cd.division,
-//                 cd.sub_division,
-//                 cd.section,
-//                 zc.div_code,
-//                 zc.sd_code,
-//                 zc.so_code,
-//                 drq.IsResolved,
-//                 cd.rr_no,
-//                 cd.consumer_name,
-//                 cd.consumer_address
-//             FROM 
-//                 DocumentRejectionQueue drq
-//             JOIN DocumentUpload du 
-//                 ON drq.DocumentId = du.DocumentId
-//             JOIN DocumentVersion dv 
-//                 ON du.DocumentId = dv.DocumentId 
-//             AND dv.IsLatest = 1
-//             JOIN User u 
-//                 ON drq.UploaderUser_Id = u.User_Id
-//             JOIN User ru 
-//                 ON drq.RejectedByUser_Id = ru.User_Id
-//             JOIN consumer_details cd 
-//                 ON du.Account_Id = cd.account_id
-//             JOIN zone_codes zc 
-//                 ON TRIM(cd.division) = TRIM(zc.div_code)
-//             AND TRIM(cd.sub_division) = TRIM(zc.sd_code)
-//             AND TRIM(cd.section) = TRIM(zc.so_code)
-//             JOIN DocumentStatusMaster dsm 
-//                 ON drq.Status_Id = dsm.Status_Id
-//             WHERE 
-//                 drq.Status_Id = 3  -- Rejected
-//                 AND drq.IsResolved = 0  -- ✅ Only unresolved
-//                 AND drq.RejectedByUser_Id = 34
-//                 AND (zc.div_code, zc.sd_code, zc.so_code) IN (
-//                     SELECT div_code, sd_code, so_code 
-//                     FROM User 
-//                     WHERE Role_Id = 2 
-//                     AND User_Id = 34
-//                 );
-//             `,
-//             [User_Id]
-//         );
-//         return result;
-//     } catch (error) {
-//         console.error("Error fetching rejected documents:", error);
-//         throw error;
-//     }
-// };
+                    -- Consumer Info
+                    cd.consumer_name,
+                    cd.phone,
+                    cd.consumer_address,
+                    cd.rr_no,
+                    cd.tariff,
+
+                    -- Zone / Division / Subdivision / Section
+                    zc.zone,
+                    zc.division AS division_name,
+                    zc.sub_division AS subdivision_name,
+                    zc.section_office AS section_name
+
+                FROM 
+                    documentupload du
+                JOIN 
+                    documentcategorymaster cat ON du.Category_Id = cat.Category_Id
+                JOIN 
+                    documentversion dv 
+                    ON du.DocumentId = dv.DocumentId 
+                    AND dv.Status_Id = 2                             
+                JOIN 
+                    documentworkflowhistory wfh 
+                    ON dv.Version_Id = wfh.Version_Id 
+                    AND wfh.Status_Id = 2              
+                    AND wfh.IsLatest = 1                
+                LEFT JOIN 
+                    consumer_details cd 
+                    ON du.Account_Id = cd.account_id
+                LEFT JOIN 
+                    zone_codes zc 
+                    ON zc.div_code = du.div_code
+                    AND zc.sd_code = du.sd_code
+                    AND zc.so_code = du.so_code
+                WHERE 
+                    du.so_code = ?       
+                    AND du.CreatedByUser_Id = ?     
+                ORDER BY 
+                    dv.UploadedAt DESC;
+
+            `,
+            [so_code,User_Id]
+        );
+
+        return result;
+    } catch (error) {
+        console.error("Error fetching approved documents:", error);
+        throw error;
+    }
+};
+//=========================================================================================
+
+//==================THIS IS FECTHING BACK REJECTED DOCUMENTS TO THE UPLOADER============================
+export const getBackAllRejectedDocuments = async (User_Id,so_code) => {
+    try {
+        const [result] = await pool.execute(
+            `
+                 
+                SELECT 
+                    du.DocumentId,
+                    du.DocumentName,
+                    du.DocumentDescription,
+                    du.MetaTags,
+                    du.Account_Id,
+                    du.CreatedByUser_Id,
+                    du.CreatedByUserName,
+                    du.CreatedAt,
+                    du.Category_Id,
+                    cat.CategoryName,
+                    du.div_code,
+                    du.sd_code,
+                    du.so_code,
+
+                    -- Version Info
+                    dv.Version_Id,
+                    dv.VersionLabel,
+                    dv.UploadedByUser_Id,
+                    dv.UploadedAt,
+                    dv.IsLatest,
+                    dv.ChangeReason,
+                    dv.Status_Id AS VersionStatus_Id,
+
+                    -- Rejection Info
+                    drq.Rejection_Id,
+                    drq.Status_Id AS RejectionStatus_Id,
+                    drq.RejectionComment,
+                    drq.RejectedOn,
+                    drq.RejectedByUser_Id,
+                    drq.UploaderUser_Id,
+                    drq.IsResolved,
+
+                    -- Consumer Info
+                    cd.consumer_name,
+                    cd.phone,
+                    cd.consumer_address,
+                    cd.rr_no,
+                    cd.tariff,
+
+                    -- Zone / Division / Subdivision / Section
+                    zc.zone,
+                    zc.division AS division_name,
+                    zc.sub_division AS subdivision_name,
+                    zc.section_office AS section_name
+
+                FROM 
+                    documentrejectionqueue drq
+                JOIN 
+                    documentupload du ON drq.DocumentId = du.DocumentId
+                JOIN 
+                    documentcategorymaster cat ON du.Category_Id = cat.Category_Id
+                LEFT JOIN 
+                    documentversion dv ON drq.Version_Id = dv.Version_Id
+                LEFT JOIN 
+                    consumer_details cd ON du.Account_Id = cd.account_id
+                LEFT JOIN 
+                    zone_codes zc 
+                        ON zc.so_code = du.so_code
+                        AND zc.sd_code = du.sd_code
+                        AND zc.div_code = du.div_code
+                WHERE 
+                    drq.UploaderUser_Id = ?    
+                    AND du.so_code = ?           
+                    AND drq.Status_Id = 3          
+                    AND drq.IsResolved = 0        
+
+                -- Sort latest first
+                ORDER BY 
+                    drq.RejectedOn DESC, 
+                    dv.UploadedAt DESC;
+
+            `,
+            [User_Id,so_code]
+        );
+        return result;
+    } catch (error) {
+        console.error("Error fetching rejected documents:", error);
+        throw error;
+    }
+};
+
+export const getBackAllRejectedDocumentsCounts = async (so_code, User_Id) => {
+    try {
+        const [result] = await pool.execute(
+            `
+                 
+        SELECT 
+            COUNT(DISTINCT du.DocumentId) AS RejectedCount
+        FROM 
+            documentrejectionqueue drq
+        JOIN 
+            documentupload du 
+            ON drq.DocumentId = du.DocumentId
+        WHERE 
+            du.so_code = ?
+            AND drq.UploaderUser_Id = ?
+            AND drq.Status_Id = 3
+            AND drq.IsResolved = 0;
+
+            `,
+            [so_code, User_Id]
+        );
+        return result;
+    } catch (error) {
+        console.error("Error fetching rejected documents:", error);
+        throw error;
+    }
+};
+
 
 
 // export const getBackAllPendingDocuments = async (User_Id) => {
@@ -533,7 +657,7 @@ export const getAllCounts = async (so_code) => {
         throw error;
     }
 };
-// ==========================
+// =========================================================================================================
 
 //THIS IS THE CLCIKING PENDING DOCS
 export const clickGetPendingDocs = async (so_code) => {
@@ -769,16 +893,4 @@ export const clickToReject = async (User_Id, Version_Id, comment) => {
         throw error;
     }
 };
-
-
-
-
-
-
-
-
-
-
-
-
 

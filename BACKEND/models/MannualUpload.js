@@ -82,7 +82,7 @@ export const getNextVersionLabel = (latestVersion) => {
 export const getDocsMetaInfo = async (accountId) => {
     try {
         const [result] = await pool.execute(`
-            SELECT 
+           SELECT 
                 du.DocumentId,
                 du.DocumentName,
                 du.DocumentDescription,
@@ -121,9 +121,9 @@ export const getDocsMetaInfo = async (accountId) => {
             LEFT JOIN 
                 consumer_details cd ON du.Account_Id = cd.account_id
             JOIN 
-                documentworkflowhistory wfh ON wfh.DocumentId = du.DocumentId AND wfh.IsLatest = 1
-            JOIN 
-                documentversion dv ON dv.DocumentId = du.DocumentId
+                documentversion dv ON dv.DocumentId = du.DocumentId AND dv.Status_Id = 2  -- Only approved versions
+            LEFT JOIN 
+                documentworkflowhistory wfh ON wfh.Version_Id = dv.Version_Id AND wfh.IsLatest = 1  -- Join workflow by version, not document
             LEFT JOIN
                 zone_codes zc 
                 ON zc.div_code = du.div_code
@@ -131,10 +131,10 @@ export const getDocsMetaInfo = async (accountId) => {
                 AND zc.so_code = du.so_code
             WHERE 
                 du.Account_Id = ?
-                AND dv.Status_Id = 2  -- Approved status from version table
             ORDER BY
                 dv.IsLatest DESC,  -- Latest version first
                 dv.UploadedAt DESC;
+
 
             `, [accountId]);
         return result

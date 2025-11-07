@@ -760,7 +760,7 @@ const DocumentViewer = () => {
 
       const response = await axios.post(
         "http://localhost:9000/backend-service/documentUpload/documentView",
-        { DocumentId: documentId, flagId: 2 },
+        { Version_Id: documentId, flagId: 2 },
         {
           responseType: "blob", // Important
         }
@@ -783,7 +783,7 @@ const DocumentViewer = () => {
       <h3>📄 Document Viewer</h3>
 
       <button
-        onClick={() => handleViewPdf(21)}
+        onClick={() => handleViewPdf(72)}
         disabled={loading}
         style={{
           padding: "8px 16px",
