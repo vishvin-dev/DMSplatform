@@ -499,26 +499,33 @@ export const getRejectUpdateDocuments = async (User_Id, roleId, DocumentId, Reje
 
 
 //==============THIS IS THE ALL QC COUNTS WHEN THE So_code SEND ok (Approved, Pending, Rejected)=======================
-export const getAllCounts = async (User_Id, so_code) => {
+
+export const getAllCounts = async (so_code) => {
     try {
         const [result] = await pool.execute(
            `
-            SELECT 
-                COALESCE(SUM(CASE WHEN dv.Status_Id = 1 THEN 1 ELSE 0 END), 0) AS PendingCount,
-                COALESCE(SUM(CASE WHEN dwh.Status_Id = 2 AND dwh.ActionByUser_Id = ? THEN 1 ELSE 0 END), 0) AS ApprovedCount,
-                COALESCE(SUM(CASE WHEN drq.Status_Id = 3 AND drq.RejectedByUser_Id = ? THEN 1 ELSE 0 END), 0) AS RejectedCount
-            FROM documentupload du
-            LEFT JOIN documentversion dv 
-                ON du.DocumentId = dv.DocumentId
-            LEFT JOIN documentworkflowhistory dwh 
-                ON dv.Version_Id = dwh.Version_Id 
-                AND dwh.IsLatest = 1
-            LEFT JOIN documentrejectionqueue drq 
-                ON dv.Version_Id = drq.Version_Id 
-                AND drq.IsResolved = 0
-            WHERE du.so_code = ?
+            SELECT
+            -- count distinct versions currently in pending status
+            COUNT(DISTINCT CASE WHEN dv.Status_Id = 1 THEN dv.Version_Id END) AS PendingCount,
+
+            -- count distinct versions whose latest workflow entry is approved
+            COUNT(DISTINCT CASE WHEN dwh.Status_Id = 2 THEN dv.Version_Id END) AS ApprovedCount,
+
+            -- count distinct versions that are rejected either via latest workflow OR unresolved rejection queue
+            COUNT(DISTINCT CASE WHEN (dwh.Status_Id = 3 OR drq.Status_Id = 3) THEN dv.Version_Id END) AS RejectedCount
+
+        FROM documentupload du
+        JOIN documentversion dv
+            ON du.DocumentId = dv.DocumentId
+        LEFT JOIN documentworkflowhistory dwh
+            ON dv.Version_Id = dwh.Version_Id
+            AND dwh.IsLatest = 1
+        LEFT JOIN documentrejectionqueue drq
+            ON dv.Version_Id = drq.Version_Id
+            AND drq.IsResolved = 0
+        WHERE du.so_code = ?;
             `,
-            [User_Id, User_Id, so_code]
+            [so_code]
         );
         return result;
     } catch (error) {
@@ -712,38 +719,57 @@ export const clickToApproved = async (User_Id, Version_Id, Role_Id) => {
 };
 
 
-//==========================THIS WHEN WE CLICK TO THE REJECTED BUTTONS THEN IT TO BE REJECTED OK============================
-export const clickToReject = async (User_Id, DocumentId, comment) => {
+//==========================THIS WHEN WE CLICK TO THE REJECTED BUTTONS THEN IT TO BE REJECTED OK=============================
+export const clickToReject = async (User_Id, Version_Id, comment) => {
     try {
-        // 1️ Update document as Rejected
+        // 1️ Update the specific version status to Rejected
         await pool.execute(
             `
-      UPDATE DocumentUpload
-      SET Status_Id = 3,
-          UpdatedOn = NOW()
-      WHERE DocumentId = ?
-      `,
-            [DocumentId]
+            UPDATE documentversion
+            SET Status_Id = 3, UploadedAt = NOW()
+            WHERE Version_Id = ?
+            `,
+            [Version_Id]
         );
 
-        // 2️ Insert into rejection queue
+        // 2️ Mark old rejection entries for this version as resolved (optional)
+        await pool.execute(
+            `
+            UPDATE documentrejectionqueue
+            SET IsResolved = 1
+            WHERE Version_Id = ?
+            `,
+            [Version_Id]
+        );
+
+        // 3️ Insert new rejection record for this version
         const [result] = await pool.execute(
             `
-      INSERT INTO DocumentRejectionQueue
-        (DocumentId, Status_Id, RejectedByUser_Id, UploaderUser_Id, RejectedOn, RejectionComment, IsResolved)
-      SELECT ?, 3, ?, du.CreatedByUser_Id, NOW(), ?, 0
-      FROM DocumentUpload du
-      WHERE du.DocumentId = ?
-      `,
-            [DocumentId, User_Id, comment, DocumentId]
+            INSERT INTO documentrejectionqueue
+                (DocumentId, Version_Id, Status_Id, RejectedByUser_Id, UploaderUser_Id, RejectedOn, RejectionComment, IsResolved)
+            VALUES
+                (
+                    (SELECT DocumentId FROM documentversion WHERE Version_Id = ?),
+                    ?, 
+                    3, 
+                    ?, 
+                    (SELECT UploadedByUser_Id FROM documentversion WHERE Version_Id = ?),
+                    NOW(),
+                    ?,
+                    0
+                )
+            `,
+            [Version_Id, Version_Id, User_Id, Version_Id, comment]
         );
 
         return { success: true, rejectionId: result.insertId };
+
     } catch (error) {
-        console.error("Error rejecting document:", error);
+        console.error("Error rejecting version:", error);
         throw error;
     }
 };
+
 
 
 
