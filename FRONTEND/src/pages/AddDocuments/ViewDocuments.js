@@ -1942,22 +1942,17 @@ const ViewDocuments = () => {
         return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
     };
 
+    // FIXED: Enhanced blob handling with proper binary data conversion
     const handleFileSelect = async (file) => {
+        console.log('📄 File selected:', file);
+        console.log('🔑 Version_Id to be sent:', file.versionId);
+        
         setSelectedFile(file);
         setPreviewLoading(true);
         setPreviewContent(null);
         setPreviewError(null);
 
         try {
-            console.log('📄 Starting document preview for Version_Id:', file.versionId);
-            console.log('📋 Selected file details:', {
-                documentId: file.documentId,
-                versionId: file.versionId,
-                versionLabel: file.versionLabel,
-                isLatest: file.isLatest,
-                fileName: file.name
-            });
-
             // Validate versionId is available
             if (!file.versionId) {
                 throw new Error("Version_Id is required for document preview");
@@ -1965,67 +1960,112 @@ const ViewDocuments = () => {
 
             const requestPayload = {
                 flagId: 2,
-                Version_Id: file.versionId, // Using Version_Id instead of DocumentId
+                Version_Id: file.versionId,
                 requestUserName: userName,
             };
 
-            console.log('🚀 API Request Payload with Version_Id:', requestPayload);
+            console.log('🚀 API Request Payload:', requestPayload);
 
-            // Call the view API with Version_Id
+            // Call the view API - it should return binary data
             const response = await view(requestPayload);
-
             console.log('✅ API Response received:', response);
             console.log('📊 Response type:', typeof response);
+            console.log('🔍 Response constructor:', response?.constructor?.name);
+            console.log('📦 Response size:', response?.size);
+            console.log('📄 Response data sample:', typeof response === 'string' ? response.substring(0, 100) : 'Not a string');
 
             let blobData = null;
 
-            // Handle different response formats
+            // Check if response is already a proper Blob
             if (response instanceof Blob) {
+                console.log('✅ Response is already a Blob');
                 blobData = response;
-                console.log('✅ Blob data received directly');
-            } else if (response && response.data instanceof Blob) {
-                blobData = response.data;
-                console.log('✅ Blob data received from response.data');
-            } else if (response && response.blob) {
-                blobData = response.blob;
-                console.log('✅ Blob data received from response.blob');
-            } else if (response && typeof response === 'object') {
-                // If response is an object but not a blob, check for data property
-                console.log('🔍 Response object structure:', Object.keys(response));
-                if (response.data && response.data instanceof Blob) {
-                    blobData = response.data;
+            }
+            // Check if response is ArrayBuffer
+            else if (response instanceof ArrayBuffer) {
+                console.log('✅ Response is ArrayBuffer');
+                blobData = new Blob([response], { type: 'application/pdf' });
+            }
+            // Check if response is a string (binary data)
+            else if (typeof response === 'string') {
+                console.log('✅ Response is string, converting binary data to Blob');
+                
+                // Check if it's a valid PDF by looking for PDF header
+                if (response.substring(0, 4) === '%PDF') {
+                    console.log('📄 Valid PDF header found');
                 } else {
-                    throw new Error("Invalid response format - expected Blob data");
+                    console.log('⚠️  PDF header not found, but continuing...');
                 }
-            } else {
-                console.error('❌ Unexpected response format:', response);
-                throw new Error("Invalid preview response format - expected Blob data");
+
+                // --- START FIX: Correct binary string to Blob conversion ---
+                console.log('Converting binary string to ArrayBuffer...');
+                const uint8Array = new Uint8Array(response.length);
+                for (let i = 0; i < response.length; i++) {
+                    uint8Array[i] = response.charCodeAt(i) & 0xFF; // Use 8-bit mask
+                }
+                blobData = new Blob([uint8Array], { type: 'application/pdf' });
+                console.log('✅ Binary string conversion successful. Size:', blobData.size);
+                // --- END FIX ---
+            }
+            // Check if response has data property
+            else if (response && response.data) {
+                console.log('✅ Response has data property');
+                
+                if (response.data instanceof Blob) {
+                    blobData = response.data;
+                } else if (response.data instanceof ArrayBuffer) {
+                    blobData = new Blob([response.data], { type: 'application/pdf' });
+                } else if (typeof response.data === 'string') {
+                    
+                    // --- START FIX: Correct binary string to Blob conversion ---
+                    console.log('✅ response.data is string, converting binary data to Blob');
+                    const uint8Array = new Uint8Array(response.data.length);
+                    for (let i = 0; i < response.data.length; i++) {
+                        uint8Array[i] = response.data.charCodeAt(i) & 0xFF; // Use 8-bit mask
+                    }
+                    blobData = new Blob([uint8Array], { type: 'application/pdf' });
+                    console.log('✅ response.data binary string converted to Blob. Size:', blobData.size);
+                    // --- END FIX ---
+                    
+                } else {
+                    // Last resort: stringify and create blob
+                    blobData = new Blob([JSON.stringify(response.data)], { type: 'application/pdf' });
+                }
+            }
+            // Last resort: try to create blob from whatever we have
+            else {
+                console.log('🔍 Creating blob from raw response as last resort');
+                blobData = new Blob([response], { type: 'application/pdf' });
             }
 
             // Validate the blob
-            if (!blobData || blobData.size === 0) {
-                throw new Error("Received empty or invalid file data");
+            if (!blobData) {
+                throw new Error("Failed to create blob from response");
             }
 
-            console.log('📦 Blob details:', {
+            if (blobData.size === 0) {
+                throw new Error("Received empty file data");
+            }
+
+            console.log('📦 Final Blob details:', {
                 size: blobData.size,
                 type: blobData.type,
                 isBlob: blobData instanceof Blob
             });
 
-            // Create object URL and set preview content
+            // Create object URL for the blob
             const fileUrl = URL.createObjectURL(blobData);
-            const fileType = blobData.type || 'application/pdf';
-
-            console.log('📁 File type:', fileType);
-            console.log('🔗 Object URL created:', fileUrl);
+            
+            console.log('🔗 Object URL created:', fileUrl.substring(0, 50) + '...');
 
             setPreviewContent({
                 url: fileUrl,
-                type: fileType,
+                type: 'application/pdf', // Force PDF type
                 name: file.name,
                 blob: blobData
             });
+
+            console.log('✅ Preview content set successfully');
 
         } catch (error) {
             console.error("❌ Preview error:", error);
@@ -2038,6 +2078,7 @@ const ViewDocuments = () => {
         }
     };
 
+    // FIXED: Enhanced download handler
     const handleDownload = async (file) => {
         try {
             console.log('📥 Starting download for Version_Id:', file.versionId);
@@ -2048,11 +2089,11 @@ const ViewDocuments = () => {
 
             const requestPayload = {
                 flagId: 2,
-                Version_Id: file.versionId, // Using Version_Id instead of DocumentId
+                Version_Id: file.versionId,
                 requestUserName: userName,
             };
 
-            console.log('🚀 Download API Request Payload:', requestPayload);
+            console.log('🚀 Download API Request:', requestPayload);
 
             const response = await view(requestPayload);
 
@@ -2061,33 +2102,60 @@ const ViewDocuments = () => {
             // Handle response formats same as preview
             if (response instanceof Blob) {
                 blobData = response;
-            } else if (response && response.data instanceof Blob) {
-                blobData = response.data;
-            } else if (response && response.blob) {
-                blobData = response.blob;
-            } else if (response && typeof response === 'object' && response.data instanceof Blob) {
-                blobData = response.data;
+            } else if (response instanceof ArrayBuffer) {
+                blobData = new Blob([response], { type: 'application/pdf' });
+            } else if (typeof response === 'string') {
+                // --- START FIX: Correct binary string to Blob conversion ---
+                console.log('✅ Download: Response is string, converting binary data to Blob');
+                const uint8Array = new Uint8Array(response.length);
+                for (let i = 0; i < response.length; i++) {
+                    uint8Array[i] = response.charCodeAt(i) & 0xFF; // Use 8-bit mask
+                }
+                blobData = new Blob([uint8Array], { type: 'application/pdf' });
+                // --- END FIX ---
+            } else if (response && response.data) {
+                if (response.data instanceof Blob) {
+                    blobData = response.data;
+                } else if (response.data instanceof ArrayBuffer) {
+                    blobData = new Blob([response.data], { type: 'application/pdf' });
+                } else if (typeof response.data === 'string') {
+                    // --- START FIX: Correct binary string to Blob conversion ---
+                    console.log('✅ Download: response.data is string, converting binary data to Blob');
+                    const uint8Array = new Uint8Array(response.data.length);
+                    for (let i = 0; i < response.data.length; i++) {
+                        uint8Array[i] = response.data.charCodeAt(i) & 0xFF; // Use 8-bit mask
+                    }
+                    blobData = new Blob([uint8Array], { type: 'application/pdf' });
+                    // --- END FIX ---
+                } else {
+                    blobData = new Blob([JSON.stringify(response.data)], { type: 'application/pdf' });
+                }
             } else {
-                throw new Error("Invalid download response format");
+                blobData = new Blob([response], { type: 'application/pdf' });
             }
 
             if (!blobData || blobData.size === 0) {
                 throw new Error("Received empty file for download");
             }
 
-            const url = window.URL.createObjectURL(blobData);
+            // Create download link
+            const url = URL.createObjectURL(blobData);
             const link = document.createElement("a");
             link.href = url;
 
-            // Create a better filename
-            const fileExtension = file.type || 'pdf';
+            // Create filename
+            const fileExtension = 'pdf';
             const fileName = `${file.name || 'document'}_v${file.versionLabel || file.versionId}.${fileExtension}`;
 
             link.download = fileName;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
+            
+            // Clean up URL after download
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 100);
 
             console.log('✅ Download completed successfully');
 
@@ -2497,6 +2565,19 @@ const ViewDocuments = () => {
                                                             </div>
                                                         </div>
                                                     </div>
+
+                                                    {/* Debug Information - Only show in development */}
+                                                    {process.env.NODE_ENV === 'development' && (
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex align-items-center">
+                                                                <i className="ri-bug-line me-1 text-warning fs-6"></i>
+                                                                <div className="d-flex align-items-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Version_Id:</Label>
+                                                                    <span className="fw-semibold x-small text-warning">{selectedFile.versionId}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         ) : (
@@ -2526,7 +2607,7 @@ const ViewDocuments = () => {
                                                 <ListGroup flush style={{ minHeight: '100%' }}>
                                                     {documents.map((doc, index) => (
                                                         <div
-                                                            key={doc.id} // Using the combined ID
+                                                            key={doc.id}
                                                             className="fade-in-list-item"
                                                             style={{ animationDelay: `${0.1 * index}s` }}
                                                         >
@@ -2617,16 +2698,32 @@ const ViewDocuments = () => {
                                             ) : previewContent ? (
                                                 <div className="d-flex flex-column h-100">
                                                     <div className="flex-grow-1 preview-content">
-                                                        {previewContent.type.match(/pdf/) ? (
+                                                        {previewContent.type.includes('pdf') ? (
                                                             <div className="pdf-viewer-container fade-in h-100">
                                                                 <iframe
-                                                                    src={`${previewContent.url}#toolbar=1&navpanes=1&scrollbar=1`}
+                                                                    // --- MODIFICATION HERE ---
+                                                                    src={`${previewContent.url}#toolbar=0&navpanes=0&scrollbar=0`}
                                                                     title="PDF Viewer"
                                                                     className="w-100 h-100"
                                                                     style={{ border: 'none' }}
+                                                                    onLoad={(e) => {
+                                                                        console.log('📄 PDF iframe loaded');
+                                                                        // Check if iframe has content
+                                                                        const iframe = e.target;
+                                                                        try {
+                                                                            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                                                                            console.log('📄 Iframe document readyState:', iframeDoc.readyState);
+                                                                        } catch (err) {
+                                                                            console.log('🔒 Cannot access iframe content (cross-origin)');
+                                                                        }
+                                                                    }}
+                                                                    onError={(e) => {
+                                                                        console.error('❌ PDF iframe error:', e);
+                                                                        setPreviewError('Failed to load PDF in iframe');
+                                                                    }}
                                                                 />
                                                             </div>
-                                                        ) : previewContent.type.match(/jpeg|jpg|png|gif/) ? (
+                                                        ) : previewContent.type.includes('image') ? (
                                                             <div className="text-center fade-in p-3 h-100 d-flex align-items-center justify-content-center">
                                                                 <img
                                                                     src={previewContent.url}
@@ -2636,6 +2733,10 @@ const ViewDocuments = () => {
                                                                         maxHeight: '100%',
                                                                         maxWidth: '100%',
                                                                         objectFit: 'contain'
+                                                                    }}
+                                                                    onError={(e) => {
+                                                                        console.error('❌ Image load error:', e);
+                                                                        setPreviewError('Failed to load image preview');
                                                                     }}
                                                                 />
                                                             </div>
