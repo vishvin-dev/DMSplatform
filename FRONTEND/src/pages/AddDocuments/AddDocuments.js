@@ -16,7 +16,7 @@ const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB in bytes
 const DocumentManagement = () => {
     // Modal states
     const [modalOpen, setModalOpen] = useState(false);
-    const [statusModalOpen, setStatusModalOpen] = useState(false);
+    const [statusModalOpen, setStatusModalOpen] = useState(false); // This seems unused, replaced by specific modals
     const [currentStatus, setCurrentStatus] = useState('');
     const [editMode, setEditMode] = useState(false);
     const [currentDocument, setCurrentDocument] = useState(null);
@@ -51,12 +51,21 @@ const DocumentManagement = () => {
         pending: 0,
         rejected: 0
     });
+    
+    // *** ADDED/MODIFIED STATES ***
     const [approvedModalOpen, setApprovedModalOpen] = useState(false);
-    const [rejectedDocuments, setRejectedDocuments] = useState([]);
-    const [selectedRejectedFile, setSelectedRejectedFile] = useState(null);
     const [rejectedModalOpen, setRejectedModalOpen] = useState(false);
+    const [pendingModalOpen, setPendingModalOpen] = useState(false); // <-- ADDED
+    
     const [approvedDocuments, setApprovedDocuments] = useState([]);
-    const [selectedFile, setSelectedFile] = useState(null);
+    const [rejectedDocuments, setRejectedDocuments] = useState([]);
+    const [pendingDocuments, setPendingDocuments] = useState([]); // <-- ADDED
+
+    const [selectedFile, setSelectedFile] = useState(null); // Used for Approved
+    const [selectedRejectedFile, setSelectedRejectedFile] = useState(null); // Used for Rejected
+    const [selectedPendingFile, setSelectedPendingFile] = useState(null); // <-- ADDED
+    // *** END OF ADDED/MODIFIED STATES ***
+
     const [previewContent, setPreviewContent] = useState(null);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewError, setPreviewError] = useState(null);
@@ -406,6 +415,7 @@ const DocumentManagement = () => {
     const handleApprovedClick = () => {
         setSelectedFile(null);
         setSelectedRejectedFile(null);
+        setSelectedPendingFile(null); // <-- ADDED
         setPreviewContent(null);
         setPreviewError(null);
         setApprovedModalOpen(true);
@@ -416,6 +426,7 @@ const DocumentManagement = () => {
     const handleRejectedClick = () => {
         setSelectedFile(null);
         setSelectedRejectedFile(null);
+        setSelectedPendingFile(null); // <-- ADDED
         setPreviewContent(null);
         setPreviewError(null);
         setRejectedModalOpen(true);
@@ -423,9 +434,16 @@ const DocumentManagement = () => {
         fetchDocumentCounts();
     };
 
+    // *** MODIFIED FUNCTION ***
     const handlePendingClick = () => {
-        setCurrentStatus('pending');
-        setStatusModalOpen(true);
+        setSelectedFile(null);
+        setSelectedRejectedFile(null);
+        setSelectedPendingFile(null);
+        setPreviewContent(null);
+        setPreviewError(null);
+        setPendingModalOpen(true); // <-- CHANGED
+        fetchPendingDocuments();  // <-- ADDED
+        fetchDocumentCounts();
     };
 
     // Simplified Validation Schema
@@ -450,7 +468,8 @@ const DocumentManagement = () => {
         return <i className="ri-file-line fs-4 text-secondary"></i>;
     };
 
-   const fetchDocumentCounts = async () => {
+    // *** MODIFIED FUNCTION ***
+    const fetchDocumentCounts = async () => {
         try {
             const authUser = JSON.parse(sessionStorage.getItem("authUser"));
             const userId = authUser?.user?.User_Id;
@@ -459,29 +478,39 @@ const DocumentManagement = () => {
             const approvedParams = {
                 flagId: 1, // Use flagId 1 for approved count
                 User_Id: userId,
-                so_code: so_code // Add so_code
+                so_code: so_code
             };
-            const approvedResponse = await qcReviewed(approvedParams);
-
             const rejectedParams = {
                 flagId: 3, // Use flagId 3 for rejected count
                 User_Id: userId,
-                so_code: so_code // Add so_code
+                so_code: so_code
             };
-            const rejectedResponse = await qcReviewed(rejectedParams);
+            // --- ADDED PENDING COUNT CALL ---
+            const pendingParams = {
+                flagId: 5, // Use flagId 5 for pending count (from Postman)
+                User_Id: userId,
+                so_code: so_code
+            };
 
-            // Removed pending call as flagId: 3 is now for rejected count
+            // Run all count fetches in parallel
+            const [approvedResponse, rejectedResponse, pendingResponse] = await Promise.all([
+                qcReviewed(approvedParams),
+                qcReviewed(rejectedParams),
+                qcReviewed(pendingParams) // <-- ADDED
+            ]);
+            // --- END OF ADDED CALL ---
             
             setDocumentCounts({
-                // MODIFIED: Correctly parse the new response structure
                 approved: approvedResponse?.results?.[0]?.ApprovedCount || 0,
-                pending: 0, // Set pending to 0 or remove if not needed
+                pending: pendingResponse?.results?.[0]?.PendingDocsCount || 0, // <-- MODIFIED
                 rejected: rejectedResponse?.results?.[0]?.RejectedCount || 0
             });
+
         } catch (error) {
             console.error("Error fetching document counts:", error);
         }
     };
+    // *** END OF MODIFIED FUNCTION ***
 
     const fetchApprovedDocuments = async () => {
         try {
@@ -583,6 +612,56 @@ const DocumentManagement = () => {
         }
     };
 
+    // *** NEW FUNCTION ***
+    const fetchPendingDocuments = async () => {
+        try {
+            setLoading(true);
+            const authUser = JSON.parse(sessionStorage.getItem("authUser"));
+            const userId = authUser?.user?.User_Id;
+            const so_code = authUser?.user?.zones?.[0]?.so_code || '';
+
+            const params = {
+                flagId: 6, // Following pattern (1/2, 3/4, 5/6)
+                User_Id: userId,
+                so_code: so_code
+            };
+
+            const response = await qcReviewed(params);
+
+            if (response?.status === 'success' && response?.results) {
+                const transformedDocuments = response.results.map(doc => ({
+                    id: doc.DocumentId,
+                    DocumentId: doc.DocumentId,
+                    name: doc.DocumentName || `Document_${doc.DocumentId}`,
+                    type: getFileTypeFromPath(doc.FilePath),
+                    category: doc.DocumentType || getDocumentTypeFromPath(doc.FilePath),
+                    createdAt: new Date(doc.CreatedAt).toLocaleDateString(), // Assuming CreatedAt for pending
+                    createdBy: doc.CreatedByUserName, // Assuming CreatedByUserName
+                    description: doc.DocumentDescription,
+                    status: doc.StatusName,
+                    FilePath: doc.FilePath,
+                    division: doc.division,
+                    sub_division: doc.sub_division,
+                    section: doc.section,
+                    rr_no: doc.rr_no,
+                    consumer_name: doc.consumer_name,
+                    consumer_address: doc.consumer_address,
+                }));
+                setPendingDocuments(transformedDocuments);
+            } else {
+                setPendingDocuments([]);
+            }
+        } catch (error) {
+            console.error("Error fetching pending documents:", error);
+            setPendingDocuments([]);
+            setResponse('Error fetching pending documents');
+            setErrorModal(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+    // *** END OF NEW FUNCTION ***
+
     const getFileTypeFromPath = (filePath) => {
         if (!filePath) return 'application/octet-stream';
         const extension = filePath.split('.').pop().toLowerCase();
@@ -610,9 +689,13 @@ const DocumentManagement = () => {
         return 'Additional Document';
     };
 
+    // NOTE: This function still uses the broken 'view' helper.
+    // You should replace this with the 'axios' logic from your other files.
     const handleFileSelect = async (file) => {
         console.log("File", file.DocumentId)
-        setSelectedFile(file);
+        setSelectedFile(file); // Keep this for approved
+        setSelectedRejectedFile(file); // Keep this for rejected
+        setSelectedPendingFile(file); // <-- ADDED
         setPreviewLoading(true);
         setPreviewContent(null);
         setPreviewError(null);
@@ -653,6 +736,16 @@ const DocumentManagement = () => {
         await handleFileSelect(file);
     };
 
+    // *** NEW FUNCTION ***
+    const handlePendingFileSelect = async (file) => {
+        setSelectedPendingFile(file);
+        setSelectedFile(null);
+        setSelectedRejectedFile(null);
+        await handleFileSelect(file);
+    };
+    // *** END OF NEW FUNCTION ***
+
+    // NOTE: This function also uses the broken 'view' helper.
     const handleReuploadClick = async (doc) => {
         setReuploadDocument(doc);
         setSelectedRejectedFile(doc);
@@ -1144,7 +1237,7 @@ const DocumentManagement = () => {
                                                             type="select"
                                                             value={division}
                                                             onChange={handleDivisionChange}
-                                                            disabled={isFieldDisabled('division') || !circle}
+                                                            disabled={isFieldDisabled('division') || (userLevel === 'zone' && !circle)}
                                                         >
                                                             <option value="">Select Division</option>
                                                             {divisionOptions.map(div => (
@@ -1278,7 +1371,7 @@ const DocumentManagement = () => {
                                                         e.currentTarget.style.color = '#ffc107';
                                                         e.currentTarget.querySelector('i').style.transform = 'scale(1)';
                                                     }}
-                                                    onClick={handlePendingClick}
+                                                    onClick={handlePendingClick} // <-- MODIFIED
                                                 >
                                                     <i
                                                         className="ri-time-line"
@@ -1721,7 +1814,8 @@ const DocumentManagement = () => {
                     </Form>
                 </Modal>
 
-                {/* The rest of your modal components (Approved Modal, Rejected Modal, Re-upload Modal) remain exactly the same */}
+                {/* --- MODALS for Approved, Rejected, and Pending --- */}
+
                 {/* Approved Modal */}
                 <Modal
                     isOpen={approvedModalOpen}
@@ -1742,6 +1836,7 @@ const DocumentManagement = () => {
                             setSelectedFile(null);
                             setPreviewContent(null);
                             setPreviewError(null);
+                            setSelectedConsumer(null);
                         }}
                         style={{
                             borderBottom: '1px solid rgba(255,255,255,0.2)',
@@ -2322,6 +2417,287 @@ const DocumentManagement = () => {
                         </Button>
                     </ModalFooter>
                 </Modal>
+
+                {/* --- START: NEW PENDING MODAL --- */}
+                <Modal
+                    isOpen={pendingModalOpen}
+                    toggle={() => {
+                        setPendingModalOpen(false);
+                        setSelectedPendingFile(null);
+                        setPreviewContent(null);
+                        setPreviewError(null);
+                    }}
+                    size="xl"
+                    className="custom-large-modal"
+                >
+                    <ModalHeader
+                        className="bg-primary text-white"
+                        toggle={() => {
+                            setPendingModalOpen(false);
+                            setSelectedPendingFile(null);
+                            setPreviewContent(null);
+                            setPreviewError(null);
+                        }}
+                        style={{
+                            borderBottom: '1px solid rgba(255,255,255,0.2)',
+                            padding: '1rem 1.5rem'
+                        }}
+                    >
+                        <div className="d-flex alignItems-center">
+                            <h5 className="mb-0 text-white">Pending Documents</h5>
+                            <Badge color="light" pill className="ms-2 text-warning">
+                                {documentCounts.pending} Pending
+                            </Badge>
+                        </div>
+                    </ModalHeader>
+                    <ModalBody className="p-3">
+                        <Container fluid>
+                            <Row className="g-3 results-container">
+                                {/* Left Column (Consumer & Doc Info) */}
+                                <Col lg={3} className="h-100 d-flex flex-column">
+                                    <Card className="mb-3 slide-in-left fixed-height-card">
+                                        <CardHeader className="bg-light p-3 position-relative" style={{ borderTop: '3px solid #405189' }}>
+                                            <h5 className="mb-0">Consumer Information</h5>
+                                        </CardHeader>
+                                        <CardBody className="p-1 custom-scrollbar">
+                                            {selectedPendingFile ? (
+                                                <div className="consumer-details">
+                                                    <div className="row g-0">
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center mb-1">
+                                                                <i className="ri-user-3-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">RR No:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedPendingFile.rr_no || '-'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center mb-1">
+                                                                <i className="ri-profile-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Name:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedPendingFile.consumer_name || '-'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center mb-1">
+                                                                <i className="ri-map-pin-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Address:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedPendingFile.consumer_address || '-'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center text-muted py-1 h-100 d-flex flex-column justify-content-center">
+                                                    <i className="ri-user-line fs-5"></i>
+                                                    <p className="mt-1 x-small mb-0">No document selected</p>
+                                                </div>
+                                            )}
+                                        </CardBody>
+                                    </Card>
+                                    <Card className="slide-in-left delay-1 fixed-height-card">
+                                        <CardHeader className="bg-light p-3 position-relative" style={{ borderTop: '3px solid #405189' }}>
+                                            <h5 className="mb-0">Document Information</h5>
+                                        </CardHeader>
+                                        <CardBody className="p-1 custom-scrollbar">
+                                            {selectedPendingFile ? (
+                                                <div className="document-details">
+                                                    <div className="d-flex alignItems-center mb-3">
+                                                        <div className="flex-shrink-0 me-1">
+                                                            {getFileIcon(selectedPendingFile.name)}
+                                                        </div>
+                                                        <div>
+                                                            <h6 className="mb-0 x-small">{selectedPendingFile.name}</h6>
+                                                            <small className="text-muted x-small">{selectedPendingFile.category}</small>
+                                                        </div>
+                                                    </div>
+                                                    <div className="row g-0">
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-user-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Uploaded By:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedPendingFile.createdBy}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-calendar-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Uploaded On:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedPendingFile.createdAt}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-time-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Status:</Label>
+                                                                    <Badge color="warning" className="badge-soft-warning x-small">
+                                                                        {selectedPendingFile.status}
+                                                                    </Badge>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center text-muted py-1 h-100 d-flex flex-column justify-content-center">
+                                                    <i className="ri-file-line fs-5"></i>
+                                                    <p className="mt-1 x-small mb-0">No document selected</p>
+                                                </div>
+                                            )}
+                                        </CardBody>
+                                    </Card>
+                                </Col>
+
+                                {/* Middle Column (Document List) */}
+                                <Col lg={3} className="h-100 d-flex flex-column">
+                                    <Card className="h-100 fade-in delay-2">
+                                        <CardHeader
+                                            className="bg-light d-flex justify-content-between align-items-center"
+                                            style={{ borderTop: '3px solid #405189' }}
+                                        >
+                                            <h5 className="mb-0">Pending Documents</h5>
+                                            <Badge color="warning" pill className="text-uppercase px-3 py-2">
+                                                {pendingDocuments.length} {pendingDocuments.length === 1 ? 'file' : 'files'}
+                                            </Badge>
+                                        </CardHeader>
+                                        <CardBody className="p-0 uploaded-documents-container">
+                                            <div className="uploaded-documents-scrollable" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                                                {loading ? (
+                                                    <div className="text-center py-4">
+                                                        <div className="spinner-border text-primary" role="status">
+                                                            <span className="visually-hidden">Loading...</span>
+                                                        </div>
+                                                        <p className="mt-2">Loading pending documents...</p>
+                                                    </div>
+                                                ) : pendingDocuments.length > 0 ? (
+                                                    <ListGroup flush style={{ minHeight: '100%' }}>
+                                                        {pendingDocuments.map((doc, index) => (
+                                                            <div
+                                                                key={doc.DocumentId}
+                                                                className="fade-in-list-item"
+                                                                style={{ animationDelay: `${0.1 * index}s` }}
+                                                            >
+                                                                <ListGroupItem
+                                                                    action
+                                                                    active={selectedPendingFile?.DocumentId === doc.DocumentId}
+                                                                    onClick={() => handlePendingFileSelect(doc)}
+                                                                    className="d-flex align-items-center"
+                                                                    style={{
+                                                                        backgroundColor: selectedPendingFile?.DocumentId === doc.DocumentId ? '#e9ecef' : 'transparent',
+                                                                        borderLeft: selectedPendingFile?.DocumentId === doc.DocumentId ? '3px solid #9299b1ff' : '3px solid transparent',
+                                                                        cursor: "pointer"
+                                                                    }}
+                                                                >
+                                                                    <div className="flex-shrink-0 me-3">
+                                                                        {getFileIcon(doc.name)}
+                                                                    </div>
+                                                                    <div className="flex-grow-1 text-truncate">
+                                                                        <h6 className="mb-0 text-truncate" title={doc.name}>
+                                                                            {doc.name}
+                                                                        </h6>
+                                                                    </div>
+                                                                </ListGroupItem>
+                                                            </div>
+                                                        ))}
+                                                    </ListGroup>
+                                                ) : (
+                                                    <div className="text-center text-muted py-4 h-100 d-flex flex-column justify-content-center">
+                                                        No pending documents found
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardBody>
+                                    </Card>
+                                </Col>
+
+                                {/* Right Column (Preview) */}
+                                <Col lg={6} className="h-100 d-flex flex-column">
+                                    <Card className="h-100 slide-in-right delay-3 fixed-height-card">
+                                        <CardHeader className="bg-light p-3 position-relative"
+                                            style={{ borderTop: '3px solid #405189' }}>
+                                            <h5 className="mb-0">Document Preview</h5>
+                                        </CardHeader>
+                                        <CardBody className="p-0 preview-container">
+                                            <div className="preview-scrollable">
+                                                {previewLoading ? (
+                                                    <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
+                                                        <div className="spinner-border text-primary" role="status">
+                                                            <span className="visually-hidden">Loading...</span>
+                                                        </div>
+                                                        <p className="mt-2">Loading preview...</p>
+                                                    </div>
+                                                ) : previewError ? (
+                                                    <Alert color="danger" className="m-3 fade-in">
+                                                        <i className="ri-error-warning-line me-2"></i>
+                                                        {previewError}
+                                                    </Alert>
+                                                ) : selectedPendingFile && previewContent ? (
+                                                    <div className="d-flex flex-column h-100">
+                                                        <div className="flex-grow-1 preview-content">
+                                                            {previewContent.type === 'pdf' ? (
+                                                                <div className="pdf-viewer-container fade-in h-100">
+                                                                    <embed
+                                                                        src={`${previewContent.url}#toolbar=0&navpanes=0&scrollbar=0`}
+                                                                        type="application/pdf"
+                                                                        className="w-100 h-100"
+                                                                        style={{ border: 'none' }}
+                                                                    />
+                                                                </div>
+                                                            ) : ['jpeg', 'jpg', 'png', 'gif'].includes(previewContent.type) ? (
+                                                                <div className="text-center fade-in p-3 h-100 d-flex alignItems-center justify-content-center">
+                                                                    <img
+                                                                        src={previewContent.url}
+                                                                        alt="Document Preview"
+                                                                        className="img-fluid"
+                                                                        style={{ maxHeight: '100%', maxWidth: '100%' }}
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
+                                                                    <i className="ri-file-line display-4 text-muted"></i>
+                                                                    <h5 className="mt-3">Preview not available</h5>
+                                                                    <p>This file type cannot be previewed in the browser.</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center text-muted py-5 h-100 d-flex flex-column justify-content-center fade-in">
+                                                        <i className="ri-file-line display-4"></i>
+                                                        <h5 className="mt-3">No document selected</h5>
+                                                        <p>Select a pending file from the list to preview it here</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardBody>
+                                    </Card>
+                                </Col>
+                            </Row>
+                        </Container>
+                    </ModalBody>
+                    <ModalFooter>
+                        <Button color="secondary" onClick={() => {
+                            setPendingModalOpen(false);
+                            setSelectedPendingFile(null);
+                            setPreviewContent(null);
+                            setPreviewError(null);
+                        }}>
+                            Close
+                        </Button>
+                    </ModalFooter>
+                </Modal>
+                {/* --- END: NEW PENDING MODAL --- */}
+
 
                 {/* Re-upload Document Modal */}
                 <Modal

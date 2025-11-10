@@ -5,11 +5,17 @@ import {
     Spinner, Input, Table, Label, FormGroup, Alert, Badge
 } from 'reactstrap';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
-import { qcView, view, qcApproveReject, getDocumentDropdowns } from '../../helpers/fakebackend_helper';
+// We are REMOVING 'view' because it is the source of the problem
+import { qcView, qcApproveReject, getDocumentDropdowns } from '../../helpers/fakebackend_helper'; 
+import axios from 'axios'; // <-- ***** YOU MUST ADD THIS IMPORT *****
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
 
 const SORT_ARROW_SIZE = 13; // px
+
+// --- ADD THIS URL (from your previous component) ---
+// This needs to be the actual URL your 'view' helper was calling
+const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
 
 function SortArrows({ direction, active }) {
     return (
@@ -611,7 +617,7 @@ const QCViewDocuments = () => {
         setPage(0);
     };
 
-    // FIXED handleFileSelect function with proper blob handling
+    // --- START: CORRECTED handleFileSelect (using direct axios and Version_Id) ---
     const handleFileSelect = async (doc) => {
         setCurrentDoc(doc);
         setPreviewLoading(true);
@@ -620,63 +626,108 @@ const QCViewDocuments = () => {
         setPreviewModal(true);
 
         try {
-            console.log('📄 Starting document preview for DocumentId:', doc.DocumentId);
+            // *** CRITICAL CHANGE HERE ***
+            if (!doc.Version_Id) {
+                throw new Error("Version_Id is missing for this document.");
+            }
+            console.log('📄 Starting document preview for Version_Id:', doc.Version_Id);
             
             const requestPayload = {
                 flagId: 2,
-                DocumentId: doc.DocumentId,
+                Version_Id: doc.Version_Id, // <-- *** CORRECTED: Using Version_Id ***
                 requestUserName: userInfo.email,
-                preview: false
+                preview: false // This param seems to be from your old code, keeping it
             };
             
             console.log('🚀 API Request Payload:', requestPayload);
 
-            // Use the view function from fakebackend_helper
-            const response = await view(requestPayload);
+            // --- FIX: Use direct axios call ---
+            const response = await axios.post(
+                VIEW_DOCUMENT_URL,
+                requestPayload,
+                { responseType: "blob" } // Critical: ensures data is treated as a blob
+            );
 
-            console.log('✅ API Response received:', response);
+            // The blob is in response.data
+            const receivedBlob = response;
+            // --- END FIX ---
 
-            let blobData = null;
 
-            // Handle different response formats
-            if (response && response instanceof Blob) {
-                blobData = response;
-                console.log('✅ Blob data received from response.data');
-            } else if (response instanceof Blob) {
-                blobData = response;
-                console.log('✅ Blob data received directly');
-            } else if (response && response) {
-                // If data exists but isn't a blob, try to create blob from it
-                console.log('⚠️ Response data is not a Blob, attempting to create blob');
-                blobData = new Blob([response], { type: 'application/pdf' });
+            if (!(receivedBlob instanceof Blob)) {
+                console.error('❌ Response data was not a Blob.', receivedBlob);
+                throw new Error("Received invalid file data from server.");
+            }
+
+            console.log('📦 Received Blob. Type:', receivedBlob.type, 'Size:', receivedBlob.size);
+
+            if (receivedBlob.size === 0) {
+                throw new Error("Received empty file data (0 bytes).");
+            }
+
+            let blobToView;
+
+            // Check if the blob is an error message (as JSON)
+            if (receivedBlob.type === 'application/json') {
+                console.error('❌ Server returned an error as a JSON blob. Reading error...');
+                const errorText = await receivedBlob.text();
+                let errorMessage;
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.message || errorJson.error || "Server returned an error.";
+                } catch (e) {
+                    errorMessage = errorText || "Failed to load document: Unknown server error.";
+                }
+                console.error('Error content:', errorText);
+                throw new Error(errorMessage);
+            }
+            
+            // If the blob type is not PDF, force it.
+            // This handles 'application/octet-stream' or empty type.
+            if (receivedBlob.type !== 'application/pdf') {
+                 console.warn(`⚠️ Blob type is '${receivedBlob.type}'. Forcing 'application/pdf'.`);
+                 blobToView = new Blob([receivedBlob], { type: 'application/pdf' });
             } else {
-                console.error('❌ Unexpected response format:', response);
-                throw new Error("Invalid preview response format - expected Blob data");
+                 blobToView = receivedBlob;
             }
 
-            if (blobData) {
-                const fileUrl = URL.createObjectURL(blobData);
-                const fileType = blobData.type || 'application/pdf';
-                
-                console.log('📁 File type:', fileType);
-                console.log('🔗 Object URL created');
+            // Create object URL for the valid blob
+            const fileUrl = URL.createObjectURL(blobToView);
+            console.log('🔗 Object URL created:', fileUrl.substring(0, 50) + '...');
 
-                setPreviewContent({
-                    url: fileUrl,
-                    type: fileType,
-                    name: doc.DocumentName,
-                    blob: blobData
-                });
-            }
+            setPreviewContent({
+                url: fileUrl,
+                type: 'application/pdf', // Always use this for the iframe
+                name: doc.DocumentName,
+                blob: blobToView
+            });
+
+            console.log('✅ Preview content set successfully');
+
         } catch (error) {
             console.error("❌ Preview error:", error);
-            setPreviewError(error.message || "Failed to load preview");
-            setResponse(error.message || "Failed to load document");
+            // Handle axios errors
+            let errorMessage = error.message;
+            if (error.response && error.response) {
+                // If the error response was *also* a blob (e.g., json error), try to read it
+                if (error.response instanceof Blob) {
+                    try {
+                        const errorText = await error.response.text();
+                        const errorJson = JSON.parse(errorText);
+                        errorMessage = errorJson.message || errorJson.error || "Server error";
+                    } catch (e) {
+                         errorMessage = "Failed to load document (unreadable error response).";
+                    }
+                }
+            }
+            
+            setPreviewError(errorMessage);
+            setResponse(errorMessage);
             setErrorModal(true);
         } finally {
             setPreviewLoading(false);
         }
     };
+    // --- END: CORRECTED handleFileSelect ---
     
     const closePreview = () => {
         if (previewContent?.url) {
@@ -1062,7 +1113,8 @@ const QCViewDocuments = () => {
         );
     };
 
-    // Enhanced LazyPreviewContent component with proper document preview
+    // --- START: MODIFIED LazyPreviewContent ---
+    // This component now renders Details on the left (lg-4) and Preview on the right (lg-8)
     const LazyPreviewContent = ({ doc }) => {
         const [previewLoaded, setPreviewLoaded] = useState(false);
         const [detailsLoaded, setDetailsLoaded] = useState(false);
@@ -1125,7 +1177,8 @@ const QCViewDocuments = () => {
                 const isImage = previewContent.type.includes('image');
                 
                 return (
-                    <div className="d-flex flex-column h-100">
+                    // MODIFIED: Removed h-100
+                    <div className="d-flex flex-column"> 
                         {/* Preview Header */}
                         <div className="d-flex justify-content-between align-items-center p-3 border-bottom">
                             <h6 className="mb-0">
@@ -1144,11 +1197,13 @@ const QCViewDocuments = () => {
                         {/* Preview Content */}
                         <div className="flex-grow-1 preview-content">
                             {isPDF ? (
-                                <div className="pdf-viewer-container fade-in h-100">
+                                // MODIFIED: Removed h-100
+                                <div className="pdf-viewer-container fade-in">
                                     <iframe
-                                        src={`${previewContent.url}#toolbar=1&navpanes=1&scrollbar=1`}
+                                        src={`${previewContent.url}#toolbar=0&navpanes=0&scrollbar=0`}
                                         title="PDF Viewer"
-                                        className="w-100 h-100"
+                                        // MODIFIED: Removed h-100
+                                        className="w-100" 
                                         style={{ border: 'none' }}
                                     />
                                 </div>
@@ -1197,24 +1252,12 @@ const QCViewDocuments = () => {
         
         return (
             <Row>
-                <Col lg={6} className="h-100 d-flex flex-column">
-                    <Card className="h-100 slide-in-left delay-3 fixed-height-card">
-                        <CardHeader className="bg-light p-3 position-relative"
-                            style={{
-                                borderTop: '3px solid #405189'
-                            }}>
-                            <h5 className="mb-0">Document Preview</h5>
-                        </CardHeader>
-                        <CardBody className="p-0 preview-container">
-                            <div className="preview-scrollable">
-                                {renderPreviewContent()}
-                            </div>
-                        </CardBody>
-                    </Card>
-                </Col>
-                <Col lg={6}>
+                {/* --- START: Document Details (SMALLER: lg={4}) --- */}
+                {/* MODIFIED: Added md={12} and stacking margin */}
+                <Col lg={4} md={12} className="mb-3 mb-lg-0">
                     {!detailsLoaded ? (
-                        <Card className="h-100 shadow-sm">
+                         // MODIFIED: Removed h-100
+                        <Card className="shadow-sm slide-in-left">
                             <CardHeader className="bg-light p-3 position-relative card-header border-top-primary">
                                 <h6 className="mb-0 d-flex align-items-center">
                                     <i className="ri-information-line me-2"></i> Document Details
@@ -1225,17 +1268,19 @@ const QCViewDocuments = () => {
                             </CardBody>
                         </Card>
                     ) : (
-                        <Card className="h-100 shadow-sm">
+                         // MODIFIED: Removed h-100
+                        <Card className="shadow-sm slide-in-left">
                             <CardHeader className="bg-light p-3 position-relative card-header border-top-primary">
                                 <h6 className="mb-0 d-flex align-items-center">
                                     <i className="ri-information-line me-2"></i> Document Details
                                 </h6>
                             </CardHeader>
 
-                            <CardBody className="py-3 px-4">
+                            {/* Body is now scrollable to fit in the small column */}
+                            {/* MODIFIED: Set maxHeight to 70vh to match preview */}
+                            <CardBody className="py-3 px-4" style={{ overflowY: 'auto', maxHeight: '70vh' }}>
                                 <Row>
-                                    {/* Left Column */}
-                                    <Col md={6}>
+                                    <Col md={12}>
                                         <div className="mb-2">
                                             <Label className="fw-semibold">Document Name:</Label>
                                             <p className="mb-1 text-break">{doc.DocumentName}</p>
@@ -1256,10 +1301,9 @@ const QCViewDocuments = () => {
                                             <Label className="fw-semibold">Consumer Address:</Label>
                                             <p className="mb-1 text-break">{doc.consumer_address || 'N/A'}</p>
                                         </div>
-                                    </Col>
+                                        
+                                        <hr className="my-3"/>
 
-                                    {/* Right Column */}
-                                    <Col md={6}>
                                         <div className="mb-2">
                                             <Label className="fw-semibold">Division:</Label>
                                             <p className="mb-1">{doc.division || 'N/A'}</p>
@@ -1296,9 +1340,34 @@ const QCViewDocuments = () => {
                         </Card>
                     )}
                 </Col>
+                {/* --- END: Document Details --- */}
+
+                {/* --- START: Document Preview (BIGGER: lg={8}) --- */}
+                {/* MODIFIED: Added md={12}, removed h-100, d-flex */}
+                <Col lg={8} md={12}>
+                    {/* MODIFIED: Removed h-100, fixed-height-card */}
+                    <Card className="slide-in-right delay-3">
+                        <CardHeader className="bg-light p-3 position-relative"
+                            style={{
+                                borderTop: '3px solid #405189'
+                            }}>
+                            <h5 className="mb-0">Document Preview</h5>
+                        </CardHeader>
+                        {/* MODIFIED: Removed p-0, preview-container */}
+                        <CardBody className="p-0">
+                            {/* MODIFIED: Removed preview-scrollable */}
+                            <div>
+                                {renderPreviewContent()}
+                            </div>
+                        </CardBody>
+                    </Card>
+                </Col>
+                {/* --- END: Document Preview --- */}
             </Row>
         );
     };
+    // --- END: MODIFIED LazyPreviewContent ---
+
 
     return (
         <React.Fragment>
@@ -1599,19 +1668,20 @@ const QCViewDocuments = () => {
                                     <Spinner size="lg" color="primary" />
                                     <h5 className="mt-3">Initializing Quality Control System...</h5>
                                     <p className="text-muted">Loading user permissions and system configuration</p>
+
                                 </div>
                             )}
                         </CardBody>
                     </Card>
 
-                    {/* Document Preview Modal */}
+                    {/* --- START: MODIFIED Document Preview Modal --- */}
                     <Modal
                         isOpen={previewModal}
                         toggle={closePreview}
                         size="xl"
                         centered
                         className="document-preview-modal"
-                        style={{ maxWidth: '95%' }}
+                        style={{ maxWidth: '85%' }} // <-- MODIFIED: Made "smaler"
                     >
                         <ModalHeader className="bg-primary text-white p-3" toggle={closePreview}>
                             <span className="modal-title text-white">
@@ -1626,12 +1696,13 @@ const QCViewDocuments = () => {
                             </span>
                         </ModalHeader>
                         <ModalBody style={{
-                            maxHeight: '70vh',
+                            maxHeight: '80vh', // <-- MODIFIED: Made taller for new layout
                             overflowY: 'auto',
                             padding: '16px',
                             display: 'flex',
                             flexDirection: 'column'
                         }}>
+                            {/* LazyPreviewContent now renders the new 4/8 layout */}
                             {currentDoc && <LazyPreviewContent doc={currentDoc} />}
                         </ModalBody>
                         <ModalFooter style={{ borderTop: 'none' }}>
@@ -1643,7 +1714,7 @@ const QCViewDocuments = () => {
                                 <>
                                     <Button
                                         color="success"
-                                        onClick={() => handleApprove(currentDoc.Version_Id)}  // <-- MODIFIED
+                                        onClick={() => handleApprove(currentDoc.Version_Id)}
                                         disabled={actionLoading}
                                     >
                                         {actionLoading ? (
@@ -1670,6 +1741,8 @@ const QCViewDocuments = () => {
                             )}
                         </ModalFooter>
                     </Modal>
+                    {/* --- END: MODIFIED Document Preview Modal --- */}
+
 
                     {/* Rejection Reason Modal */}
                     <Modal isOpen={rejectionModal} toggle={closeRejectionModal} centered>
@@ -1705,7 +1778,7 @@ const QCViewDocuments = () => {
                                 color="danger"
                                 onClick={() => {
                                     if (rejectionReason.trim()) {
-                                        handleReject(currentDoc.Version_Id, rejectionReason.trim()); // <-- MODIFIED
+                                        handleReject(currentDoc.Version_Id, rejectionReason.trim());
                                     }
                                 }}
                                 disabled={!rejectionReason.trim() || actionLoading}
@@ -1738,6 +1811,7 @@ const QCViewDocuments = () => {
                 errorMsg={response}
             />
 
+            {/* --- MODIFIED <style> block --- */}
             <style>
                 {`
                 .page-content { min-height: 100vh; padding-bottom: 60px; }
@@ -1750,8 +1824,21 @@ const QCViewDocuments = () => {
                 .preview-scrollable { flex: 1; overflow-y: auto; padding-right: 5px; margin-right: -5px; }
                 .preview-body { overflow: hidden !important; height: calc(100% - 60px); }
                 .preview-content { overflow: hidden; position: relative; }
-                .pdf-viewer-container { width: 100%; height: 100%; overflow: hidden; }
-                .pdf-viewer-container iframe { width: 100%; height: 100%; min-height: 500px; border: none; background: #f8f9fa; }
+                
+                /* --- MODIFIED CSS FOR PREVIEW MODAL --- */
+                .pdf-viewer-container { 
+                    width: 100%; 
+                    height: 70vh; /* Responsive height */
+                    overflow: hidden; 
+                    background: #f8f9fa;
+                }
+                .pdf-viewer-container iframe { 
+                    width: 100%; 
+                    height: 100%; /* Fill the container */
+                    border: none; 
+                }
+                /* --- END OF MODIFICATION --- */
+
                 .document-details { height: 100%; display: flex; flex-direction: column; }
                 .slide-in-left { animation: slideInLeft 0.5s ease-out forwards; opacity: 0; transform: translateX(-20px); }
                 .slide-in-right { animation: slideInRight 0.5s ease-out forwards; opacity: 0; transform: translateX(20px); }
@@ -1771,7 +1858,12 @@ const QCViewDocuments = () => {
                     .fixed-height-card { height: 400px; margin-bottom: 20px; }
                     .results-container .col-lg-3:first-child .fixed-height-card:first-child,
                     .results-container .col-lg-3:first-child .fixed-height-card:last-child { height: 350px; }
-                    .pdf-viewer-container iframe { min-height: 400px; }
+                    
+                    /* --- MODIFIED CSS FOR PREVIEW MODAL (Mobile) --- */
+                    .pdf-viewer-container {
+                        height: 60vh; /* Slightly shorter on mobile */
+                    }
+                    /* --- END OF MODIFICATION --- */
                 }
                 `}
             </style>
