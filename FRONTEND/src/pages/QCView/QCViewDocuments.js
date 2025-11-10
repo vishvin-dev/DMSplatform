@@ -2171,10 +2171,13 @@ const QCViewDocuments = () => {
 
     // Fetch document counts using qcApproveReject API
     const fetchDocumentCounts = async () => {
+        const authUser = JSON.parse(sessionStorage.getItem("authUser"));
+        const userId= authUser.user.User_Id 
         try {
             const payload = {
                 flagId: 1,
-                so_code: section
+                so_code: section,
+                User_Id:userId
             };
 
             const response = await qcApproveReject(payload);
@@ -2458,19 +2461,21 @@ const QCViewDocuments = () => {
         window.URL.revokeObjectURL(url);
     };
 
-    // Updated handleStatusUpdate function with the new API structure
-    const handleStatusUpdate = async (docId, status, reason = '') => {
+    // *** MODIFIED ***
+    // Updated handleStatusUpdate function (for APPROVAL)
+    // Now sends Version_Id instead of DocumentId
+    const handleStatusUpdate = async (versionId, status, reason = '') => {
         setActionLoading(true);
         try {
             const payload = {
                 flagId: 5, // Using flagId 5 for approval as specified
                 User_Id: userInfo.userId,
-                DocumentId: docId,
+                Version_Id: versionId, // <-- CHANGED from DocumentId
                 Role_Id: userInfo.roleId,
                 ...(status === 'Rejected' && { RejectionComment: reason })
             };
 
-            console.log('API Payload:', payload); // For debugging
+            console.log('API Payload (Approve):', payload); // For debugging
 
             const response = await qcApproveReject(payload);
 
@@ -2498,19 +2503,21 @@ const QCViewDocuments = () => {
         }
     };
 
-    // Handle approve action - using the new API structure
-    const handleApprove = async (docId) => {
-        await handleStatusUpdate(docId, 'Approved');
+    // *** MODIFIED ***
+    // Handle approve action - passes Version_Id to handleStatusUpdate
+    const handleApprove = async (versionId) => {
+        await handleStatusUpdate(versionId, 'Approved');
     };
 
-    // Handle reject action - using the new API structure
-    const handleReject = async (docId, reason) => {
+    // *** MODIFIED ***
+    // Handle reject action - now sends Version_Id instead of DocumentId
+    const handleReject = async (versionId, reason) => {
         setActionLoading(true);
         try {
             const payload = {
                 flagId: 6, // Using flagId 6 for rejection as specified
                 User_Id: userInfo.userId,
-                DocumentId: docId,
+                Version_Id: versionId, // <-- CHANGED from DocumentId
                 comment: reason
             };
 
@@ -3385,7 +3392,7 @@ const QCViewDocuments = () => {
                                 <>
                                     <Button
                                         color="success"
-                                        onClick={() => handleApprove(currentDoc.DocumentId)}
+                                        onClick={() => handleApprove(currentDoc.Version_Id)}  // <-- MODIFIED
                                         disabled={actionLoading}
                                     >
                                         {actionLoading ? (
@@ -3447,7 +3454,7 @@ const QCViewDocuments = () => {
                                 color="danger"
                                 onClick={() => {
                                     if (rejectionReason.trim()) {
-                                        handleReject(currentDoc.DocumentId, rejectionReason.trim());
+                                        handleReject(currentDoc.Version_Id, rejectionReason.trim()); // <-- MODIFIED
                                     }
                                 }}
                                 disabled={!rejectionReason.trim() || actionLoading}

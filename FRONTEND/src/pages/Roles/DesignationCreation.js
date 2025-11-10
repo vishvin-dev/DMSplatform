@@ -761,9 +761,8 @@ const DocumentViewer = () => {
         Version_Id: Version_Id, flagId: 2
       }
       const response = await axios.post(
-        "http://192.168.23.229:9000/backend-service/documentUpload/documentView",
-        data,
-
+        "http://localhost:9000/backend-service/documentUpload/documentView",
+        { DocumentId: documentId, flagId: 2 },
         {
           responseType: "blob", // Important
         }

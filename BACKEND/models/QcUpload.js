@@ -499,27 +499,31 @@ export const getRejectUpdateDocuments = async (User_Id, roleId, DocumentId, Reje
 
 
 //==============THIS IS THE ALL QC COUNTS WHEN THE So_code SEND ok (Approved, Pending, Rejected)=======================
+
 export const getAllCounts = async (so_code) => {
     try {
         const [result] = await pool.execute(
-            `
-            SELECT 
-            -- Pending: documents that are still in pending state
-            COALESCE(SUM(CASE WHEN du.Status_Id = 1 THEN 1 ELSE 0 END), 0) AS PendingCount,
+           `
+            SELECT
+            -- count distinct versions currently in pending status
+            COUNT(DISTINCT CASE WHEN dv.Status_Id = 1 THEN dv.Version_Id END) AS PendingCount,
 
-            -- Approved: count from workflow history by this user
-            COALESCE(SUM(CASE WHEN dwh.Status_Id = 2 AND dwh.ActionByUser_Id = 5 THEN 1 ELSE 0 END), 0) AS ApprovedCount,
+            -- count distinct versions whose latest workflow entry is approved
+            COUNT(DISTINCT CASE WHEN dwh.Status_Id = 2 THEN dv.Version_Id END) AS ApprovedCount,
 
-            -- Rejected: count from rejection queue by this user
-            COALESCE(SUM(CASE WHEN drq.Status_Id = 3 AND drq.RejectedByUser_Id = 5 THEN 1 ELSE 0 END), 0) AS RejectedCount
-            FROM DocumentUpload du
-            LEFT JOIN DocumentWorkflowHistory dwh 
-                ON du.DocumentId = dwh.DocumentId 
-                AND dwh.IsLatest = 1
-            LEFT JOIN DocumentRejectionQueue drq 
-                ON du.DocumentId = drq.DocumentId 
-                AND drq.IsResolved = 0
-            WHERE du.so_code = ?;
+            -- count distinct versions that are rejected either via latest workflow OR unresolved rejection queue
+            COUNT(DISTINCT CASE WHEN (dwh.Status_Id = 3 OR drq.Status_Id = 3) THEN dv.Version_Id END) AS RejectedCount
+
+        FROM documentupload du
+        JOIN documentversion dv
+            ON du.DocumentId = dv.DocumentId
+        LEFT JOIN documentworkflowhistory dwh
+            ON dv.Version_Id = dwh.Version_Id
+            AND dwh.IsLatest = 1
+        LEFT JOIN documentrejectionqueue drq
+            ON dv.Version_Id = drq.Version_Id
+            AND drq.IsResolved = 0
+        WHERE du.so_code = ?;
             `,
             [so_code]
         );
@@ -536,27 +540,43 @@ export const clickGetPendingDocs = async (so_code) => {
     try {
         const [result] = await pool.execute(
             `
-            SELECT 
-                du.DocumentId,
-                du.DocumentName,
-                du.DocumentDescription,
-                du.MetaTags,
-                du.Account_Id,
-                du.CreatedByUser_Id,
-                du.CreatedByUserName,
-                du.Category_Id,
-                du.Status_Id,
-                du.CreatedAt,
-                du.UpdatedOn,
-                c.consumer_name,
-                c.rr_no,
-                c.consumer_address
-            FROM DocumentUpload du
-            JOIN consumer_details c 
-                ON du.Account_Id = c.account_id
-            WHERE du.Status_Id = 1
-            AND du.so_code = ?
-            ORDER BY du.CreatedAt DESC;
+                        SELECT 
+                            du.DocumentId,
+                            du.DocumentName AS MainDocumentName,
+                            du.DocumentDescription AS MainDocumentDescription,
+                            du.MetaTags AS MainMetaTags,
+                            du.Account_Id,
+                            du.CreatedByUser_Id,
+                            du.CreatedByUserName,
+                            du.Category_Id,
+                            -- removed du.Status_Id since it's now in documentversion
+                            du.CreatedAt,
+                            du.UpdatedOn,
+                            du.div_code,
+                            du.sd_code,
+                            du.so_code,
+                            c.consumer_name,
+                            c.rr_no,
+                            c.consumer_address,
+                            dv.Version_Id,
+                            dv.VersionLabel,
+                            dv.UploadedByUser_Id,
+                            dv.UploadedAt,
+                            dv.IsLatest,
+                            dv.ChangeReason,
+                            dv.DocumentName AS VersionDocumentName,
+                            dv.DocumentDescription AS VersionDocumentDescription,
+                            dv.MetaTags AS VersionMetaTags,
+                            dv.Status_Id AS VersionStatus_Id
+                        FROM DocumentUpload du
+                        JOIN consumer_details c 
+                            ON du.Account_Id = c.account_id
+                        LEFT JOIN documentversion dv 
+                            ON du.DocumentId = dv.DocumentId
+                        WHERE dv.Status_Id = 1  -- <-- filter by pending status from version table
+                        AND du.so_code = ?
+                        ORDER BY du.DocumentId DESC, dv.UploadedAt DESC;
+
             `,
             [so_code]
         );
@@ -567,36 +587,39 @@ export const clickGetPendingDocs = async (so_code) => {
     }
 };
 
-//THIS IS THE CLCIKING Approved DOCS
+//THIS IS THE CLCIKING Approved DOCS to fecth teh approved docs ok 
 export const clickGetApprovedDocs = async (User_Id, so_code) => {
     try {
         const [result] = await pool.execute(
             `
                 SELECT 
-                    du.DocumentId,
-                    du.DocumentName,
-                    du.DocumentDescription,
-                    du.MetaTags,
-                    du.Account_Id,
-                    du.CreatedByUser_Id,
-                    du.CreatedByUserName,
-                    du.Category_Id,
-                    dwh.ActionByUser_Id,
-                    dwh.ActionTime,
-                    dwh.Comment,
-                    c.consumer_name,
-                    c.rr_no,
-                    c.consumer_address
-                FROM DocumentUpload du
-                JOIN DocumentWorkflowHistory dwh 
-                    ON du.DocumentId = dwh.DocumentId 
+                du.DocumentId,
+                du.DocumentName,
+                du.DocumentDescription,
+                du.MetaTags,
+                du.Account_Id,
+                du.CreatedByUser_Id,
+                du.CreatedByUserName,
+                du.Category_Id,
+                dwh.ActionByUser_Id,
+                dwh.ActionTime,
+                dwh.Comment,
+                c.consumer_name,
+                c.rr_no,
+                c.consumer_address
+            FROM DocumentUpload du
+            JOIN DocumentWorkflowHistory dwh 
+                ON du.DocumentId = dwh.DocumentId
                 AND dwh.IsLatest = 1
-                JOIN consumer_details c 
-                    ON du.Account_Id = c.account_id
-                WHERE dwh.Status_Id = 2
-                AND dwh.ActionByUser_Id = ?
-                AND du.so_code = ?
-                ORDER BY dwh.ActionTime DESC;
+                AND dwh.Status_Id = 2           -- Approved in workflow
+            JOIN DocumentVersion dv 
+                ON dwh.Version_Id = dv.Version_Id
+                AND dv.Status_Id = 2            -- Version also approved
+            JOIN consumer_details c 
+                ON du.Account_Id = c.account_id
+            WHERE dwh.ActionByUser_Id = ?
+              AND du.so_code = ?
+            ORDER BY dwh.ActionTime DESC;
             `,
             [User_Id, so_code]
         );
@@ -607,36 +630,40 @@ export const clickGetApprovedDocs = async (User_Id, so_code) => {
     }
 };
 
-//THIS IS THE CLCIKING Approved DOCS
+//THIS IS THE CLCIKING Rejected DOCS
 export const clickGetRejectedDocs = async (User_Id, so_code) => {
     try {
         const [result] = await pool.execute(
             `
-                SELECT 
-                    du.DocumentId,
-                    du.DocumentName,
-                    du.DocumentDescription,
-                    du.MetaTags,
-                    du.Account_Id,
-                    du.CreatedByUser_Id,
-                    du.CreatedByUserName,
-                    du.Category_Id,
-                    drq.RejectedByUser_Id,
-                    drq.RejectedOn,
-                    drq.RejectionComment,
-                    c.consumer_name,
-                    c.rr_no,
-                    c.consumer_address
-                FROM DocumentUpload du
-                JOIN DocumentRejectionQueue drq 
-                    ON du.DocumentId = drq.DocumentId 
-                AND drq.IsResolved = 0
-                JOIN consumer_details c 
-                    ON du.Account_Id = c.account_id
-                WHERE drq.Status_Id = 3
-                AND drq.RejectedByUser_Id = ?
-                AND du.so_code = ?
-                ORDER BY drq.RejectedOn DESC;
+            SELECT 
+                dv.Version_Id,
+                dv.DocumentId,
+                dv.DocumentName,
+                dv.DocumentDescription,
+                dv.MetaTags,
+                du.Account_Id,
+                du.CreatedByUser_Id,
+                du.CreatedByUserName,
+                du.Category_Id,
+                drq.Rejection_Id,
+                drq.RejectedByUser_Id,
+                drq.RejectedOn,
+                drq.RejectionComment,
+                c.consumer_name,
+                c.rr_no,
+                c.consumer_address
+            FROM documentrejectionqueue drq
+            JOIN documentversion dv 
+                ON drq.Version_Id = dv.Version_Id
+            JOIN documentupload du 
+                ON dv.DocumentId = du.DocumentId
+            JOIN consumer_details c 
+                ON du.Account_Id = c.account_id
+            WHERE drq.Status_Id = 3
+            AND drq.RejectedByUser_Id = ?
+            AND drq.IsResolved = 0
+            AND du.so_code = ?
+            ORDER BY drq.RejectedOn DESC;
             `,
             [User_Id, so_code]
         );
@@ -648,80 +675,101 @@ export const clickGetRejectedDocs = async (User_Id, so_code) => {
 };
 
 
+
 //==========================THIS WHEN WE CLICK TO THE APPROVED BUTTONS THEN IT TO BE APPROVED OK============================
-export const clickToApproved = async (User_Id, DocumentId, Role_Id) => {
+export const clickToApproved = async (User_Id, Version_Id, Role_Id) => {
     try {
-        // 1️ Update DocumentUpload status
+        // 1️ Update the specific version status
         await pool.execute(
             `
-            UPDATE DocumentUpload
+            UPDATE Documentversion
             SET Status_Id = 2,
-                UpdatedOn = NOW()
-            WHERE DocumentId = ?
+                UploadedAt = NOW()
+            WHERE Version_Id = ?
             `,
-            [DocumentId]
+            [Version_Id]
         );
 
-        // 2️ Mark old workflow entries as not latest
+        // 2️ Mark old workflow entries for this version as not latest
         await pool.execute(
             `
             UPDATE DocumentWorkflowHistory
             SET IsLatest = 0
-            WHERE DocumentId = ?
+            WHERE Version_Id = ?
             `,
-            [DocumentId]
+            [Version_Id]
         );
 
         // 3️ Insert new workflow history row
         const [result] = await pool.execute(
             `
             INSERT INTO DocumentWorkflowHistory
-                (DocumentId, Status_Id, Comment, ActionByUser_Id, ActionByRole_Id, ActionTime, IsLatest)
+                (DocumentId, Version_Id, Status_Id, Comment, ActionByUser_Id, ActionByRole_Id, ActionTime, IsLatest)
             VALUES
-                (?, 2, 'Approved by QC', ?, ?, NOW(), 1)
+                ((SELECT DocumentId FROM Documentversion WHERE Version_Id = ?), ?, 2, 'Approved by QC', ?, ?, NOW(), 1)
             `,
-            [DocumentId, User_Id, Role_Id]
+            [Version_Id, Version_Id, User_Id, Role_Id]
         );
 
         return { success: true, workflowId: result.insertId };
     } catch (error) {
-        console.error("Error approving document:", error);
+        console.error("Error approving version:", error);
         throw error;
     }
 };
 
-//==========================THIS WHEN WE CLICK TO THE REJECTED BUTTONS THEN IT TO BE REJECTED OK============================
-export const clickToReject = async (User_Id, DocumentId, comment) => {
+
+//==========================THIS WHEN WE CLICK TO THE REJECTED BUTTONS THEN IT TO BE REJECTED OK=============================
+export const clickToReject = async (User_Id, Version_Id, comment) => {
     try {
-        // 1️ Update document as Rejected
+        // 1️ Update the specific version status to Rejected
         await pool.execute(
             `
-      UPDATE DocumentUpload
-      SET Status_Id = 3,
-          UpdatedOn = NOW()
-      WHERE DocumentId = ?
-      `,
-            [DocumentId]
+            UPDATE documentversion
+            SET Status_Id = 3, UploadedAt = NOW()
+            WHERE Version_Id = ?
+            `,
+            [Version_Id]
         );
 
-        // 2️ Insert into rejection queue
+        // 2️ Mark old rejection entries for this version as resolved (optional)
+        await pool.execute(
+            `
+            UPDATE documentrejectionqueue
+            SET IsResolved = 1
+            WHERE Version_Id = ?
+            `,
+            [Version_Id]
+        );
+
+        // 3️ Insert new rejection record for this version
         const [result] = await pool.execute(
             `
-      INSERT INTO DocumentRejectionQueue
-        (DocumentId, Status_Id, RejectedByUser_Id, UploaderUser_Id, RejectedOn, RejectionComment, IsResolved)
-      SELECT ?, 3, ?, du.CreatedByUser_Id, NOW(), ?, 0
-      FROM DocumentUpload du
-      WHERE du.DocumentId = ?
-      `,
-            [DocumentId, User_Id, comment, DocumentId]
+            INSERT INTO documentrejectionqueue
+                (DocumentId, Version_Id, Status_Id, RejectedByUser_Id, UploaderUser_Id, RejectedOn, RejectionComment, IsResolved)
+            VALUES
+                (
+                    (SELECT DocumentId FROM documentversion WHERE Version_Id = ?),
+                    ?, 
+                    3, 
+                    ?, 
+                    (SELECT UploadedByUser_Id FROM documentversion WHERE Version_Id = ?),
+                    NOW(),
+                    ?,
+                    0
+                )
+            `,
+            [Version_Id, Version_Id, User_Id, Version_Id, comment]
         );
 
         return { success: true, rejectionId: result.insertId };
+
     } catch (error) {
-        console.error("Error rejecting document:", error);
+        console.error("Error rejecting version:", error);
         throw error;
     }
 };
+
 
 
 

@@ -2566,18 +2566,7 @@ const ViewDocuments = () => {
                                                         </div>
                                                     </div>
 
-                                                    {/* Debug Information - Only show in development */}
-                                                    {process.env.NODE_ENV === 'development' && (
-                                                        <div className="col-12 mb-3">
-                                                            <div className="d-flex align-items-center">
-                                                                <i className="ri-bug-line me-1 text-warning fs-6"></i>
-                                                                <div className="d-flex align-items-center gap-3">
-                                                                    <Label className="fw-medium text-muted x-small mb-0">Version_Id:</Label>
-                                                                    <span className="fw-semibold x-small text-warning">{selectedFile.versionId}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    )}
+                                                   
                                                 </div>
                                             </div>
                                         ) : (
