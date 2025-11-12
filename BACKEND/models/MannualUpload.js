@@ -48,28 +48,45 @@ export const getLatestVersion = async (documentId) => {
 
 // =======================================================Insert new version=========================================================
 export const insertDocumentVersion = async (
-    documentId,
-    Status_Id,
-    versionLabel,
-    filePath,
-    DocumentName,
-    DocumentDescription,
-    MetaTags,
-    UploadedByUser_Id,
-    isLatest = 1
+  documentId,
+  versionLabel,
+  filePath,
+  isLatest = 1,
+  changeReason,
+  DocumentName,
+  DocumentDescription,
+  MetaTags,
+  Status_Id,
+  UploadedByUser_Id
 ) => {
-    // Mark old versions as not latest
-    await pool.execute(`UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`, [documentId]);
-    const [result] = await pool.execute(
-        `
-        INSERT INTO documentversion 
-        (DocumentId, VersionLabel, FilePath, IsLatest, DocumentName, DocumentDescription, MetaTags, Status_Id, UploadedByUser_Id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        [documentId, versionLabel, filePath, isLatest, DocumentName, DocumentDescription, MetaTags, Status_Id, UploadedByUser_Id]
-    );
-    return result.insertId;
+  // Mark old versions as not latest
+  await pool.execute(`UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`, [documentId]);
+
+  // Insert new version
+  const [result] = await pool.execute(
+    `
+    INSERT INTO documentversion 
+    (DocumentId, VersionLabel, FilePath, IsLatest, ChangeReason, DocumentName, DocumentDescription, MetaTags, Status_Id, UploadedByUser_Id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      documentId,
+      versionLabel,
+      filePath,
+      isLatest,
+      changeReason ?? null,
+      DocumentName ?? null,
+      DocumentDescription ?? null,
+      MetaTags ?? null,
+      Status_Id ?? 1,
+      UploadedByUser_Id ?? null,
+    ]
+  );
+
+  return result.insertId;
 };
+
+
 
 //=================================================Generate next version label (simple v1, v2, v3...)================================
 export const getNextVersionLabel = (latestVersion) => {

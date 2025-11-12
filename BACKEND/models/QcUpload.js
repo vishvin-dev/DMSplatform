@@ -351,7 +351,7 @@ export const getBackAllApprovedDocumentsCounts = async (so_code, User_Id) => {
         const [result] = await pool.execute(
             `
             SELECT 
-                COUNT(DISTINCT du.DocumentId) AS ApprovedCount
+                COUNT(dv.Version_Id) AS ApprovedCount
             FROM 
                 documentupload du
             JOIN 
@@ -565,7 +565,7 @@ export const getBackAllRejectedDocumentsCounts = async (so_code, User_Id) => {
             `
                  
         SELECT 
-            COUNT(DISTINCT du.DocumentId) AS RejectedCount
+            COUNT(drq.Version_Id) AS RejectedCount
         FROM 
             documentrejectionqueue drq
         JOIN 
