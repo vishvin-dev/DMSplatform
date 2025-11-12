@@ -221,21 +221,67 @@ const RolesCreation = () => {
         }
     };
 
+    const updateRow = async (item) => {
+        const filterData = item;
+        tog_list();
+        setChecked(filterData.Status); 
+        setCheckedText(filterData.Status ? 'Active' : 'InActive');
+        setedit_update(true);
+        setedit_items(filterData);
+        setbuttonval('Update Role');
+        setSubButtonval('Update');
+    };
 
+    // Form submission handler with trimming
+    const handleFormSubmit = async (values) => {
+        // Trim all string fields before submission
+        const trimmedValues = {
+            ...values,
+            RoleName: values.RoleName ? values.RoleName.trim() : values.RoleName,
+            Role_Code: values.Role_Code ? values.Role_Code.trim() : values.Role_Code,
+            Description: values.Description ? values.Description.trim() : values.Description,
+        };
 
-
-
-const updateRow = async (item) => {
-    const filterData = item;
-    tog_list();
-    setChecked(filterData.Status); 
-    setCheckedText(filterData.Status ? 'Active' : 'InActive');
-    setedit_update(true);
-    setedit_items(filterData);
-    setbuttonval('Update Role');
-    setSubButtonval('Update');
-};
-
+        let response;
+        try {
+            if (edit_update === true) {
+                response = putUpdateRoles({
+                    Role_Id: edit_items.Role_Id,
+                    RoleName: trimmedValues.RoleName,
+                    Role_Code: trimmedValues.Role_Code,
+                    Description: trimmedValues.Description,
+                    Status: checked,
+                    RequestUserName: username,
+                });
+            } else {
+                response = postCreateRoles({
+                    RoleName: trimmedValues.RoleName,
+                    Description: trimmedValues.Description,
+                    Role_Code: trimmedValues.Role_Code,
+                    Status: true,
+                    RequestUserName: username,
+                });
+            }
+            let data = await response;
+            if (data) {
+                if (data.status !== 'success') {
+                    setResponse(data.message);
+                    setSuccessModal(false);
+                    setErrorModal(true);
+                } else {
+                    setResponse(data.message);
+                    setSuccessModal(true);
+                    setErrorModal(false);
+                }
+                tog_list();
+                getOnLoadingData();
+                validation.resetForm();
+            }
+        } catch (error) {
+            setSuccessModal(false);
+            setErrorModal(true);
+        }
+    };
 
     const validation = useFormik({
         enableReinitialize: true,
@@ -248,60 +294,75 @@ const updateRow = async (item) => {
             RequestUserName: '',
         },
         validationSchema: Yup.object({
-            RoleName: Yup.string().required('Please Enter Your RoleName'),
-            Role_Code: Yup.string().required('Please Enter Your Role_Code'),
-            Description: Yup.string().required('Please Enter Your Description'),
+            RoleName: Yup.string()
+                .required('Please Enter Your RoleName')
+                .matches(/^[A-Za-z][A-Za-z\s]*$/, 'RoleName should contain only alphabets and spaces between words')
+                .transform((value) => value ? value.trim() : value)
+                .test('no-leading-spaces', 'RoleName should not start with space', 
+                    (value) => !value || !value.startsWith(' '))
+                .max(20, 'RoleName should not exceed 20 characters'),
+            Role_Code: Yup.string()
+                .required('Please Enter Your Role_Code')
+                .matches(/^[A-Za-z0-9][A-Za-z0-9\s]*$/, 'Role_Code should contain only alphanumeric characters and spaces between words')
+                .transform((value) => value ? value.trim() : value)
+                .test('no-leading-spaces-rolecode', 'RoleCode should not start with space', 
+                    (value) => !value || !value.startsWith(' '))
+                .max(20, 'Role_Code should not exceed 20 characters'),
+            Description: Yup.string()
+                .required('Please Enter Your Description')
+                .transform((value) => value ? value.trim() : value)
+                .test('no-leading-spaces-desc', 'Description should not start with space', 
+                    (value) => !value || !value.startsWith(' '))
+                .max(50, 'Description should not exceed 50 characters'),
         }),
         onSubmit: async (values) => {
-            let response;
-            try {
-                if (edit_update === true) {
-                    response = putUpdateRoles({
-                        // flagId: 3,
-                        Role_Id: edit_items.Role_Id,
-                        RoleName: values.RoleName,
-                        Role_Code: values.Role_Code,
-                        Description: values.Description,
-                        Status: checked,
-                        RequestUserName: username,
-                    });
-                } else {
-                    response = postCreateRoles({
-                        // flagId: 2,  
-                        RoleName: values.RoleName,
-                        Description: values.Description,
-                        Role_Code: values.Role_Code,
-                        Status: true,
-                        RequestUserName: username,
-                    });
-                }
-                let data = await response;
-                if (data) {
-                    if (data.status !== 'success') {
-                        setResponse(data.message);
-                        setSuccessModal(false);
-                        setErrorModal(true);
-                    } else {
-                        setResponse(data.message);
-                        setSuccessModal(true);
-                        setErrorModal(false);
-                    }
-                    tog_list();
-                    getOnLoadingData();
-                    validation.resetForm();
-                }
-            } catch (error) {
-                setSuccessModal(false);
-                setErrorModal(true);
-            }
+            await handleFormSubmit(values);
         },
     });
 
-const handleChange = () => {
-    setChecked(!checked);
-    setCheckedText(!checked ? 'Active' : 'InActive');
-};
+    const handleChange = () => {
+        setChecked(!checked);
+        setCheckedText(!checked ? 'Active' : 'InActive');
+    };
 
+    // Input handlers to enforce character limits and patterns - Prevent leading spaces
+    const handleRoleNameChange = (e) => {
+        let value = e.target.value;
+        
+        // Prevent leading spaces
+        if (value.startsWith(' ')) {
+            value = value.trimStart();
+        }
+        
+        // Only allow alphabets and spaces, and limit to 20 characters
+        value = value.replace(/[^A-Za-z\s]/g, '').slice(0, 20);
+        validation.setFieldValue('RoleName', value);
+    };
+
+    const handleRoleCodeChange = (e) => {
+        let value = e.target.value;
+        
+        // Prevent leading spaces
+        if (value.startsWith(' ')) {
+            value = value.trimStart();
+        }
+        
+        // Only allow alphanumeric and spaces, and limit to 20 characters
+        value = value.replace(/[^A-Za-z0-9\s]/g, '').slice(0, 20);
+        validation.setFieldValue('Role_Code', value);
+    };
+
+    const handleDescriptionChange = (e) => {
+        let value = e.target.value;
+        
+        // Prevent leading spaces
+        if (value.startsWith(' ')) {
+            value = value.trimStart();
+        }
+        
+        value = value.slice(0, 100);
+        validation.setFieldValue('Description', value);
+    };
 
     // Handle search functionality
     const handleSearch = (e) => {
@@ -503,7 +564,6 @@ const handleChange = () => {
                 <td>{row.CreatedOn || ''}</td>
                 <td>{row.RequestUserName || ''}</td>
                 <td>
-
                     {row.Status ? (
                         <span className="badge bg-success-subtle text-success text-uppercase">Active</span>
                     ) : (
@@ -632,10 +692,9 @@ const handleChange = () => {
                                         name="RoleName"
                                         placeholder="Enter RoleName"
                                         type="text"
-                                        maxLength={75}
                                         className="form-control"
                                         id="validationCustom01"
-                                        onChange={validation.handleChange}
+                                        onChange={handleRoleNameChange}
                                         onBlur={validation.handleBlur}
                                         value={validation.values.RoleName || ''}
                                         invalid={
@@ -660,10 +719,9 @@ const handleChange = () => {
                                         name="Role_Code"
                                         placeholder="Enter Role_Code"
                                         type="text"
-                                        maxLength={50}
                                         className="form-control"
                                         id="validationCustom02"
-                                        onChange={validation.handleChange}
+                                        onChange={handleRoleCodeChange}
                                         onBlur={validation.handleBlur}
                                         value={validation.values.Role_Code || ''}
                                         invalid={
@@ -688,10 +746,9 @@ const handleChange = () => {
                                         name="Description"
                                         placeholder="Enter Description"
                                         type="textarea"
-                                        maxLength={150}
                                         className="form-control"
                                         id="validationTextarea"
-                                        onChange={validation.handleChange}
+                                        onChange={handleDescriptionChange}
                                         onBlur={validation.handleBlur}
                                         value={validation.values.Description || ''}
                                         invalid={
@@ -736,7 +793,7 @@ const handleChange = () => {
                         )}
                     </ModalBody>
                     <ModalFooter className="text-white justify-content-end" style={{ borderTop: 'none' }}>
-                        <Button color="primary"  className="me-2" id="add-btn" >
+                        <Button color="primary" type="submit" className="me-2" id="add-btn" >
                             {subButtonval}
                         </Button>
                         <Button color="danger" onClick={tog_list}>

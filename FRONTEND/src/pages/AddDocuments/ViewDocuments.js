@@ -4,7 +4,6 @@ import {
     Button, Badge, Input, Label, FormGroup, ListGroup, ListGroupItem,
     Alert, Spinner
 } from 'reactstrap';
-// We are REMOVING 'view' because it is the source of the problem
 import { getDocumentDropdowns, viewDocument, getAllUserDropDownss } from '../../helpers/fakebackend_helper'; 
 import axios from 'axios'; // <-- ***** YOU MUST ADD THIS IMPORT *****
 import { ToastContainer } from 'react-toastify';
@@ -12,7 +11,7 @@ import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
 
-// --- ADD THIS URL (from your network log) ---
+
 // This needs to be the actual URL your 'view' helper was calling
 const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
 
