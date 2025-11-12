@@ -752,12 +752,14 @@ const DocumentViewer = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleViewPdf = async (documentId) => {
+  const handleViewPdf = async (Version_Id) => {
     try {
       setLoading(true);
       setError("");
       setPdfUrl(null);
-
+      const data = {
+        Version_Id: Version_Id, flagId: 2
+      }
       const response = await axios.post(
 
         "http://192.168.23.229:9000/backend-service/documentUpload/documentView",
