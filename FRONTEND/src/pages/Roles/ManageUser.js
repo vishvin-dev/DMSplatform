@@ -10,12 +10,6 @@ import * as Yup from "yup";
 import { useFormik } from "formik";
 import ErrorModal from '../../Components/Common/ErrorModal';
 import SuccessModal from '../../Components/Common/SuccessModal'
-
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { TextField } from '@mui/material';
-import dayjs from 'dayjs';
 import Select from 'react-select';
 import {
   getAllUserDetails,
@@ -135,6 +129,31 @@ const processZoneAccessForDisplay = (zoneAccess) => {
     section_office: sectionOffices.size > 0 ? Array.from(sectionOffices).join(', ') : '-',
     rawData: zoneAccess // Keep raw data for tooltips
   };
+};
+
+// Validation functions for input fields
+const validateName = (value) => {
+  if (!value) return true;
+  // Only allow letters and spaces between words (no consecutive spaces, no leading/trailing spaces)
+  return /^[A-Za-z]+(?: [A-Za-z]+)*$/.test(value);
+};
+
+const validateEmail = (value) => {
+  if (!value) return true;
+  // Standard email validation
+  return /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(value);
+};
+
+const validatePhone = (value) => {
+  if (!value) return true;
+  // Must start with 6-9 and be exactly 10 digits
+  return /^[6-9]\d{9}$/.test(value);
+};
+
+const validatePassword = (value) => {
+  if (!value) return true;
+  // Must contain at least one letter and one number, and be between 8-20 characters
+  return /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,20}$/.test(value);
 };
 
 const ManageUser = () => {
@@ -390,6 +409,52 @@ const ManageUser = () => {
     setAllZoneAccess(updatedZones);
   };
 
+  // Input handlers with validation
+  const handleNameInput = (e, fieldName) => {
+    const value = e.target.value;
+    // Only allow letters and single spaces between words, max 20 characters
+    if (value === '' || /^[A-Za-z]*(?: [A-Za-z]*)*$/.test(value)) {
+      if (value.length <= 20) {
+        validation.setFieldValue(fieldName, value);
+      }
+    }
+  };
+
+  const handlePhoneInput = (e) => {
+    const value = e.target.value;
+    // Only allow numbers and limit to 10 digits
+    if (value === '' || /^\d{0,10}$/.test(value)) {
+      validation.setFieldValue('PhoneNumber', value);
+    }
+  };
+
+  const handleEmailInput = (e) => {
+    const value = e.target.value;
+    validation.setFieldValue('Email', value);
+  };
+
+  const handlePasswordInput = (e) => {
+    const value = e.target.value;
+    // Limit to 20 characters and allow only alphanumeric and specific special characters
+    if (value.length <= 20) {
+      passwordFormik.handleChange(e);
+      setPasswordStrength(getPasswordStrength(value));
+    }
+  };
+
+  // Calculate min and max dates for date picker
+  const getMinDate = () => {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() - 100);
+    return date.toISOString().split('T')[0];
+  };
+
+  const getMaxDate = () => {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() - 18);
+    return date.toISOString().split('T')[0];
+  };
+
   const validation = useFormik({
     enableReinitialize: true,
     initialValues: {
@@ -408,11 +473,40 @@ const ManageUser = () => {
     },
 
     validationSchema: Yup.object({
-      FirstName: Yup.string().required("First Name is required"),
-      LastName: Yup.string().required("Last Name is required"),
-      Email: Yup.string().email("Invalid email format").required("Email is required"),
-      PhoneNumber: Yup.string().matches(/^[0-9]{10}$/, "Phone number must be 10 digits"),
+      FirstName: Yup.string()
+        .required("First Name is required")
+        .matches(/^[A-Za-z]+(?: [A-Za-z]+)*$/, "First Name can only contain letters and single spaces between words")
+        .min(2, "First Name must be at least 2 characters")
+        .max(20, "First Name cannot exceed 20 characters"),
+      LastName: Yup.string()
+        .required("Last Name is required")
+        .matches(/^[A-Za-z]+(?: [A-Za-z]+)*$/, "Last Name can only contain letters and single spaces between words")
+        .min(2, "Last Name must be at least 2 characters")
+        .max(20, "Last Name cannot exceed 20 characters"),
+      middleName: Yup.string()
+        .matches(/^[A-Za-z]*(?: [A-Za-z]*)*$/, "Middle Name can only contain letters and single spaces between words")
+        .max(20, "Middle Name cannot exceed 20 characters"),
+      Email: Yup.string()
+        .email("Invalid email format")
+        .required("Email is required")
+        .matches(/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/, "Please enter a valid email address"),
+      PhoneNumber: Yup.string()
+        .required("Contact No is required")
+        .matches(/^[6-9]\d{9}$/, "Phone number must start with 6-9 and be 10 digits"),
       Role_Id: Yup.string().required("Role is required"),
+      DateofBirth: Yup.string()
+        .required("Date of Birth is required")
+        .test('is-adult', 'Must be at least 18 years old', function(value) {
+          if (!value) return true;
+          const birthDate = new Date(value);
+          const today = new Date();
+          const age = today.getFullYear() - birthDate.getFullYear();
+          const monthDiff = today.getMonth() - birthDate.getMonth();
+          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            return age - 1 >= 18;
+          }
+          return age >= 18;
+        }),
     }),
 
     onSubmit: async (data) => {
@@ -480,7 +574,9 @@ const ManageUser = () => {
     validationSchema: Yup.object({
       password: Yup.string()
         .required('Password is required')
-        .min(8, 'Password must be at least 8 characters'),
+        .min(8, 'Password must be at least 8 characters')
+        .max(20, 'Password cannot exceed 20 characters')
+        .matches(/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,20}$/, 'Password must contain at least one letter and one number'),
       confirmPassword: Yup.string()
         .oneOf([Yup.ref('password'), null], 'Passwords must match')
         .required('Confirm Password is required'),
@@ -964,9 +1060,11 @@ const ManageUser = () => {
                           <Input
                             name="FirstName"
                             value={validation.values.FirstName}
-                            onChange={validation.handleChange}
+                            onChange={(e) => handleNameInput(e, 'FirstName')}
                             onBlur={validation.handleBlur}
                             invalid={validation.touched.FirstName && !!validation.errors.FirstName}
+                            placeholder="Enter first name"
+                            maxLength="20"
                           />
                           <FormFeedback>{validation.errors.FirstName}</FormFeedback>
                         </FormGroup>
@@ -977,8 +1075,13 @@ const ManageUser = () => {
                           <Input
                             name="middleName"
                             value={validation.values.middleName}
-                            onChange={validation.handleChange}
+                            onChange={(e) => handleNameInput(e, 'middleName')}
+                            onBlur={validation.handleBlur}
+                            invalid={validation.touched.middleName && !!validation.errors.middleName}
+                            placeholder="Enter middle name"
+                            maxLength="20"
                           />
+                          <FormFeedback>{validation.errors.middleName}</FormFeedback>
                         </FormGroup>
                       </Col>
                       <Col md={6}>
@@ -987,9 +1090,11 @@ const ManageUser = () => {
                           <Input
                             name="LastName"
                             value={validation.values.LastName}
-                            onChange={validation.handleChange}
+                            onChange={(e) => handleNameInput(e, 'LastName')}
                             onBlur={validation.handleBlur}
                             invalid={validation.touched.LastName && !!validation.errors.LastName}
+                            placeholder="Enter last name"
+                            maxLength="20"
                           />
                           <FormFeedback>{validation.errors.LastName}</FormFeedback>
                         </FormGroup>
@@ -1014,33 +1119,34 @@ const ManageUser = () => {
                       </Col>
                       <Col md={6}>
                         <FormGroup className="mb-3">
-                            <Label className="form-label">Marital Status</Label>
-                            <Input
-                                type="select"
-                                name="MaritalStatus_Id"
-                                value={validation.values.MaritalStatus_Id}
-                                onChange={validation.handleChange}
-                            >
-                                <option value="">Select Marital Status</option>
-                                {maritalStatusName.map(opt => (
-
-                                    <option key={opt.maritalStatusId} value={opt.maritalStatusId}>
-                                        {opt.maritalStatusCode}
-                                    </option>
-                                ))}
-
-                            </Input>
+                          <Label className="form-label required">Date of Birth</Label>
+                          <Input
+                            name="DateofBirth"
+                            type="date"
+                            value={validation.values.DateofBirth}
+                            onChange={validation.handleChange}
+                            onBlur={validation.handleBlur}
+                            invalid={validation.touched.DateofBirth && !!validation.errors.DateofBirth}
+                            min={getMinDate()}
+                            max={getMaxDate()}
+                          />
+                          <FormFeedback>{validation.errors.DateofBirth}</FormFeedback>
+                          <div className="text-muted small mt-1">
+                            Must be at least 18 years old
+                          </div>
                         </FormGroup>
                       </Col>
                       <Col md={6}>
                         <FormGroup className="mb-3">
-                          <Label className="form-label">Contact No</Label>
+                          <Label className="form-label required">Contact No</Label>
                           <Input
                             name="PhoneNumber"
                             value={validation.values.PhoneNumber}
-                            onChange={validation.handleChange}
+                            onChange={handlePhoneInput}
                             onBlur={validation.handleBlur}
                             invalid={validation.touched.PhoneNumber && !!validation.errors.PhoneNumber}
+                            placeholder="Enter 10-digit phone number"
+                            maxLength="10"
                           />
                           <FormFeedback>{validation.errors.PhoneNumber}</FormFeedback>
                         </FormGroup>
@@ -1052,57 +1158,12 @@ const ManageUser = () => {
                             name="Email"
                             type="email"
                             value={validation.values.Email}
-                            onChange={validation.handleChange}
+                            onChange={handleEmailInput}
                             onBlur={validation.handleBlur}
                             invalid={validation.touched.Email && !!validation.errors.Email}
+                            placeholder="Enter email address"
                           />
                           <FormFeedback>{validation.errors.Email}</FormFeedback>
-                        </FormGroup>
-                      </Col>
-                      <Col md={12}>
-                        <FormGroup className="mb-3">
-                          <Label className="form-label">Date of Birth</Label>
-                          <LocalizationProvider dateAdapter={AdapterDayjs}>
-                            <DatePicker
-                              value={
-                                validation.values.DateofBirth
-                                  ? dayjs(validation.values.DateofBirth)
-                                  : null
-                              }
-                              onChange={(newValue) =>
-                                validation.setFieldValue(
-                                  'DateofBirth',
-                                  newValue ? newValue.format('YYYY-MM-DD') : ''
-                                )
-                              }
-                              disableFuture
-                              renderInput={(params) => (
-                                <TextField
-                                  {...params}
-                                  name="DateofBirth"
-                                  size="small"
-                                  fullWidth
-                                  error={Boolean(validation.errors.DateofBirth && validation.touched.DateofBirth)}
-                                  helperText={
-                                    validation.touched.DateofBirth && validation.errors.DateofBirth
-                                      ? validation.errors.DateofBirth
-                                      : ''
-                                  }
-                                  sx={{
-                                    '& .MuiInputBase-root': {
-                                      borderRadius: '6px',
-                                      fontSize: '0.85rem',
-                                      height: '38px',
-                                      width: '100%'
-                                    },
-                                    '& .MuiFormHelperText-root': {
-                                      marginLeft: 0
-                                    }
-                                  }}
-                                />
-                              )}
-                            />
-                          </LocalizationProvider>
                         </FormGroup>
                       </Col>
                     </Row>
@@ -1270,22 +1331,29 @@ const ManageUser = () => {
                         <Input
                           name="password"
                           type={showNew ? 'text' : 'password'}
-                          className={`form-control pe-5 ${passwordFormik.touched.password && passwordFormik.errors.password ? 'is-invalid' : ''
+                          className={`form-control ${passwordFormik.touched.password && passwordFormik.errors.password ? 'is-invalid' : ''
                             }`}
-                          placeholder="Enter new password"
-                          onChange={(e) => {
-                            passwordFormik.handleChange(e);
-                            setPasswordStrength(getPasswordStrength(e.target.value));
-                          }}
+                          placeholder="Enter new password (8-20 characters)"
+                          onChange={handlePasswordInput}
                           onBlur={passwordFormik.handleBlur}
                           value={passwordFormik.values.password}
+                          maxLength="20"
+                          style={{ paddingRight: '40px' }}
                         />
                         <button
                           type="button"
-                          className="btn btn-link position-absolute end-0 top-0 mt-1 me-1 text-decoration-none text-muted"
+                          className="btn btn-link position-absolute end-0 top-0 text-decoration-none text-muted border-0 bg-transparent p-0"
                           onClick={toggleNew}
+                          style={{ 
+                            zIndex: 10, 
+                            width: '40px', 
+                            height: '38px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
                         >
-                          <i className={`mdi ${showNew ? 'mdi-eye-off' : 'mdi-eye'}`}></i>
+                          <i className={`ri ${showNew ? 'ri-eye-off-line' : 'ri-eye-line'}`}></i>
                         </button>
                         <FormFeedback type="invalid">{passwordFormik.errors.password}</FormFeedback>
                       </div>
@@ -1312,19 +1380,29 @@ const ManageUser = () => {
                         <Input
                           name="confirmPassword"
                           type={showConfirm ? 'text' : 'password'}
-                          className={`form-control pe-5 ${passwordFormik.touched.confirmPassword && passwordFormik.errors.confirmPassword ? 'is-invalid' : ''
+                          className={`form-control ${passwordFormik.touched.confirmPassword && passwordFormik.errors.confirmPassword ? 'is-invalid' : ''
                             }`}
                           placeholder="Confirm new password"
                           onChange={passwordFormik.handleChange}
                           onBlur={passwordFormik.handleBlur}
                           value={passwordFormik.values.confirmPassword}
+                          maxLength="20"
+                          style={{ paddingRight: '40px' }}
                         />
                         <button
                           type="button"
-                          className="btn btn-link position-absolute end-0 top-0 mt-1 me-1 text-decoration-none text-muted"
+                          className="btn btn-link position-absolute end-0 top-0 text-decoration-none text-muted border-0 bg-transparent p-0"
                           onClick={toggleConfirm}
+                          style={{ 
+                            zIndex: 10, 
+                            width: '40px', 
+                            height: '38px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
                         >
-                          <i className={`mdi ${showConfirm ? 'mdi-eye-off' : 'mdi-eye'}`}></i>
+                          <i className={`ri ${showConfirm ? 'ri-eye-off-line' : 'ri-eye-line'}`}></i>
                         </button>
                         <FormFeedback type="invalid">{passwordFormik.errors.confirmPassword}</FormFeedback>
                       </div>
