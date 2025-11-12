@@ -882,7 +882,7 @@ const DocumentManagement = () => {
             );
 
             // The blob is in response.data
-            const receivedBlob = response.data;
+            const receivedBlob = response;
 
             if (!(receivedBlob instanceof Blob)) {
                 console.error('❌ Download response was not a Blob.', receivedBlob);
@@ -1000,7 +1000,7 @@ const DocumentManagement = () => {
                 { responseType: "blob" }
             );
 
-            const receivedBlob = response.data;
+            const receivedBlob = response;
 
             if (!(receivedBlob instanceof Blob)) {
                 throw new Error("Received invalid file data from server.");
