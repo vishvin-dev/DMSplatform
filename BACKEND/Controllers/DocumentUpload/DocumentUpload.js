@@ -659,7 +659,7 @@ export const MannualUpload = async (req, res) => {
 
     const changeReasonValue = ChangeReason ?? null;
 
-    // 🔹 Step 1: Validation
+    //  Step 1: Validation
     if (!req.file) {
       return res.status(400).json({ message: "File is required" });
     }
@@ -669,7 +669,7 @@ export const MannualUpload = async (req, res) => {
       });
     }
 
-    // 🔹 Step 2: Check if document already exists
+    //  Step 2: Check if document already exists
     const [existingDocs] = await pool.execute(
       `SELECT DocumentId FROM documentupload WHERE Account_Id = ? LIMIT 1`,
       [Account_Id]
@@ -695,11 +695,11 @@ export const MannualUpload = async (req, res) => {
       documentId = newDocId;
     }
 
-    // 🔹 Step 3: Get next version
+    //  Step 3: Get next version
     const latestVersion = await getLatestVersion(documentId);
     const nextVersion = getNextVersionLabel(latestVersion);
 
-    // 🔹 Step 4: File path
+    //  Step 4: File path
     const filePath = path.join(
       "E:/Dms/CLOUDUPLOADFOLDER",
       Account_Id.toString(),
@@ -711,8 +711,8 @@ export const MannualUpload = async (req, res) => {
       fs.mkdirSync(dirPath, { recursive: true });
     }
 
-    // 🔹 Step 5: Insert new version record
-    const [newVersionId] = await insertDocumentVersion(
+    //  Step 5: Insert new version record
+    const newVersionId = await insertDocumentVersion(
       documentId,
       nextVersion,
       filePath,
@@ -725,9 +725,9 @@ export const MannualUpload = async (req, res) => {
       CreatedByUser_Id
     );
 
-    // 🔹 Step 6: If re-upload, toggle old rejected record based on Version_Id
+    //  Step 6: If re-upload, toggle old rejected record based on Version_Id
     if (changeReasonValue) {
-      // 1️⃣ Find the previously rejected version (status 3)
+      // 1️ Find the previously rejected version (status 3)
       const [rejectedVersion] = await pool.execute(
         `
         SELECT Version_Id 
@@ -741,21 +741,21 @@ export const MannualUpload = async (req, res) => {
       if (rejectedVersion.length > 0) {
         const oldVersionId = rejectedVersion[0].Version_Id;
 
-        // 2️⃣ Update rejection queue for that specific Version_Id
+        // 2️ Update rejection queue for that specific Version_Id
         await pool.execute(
           `
           UPDATE documentrejectionqueue
-          SET Status_Id = 1, IsResolved = 0, RejectedOn = NOW()
+          SET Status_Id = 4, IsResolved = 0, RejectedOn = NOW()
           WHERE Version_Id = ? AND Status_Id = 3
           `,
           [oldVersionId]
         );
 
-        // 3️⃣ Optionally, update old version’s status to 1 (Pending again)
+        // 3️ Optionally, update old version’s status to 1 (Pending again)
         await pool.execute(
           `
           UPDATE documentversion
-          SET Status_Id = 1
+          SET Status_Id = 4
           WHERE Version_Id = ?
           `,
           [oldVersionId]
@@ -763,7 +763,7 @@ export const MannualUpload = async (req, res) => {
       }
     }
 
-    // 🔹 Step 7: Response
+    //  Step 7: Response
     return res.status(200).json({
       status: "success",
       message:
@@ -778,7 +778,7 @@ export const MannualUpload = async (req, res) => {
       FilePath: filePath,
     });
   } catch (error) {
-    console.error("❌ Error in Document Upload:", error);
+    console.error(" Error in Document Upload:", error);
     return res.status(500).json({ error: error.message });
   }
 };

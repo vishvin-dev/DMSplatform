@@ -558,7 +558,6 @@ export const getBackAllRejectedDocuments = async (User_Id, so_code) => {
         throw error;
     }
 };
-
 export const getBackAllRejectedDocumentsCounts = async (so_code, User_Id) => {
     try {
         const [result] = await pool.execute(
@@ -601,7 +600,8 @@ export const getBackAllPendingDocumentsCounts=async(User_Id, so_code)=>{
         JOIN 
             documentupload du ON dv.DocumentId = du.DocumentId
         WHERE 
-            dv.Status_Id = 1              -- Pending status
+            dv.Status_Id = 1         -- Pending status
+            AND isLatest = 1             
             AND dv.UploadedByUser_Id = ?
             AND du.so_code = ?;   -- Replace ? with User_Id
             `, [User_Id, so_code])
@@ -612,8 +612,6 @@ export const getBackAllPendingDocumentsCounts=async(User_Id, so_code)=>{
     }
 
 }
-
-
 //===========================================================================================================================
 //==============THIS IS THE ALL QC COUNTS WHEN THE So_code SEND ok (Approved, Pending, Rejected)=============================
 
@@ -623,7 +621,7 @@ export const getAllCounts = async (so_code) => {
            `
             SELECT
             -- count distinct versions currently in pending status
-            COUNT(DISTINCT CASE WHEN dv.Status_Id = 1 THEN dv.Version_Id END) AS PendingCount,
+            COUNT(DISTINCT CASE WHEN dv.Status_Id = 1 AND dv.IsLatest = 1 THEN dv.Version_Id END) AS PendingCount,
 
             -- count distinct versions whose latest workflow entry is approved
             COUNT(DISTINCT CASE WHEN dwh.Status_Id = 2 THEN dv.Version_Id END) AS ApprovedCount,
@@ -690,7 +688,7 @@ export const clickGetPendingDocs = async (so_code) => {
                             ON du.Account_Id = c.account_id
                         LEFT JOIN documentversion dv 
                             ON du.DocumentId = dv.DocumentId
-                        WHERE dv.Status_Id = 1  -- <-- filter by pending status from version table
+                        WHERE dv.Status_Id = 1 AND isLatest = 1  -- <-- filter by pending status from version table
                         AND du.so_code = ?
                         ORDER BY du.DocumentId DESC, dv.UploadedAt DESC;
 
