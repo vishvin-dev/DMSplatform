@@ -19,7 +19,7 @@ export const ZONE_UPLOAD="/backend-service/zoneupload"
 
 export const CONSUMER_UPLOAD="/backend-service/consumerUpload"
 
-export const LOGIN_AUDIT="/backend-service/loginAudit"
+export const LOGIN_AUDIT="/backend-service/loginAudit"  
 
 export const DOCUMENT_CATEGORY="/backend-service/documentCategory"
 

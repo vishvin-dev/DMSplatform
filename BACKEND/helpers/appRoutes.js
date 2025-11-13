@@ -49,5 +49,6 @@ const applyRoutes = (app) => {
 export default applyRoutes;
 
 
+
 //FLAGID 6 HAVE TO CHANGE OK IN INTENDTCREATION THINGS OK 
 
