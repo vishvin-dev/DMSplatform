@@ -548,8 +548,7 @@ const ViewDocuments = () => {
         return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
     };
 
-    // --- START: MODIFIED handleFileSelect (using direct axios) ---
-    // This is the only way to guarantee the multi-page file is not corrupted
+    
     const handleFileSelect = async (file) => {
         console.log('📄 File selected:', file);
         console.log('🔑 Version_Id to be sent:', file.versionId);
@@ -657,7 +656,7 @@ const ViewDocuments = () => {
             setPreviewLoading(false);
         }
     };
-    // --- END: MODIFIED handleFileSelect ---
+    
 
     // --- START: MODIFIED handleDownload (using direct axios) ---
     const handleDownload = async (file) => {
