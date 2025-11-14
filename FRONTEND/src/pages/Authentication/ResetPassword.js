@@ -13,20 +13,30 @@ import { postresetpassword } from '../../helpers/fakebackend_helper';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 
-// Utility function to calculate password strength
+// Utility function to calculate password strength with complexity requirements
 const getPasswordStrength = (password) => {
+  if (!password) return { score: 0, label: 'Too weak', color: 'danger', valid: false };
+
+  const hasMinLength = password.length >= 8;
+  const hasMaxLength = password.length <= 20;
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasLowerCase = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecialChar = /[^A-Za-z0-9]/.test(password);
+
   let score = 0;
-  if (!password) return { score: 0, label: 'Too weak', color: 'danger' };
+  if (hasMinLength && hasMaxLength) score++;
+  if (hasUpperCase) score++;
+  if (hasLowerCase) score++;
+  if (hasNumber) score++;
+  if (hasSpecialChar) score++;
 
-  if (password.length >= 8) score++;
-  if (/[A-Z]/.test(password)) score++;
-  if (/[a-z]/.test(password)) score++;
-  if (/[0-9]/.test(password)) score++;
-  if (/[^A-Za-z0-9]/.test(password)) score++;
+  // Check if all complexity requirements are met
+  const isValid = hasMinLength && hasMaxLength && hasUpperCase && hasLowerCase && hasNumber && hasSpecialChar;
 
-  if (score <= 2) return { score, label: 'Weak', color: 'danger' };
-  if (score === 3) return { score, label: 'Moderate', color: 'warning' };
-  if (score >= 4) return { score, label: 'Strong', color: 'success' };
+  if (score <= 2) return { score, label: 'Weak', color: 'danger', valid: isValid };
+  if (score === 3) return { score, label: 'Moderate', color: 'warning', valid: isValid };
+  if (score >= 4) return { score, label: 'Strong', color: 'success', valid: isValid };
 };
 
 const ResetPassword = ({ isForcePasswordChange }) => {
@@ -35,8 +45,7 @@ const ResetPassword = ({ isForcePasswordChange }) => {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [passwordStrength, setPasswordStrength] = useState({ score: 0, label: '', color: '' });
-  // const [loading, setLoading] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState({ score: 0, label: '', color: '', valid: false });
   const [successModal, setSuccessModal] = useState(false);
   const [errorModal, setErrorModal] = useState(false);
   const [response, setResponse] = useState('');
@@ -48,7 +57,6 @@ const ResetPassword = ({ isForcePasswordChange }) => {
   document.title = `Reset Password | DMS`;
 
   const validation = useFormik({
-    
     initialValues: {
       email: '',
       currentPassword: '',
@@ -63,6 +71,8 @@ const ResetPassword = ({ isForcePasswordChange }) => {
       newPassword: Yup.string()
         .required('New Password is required')
         .min(8, 'Password must be at least 8 characters')
+        .max(20, 'Password cannot exceed 20 characters')
+        .matches(/^(?=.*[a-zA-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/, 'Password must contain at least one uppercase letter,one lowercase letter, one number, and one special character')
         .notOneOf([Yup.ref('currentPassword')], 'New password must be different from current password'),
       confirmPassword: Yup.string()
         .required('Please confirm your password')
@@ -71,6 +81,23 @@ const ResetPassword = ({ isForcePasswordChange }) => {
   
     onSubmit: async (values) => {
       try {
+        // Additional client-side validation for password complexity
+        const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/;
+        if (!passwordRegex.test(values.newPassword)) {
+          setResponse('Password must contain at least one letter, one number, and one special character');
+          setSuccessModal(false);
+          setErrorModal(true);
+          return;
+        }
+
+        // Validate password length
+        if (values.newPassword.length < 8 || values.newPassword.length > 20) {
+          setResponse('Password must be between 8 and 20 characters');
+          setSuccessModal(false);
+          setErrorModal(true);
+          return;
+        }
+
         const payload = {
           email: values.email,
           currentPassword: values.currentPassword,
@@ -82,7 +109,7 @@ const ResetPassword = ({ isForcePasswordChange }) => {
         if (response.status === "success") {
           sessionStorage.removeItem('authUser');
           validation.resetForm();
-          setPasswordStrength({ score: 0, label: '', color: '' });
+          setPasswordStrength({ score: 0, label: '', color: '', valid: false });
           setResponse(response.message);
           setErrorModal(false);
           setSuccessModal(true);
@@ -115,6 +142,11 @@ const ResetPassword = ({ isForcePasswordChange }) => {
       }
     }
   });
+
+  // Update password strength when newPassword changes
+  useEffect(() => {
+    setPasswordStrength(getPasswordStrength(validation.values.newPassword));
+  }, [validation.values.newPassword]);
 
   return (
     <div className="auth-page-content" style={{
@@ -183,6 +215,7 @@ const ResetPassword = ({ isForcePasswordChange }) => {
                           onBlur={validation.handleBlur}
                           value={validation.values.currentPassword}
                           invalid={validation.touched.currentPassword && !!validation.errors.currentPassword}
+                          maxLength={20}
                         />
                         <button
                           type="button"
@@ -205,14 +238,20 @@ const ResetPassword = ({ isForcePasswordChange }) => {
                           name="newPassword"
                           type={showNew ? 'text' : 'password'}
                           className="form-control pe-5"
-                          placeholder="Enter new password"
+                          placeholder="Enter new password (8-20 characters)"
                           onChange={(e) => {
-                            validation.handleChange(e);
-                            setPasswordStrength(getPasswordStrength(e.target.value));
+                            // Limit input to 20 characters
+                            const value = e.target.value.slice(0, 20);
+                            validation.setFieldValue('newPassword', value);
+                            setPasswordStrength(getPasswordStrength(value));
                           }}
                           onBlur={validation.handleBlur}
                           value={validation.values.newPassword}
-                          invalid={validation.touched.newPassword && !!validation.errors.newPassword}
+                          invalid={
+                            (validation.touched.newPassword && !!validation.errors.newPassword) ||
+                            (validation.values.newPassword && !passwordStrength.valid)
+                          }
+                          maxLength={20}
                         />
                         <button
                           type="button"
@@ -223,6 +262,11 @@ const ResetPassword = ({ isForcePasswordChange }) => {
                         </button>
                         {validation.touched.newPassword && validation.errors.newPassword && (
                           <FormFeedback>{validation.errors.newPassword}</FormFeedback>
+                        )}
+                        {validation.values.newPassword && !passwordStrength.valid && !validation.errors.newPassword && (
+                          <FormFeedback className="d-block">
+                            Password must contain at least one letter, one number, and one special character
+                          </FormFeedback>
                         )}
                       </div>
 
@@ -235,11 +279,18 @@ const ResetPassword = ({ isForcePasswordChange }) => {
                               style={{ width: `${(passwordStrength.score / 5) * 100}%` }}
                             ></div>
                           </div>
-                          <small className={`text-${passwordStrength.color}`}>
-                            {passwordStrength.label}
-                          </small>
+                          <div className="d-flex justify-content-between align-items-center">
+                            <small className={`text-${passwordStrength.color}`}>
+                              {passwordStrength.label}
+                            </small>
+                            <small className="text-muted">
+                              {validation.values.newPassword.length}/20
+                            </small>
+                          </div>
                         </div>
                       )}
+
+                    
                     </div>
 
                     {/* Confirm Password */}
@@ -255,6 +306,7 @@ const ResetPassword = ({ isForcePasswordChange }) => {
                           onBlur={validation.handleBlur}
                           value={validation.values.confirmPassword}
                           invalid={validation.touched.confirmPassword && !!validation.errors.confirmPassword}
+                          maxLength={20}
                         />
                         <button
                           type="button"
@@ -274,7 +326,7 @@ const ResetPassword = ({ isForcePasswordChange }) => {
                       <Button
                         color="success"
                         type="submit"
-                        disabled={!(validation.isValid && validation.dirty)}
+                        disabled={!(validation.isValid && validation.dirty && passwordStrength.valid)}
                       >
                         {'Submit'}
                       </Button>

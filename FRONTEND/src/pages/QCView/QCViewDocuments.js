@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
     Card, CardBody, CardHeader, Col, Container, Row,
     Button, Modal, ModalHeader, ModalBody, ModalFooter,
@@ -11,7 +11,6 @@ import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
 
 const SORT_ARROW_SIZE = 13;
-
 
 const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
 
@@ -42,6 +41,326 @@ function SortArrows({ direction, active }) {
     );
 }
 
+// --- MOVED LazyPreviewContent OUTSIDE THE MAIN COMPONENT ---
+const LazyPreviewContent = React.memo(({ doc, previewLoading, previewError, previewContent, onDownload }) => {
+    const [previewLoaded, setPreviewLoaded] = useState(false);
+    const [detailsLoaded, setDetailsLoaded] = useState(false);
+
+    // Use refs to track if content has already been loaded
+    const previewLoadedRef = useRef(false);
+    const detailsLoadedRef = useRef(false);
+
+    useEffect(() => {
+        // Only load if not already loaded
+        if (!previewLoadedRef.current) {
+            const previewTimer = setTimeout(() => {
+                setPreviewLoaded(true);
+                previewLoadedRef.current = true;
+            }, 1200);
+
+            return () => clearTimeout(previewTimer);
+        }
+    }, []); // Empty dependency array - only run once
+
+    useEffect(() => {
+        if (previewLoaded && !detailsLoadedRef.current) {
+            const detailsTimer = setTimeout(() => {
+                setDetailsLoaded(true);
+                detailsLoadedRef.current = true;
+            }, 1000);
+
+            return () => clearTimeout(detailsTimer);
+        }
+    }, [previewLoaded]); // Only depend on previewLoaded
+
+    // Format date function
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        } catch {
+            return dateString;
+        }
+    };
+
+    // Enhanced PDF/Image viewer
+    const renderPreviewContent = useCallback(() => {
+        if (!previewLoaded) {
+            return (
+                <div className="text-center h-100 d-flex flex-column justify-content-center align-items-center"
+                    style={{ minHeight: '400px' }}>
+                    <div className="spinner-border text-primary" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                    </div>
+                    <p className="mt-2">Loading preview...</p>
+                </div>
+            );
+        }
+
+        if (previewLoading) {
+            return (
+                <div className="text-center h-100 d-flex flex-column justify-content-center align-items-center"
+                    style={{ minHeight: '400px' }}>
+                    <div className="spinner-border text-primary" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                    </div>
+                    <p className="mt-2">Loading document content...</p>
+                </div>
+            );
+        }
+
+        if (previewError) {
+            return (
+                <Alert color="danger" className="m-3 fade-in">
+                    <i className="ri-error-warning-line me-2"></i>
+                    {previewError}
+                </Alert>
+            );
+        }
+
+        if (previewContent) {
+            const isPDF = previewContent.type.includes('pdf');
+            const isImage = previewContent.type.includes('image');
+
+            return (
+                <div className="d-flex flex-column"> 
+                    {/* Preview Header */}
+                    <div className="d-flex justify-content-between align-items-center p-3 border-bottom">
+                        <h6 className="mb-0">
+                            <i className="ri-file-text-line me-2"></i>
+                            {previewContent.name}
+                        </h6>
+                        <Button
+                            color="primary"
+                            size="sm"
+                            onClick={onDownload}
+                        >
+                            <i className="ri-download-line me-1"></i> Download
+                        </Button>
+                    </div>
+
+                    {/* Preview Content */}
+                    <div className="flex-grow-1 preview-content">
+                        {isPDF ? (
+                            <div className="pdf-viewer-container fade-in">
+                                <iframe
+                                    src={`${previewContent.url}#toolbar=0&navpanes=0&scrollbar=0`}
+                                    title="PDF Viewer"
+                                    className="w-100"
+                                    style={{ border: 'none' }}
+                                    key={previewContent.url}
+                                />
+                            </div>
+                        ) : isImage ? (
+                            <div className="text-center fade-in p-3 h-100 d-flex align-items-center justify-content-center">
+                                <img
+                                    src={previewContent.url}
+                                    alt="Document Preview"
+                                    className="img-fluid"
+                                    style={{
+                                        maxHeight: '100%',
+                                        maxWidth: '100%',
+                                        objectFit: 'contain'
+                                    }}
+                                />
+                            </div>
+                        ) : (
+                            <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
+                                <i className="ri-file-line display-4 text-muted"></i>
+                                <h5 className="mt-3">Preview not available</h5>
+                                <p className="text-muted">
+                                    This file type ({previewContent.type}) cannot be previewed in the browser.
+                                </p>
+                                <Button
+                                    color="primary"
+                                    onClick={onDownload}
+                                    className="mt-2"
+                                >
+                                    <i className="ri-download-line me-1"></i> Download File
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="text-center text-muted py-5 h-100 d-flex flex-column justify-content-center fade-in">
+                <i className="ri-file-line display-4"></i>
+                <h5 className="mt-3">No document selected</h5>
+                <p>Select a file from the list to preview it here</p>
+            </div>
+        );
+    }, [previewLoaded, previewLoading, previewError, previewContent, onDownload]);
+
+    return (
+        <Row>
+            {/* Document Details */}
+            <Col lg={4} md={12} className="mb-3 mb-lg-0">
+                {!detailsLoaded ? (
+                    <Card className="shadow-sm slide-in-left">
+                        <CardHeader className="bg-light p-3 position-relative card-header border-top-primary">
+                            <h6 className="mb-0 d-flex align-items-center">
+                                <i className="ri-information-line me-2"></i> Document Details
+                            </h6>
+                        </CardHeader>
+                        <CardBody className="py-5 d-flex justify-content-center">
+                            <Spinner color="primary" />
+                        </CardBody>
+                    </Card>
+                ) : (
+                    <Card className="shadow-sm slide-in-left">
+                        <CardHeader className="bg-light p-3 position-relative card-header border-top-primary">
+                            <h6 className="mb-0 d-flex align-items-center">
+                                <i className="ri-information-line me-2"></i> Document Details
+                            </h6>
+                        </CardHeader>
+                        <CardBody className="py-3 px-4" style={{ overflowY: 'auto', maxHeight: '70vh' }}>
+                            <Row>
+                                <Col md={12}>
+                                    <div className="mb-2">
+                                        <Label className="fw-semibold">Document Name:</Label>
+                                        <p className="mb-1 text-break">{doc?.DocumentName || 'N/A'}</p>
+                                    </div>
+                                    <div className="mb-2">
+                                        <Label className="fw-semibold">Account ID:</Label>
+                                        <p className="mb-1">{doc?.Account_Id || 'N/A'}</p>
+                                    </div>
+                                    <div className="mb-2">
+                                        <Label className="fw-semibold">RR No:</Label>
+                                        <p className="mb-1">{doc?.rr_no || 'N/A'}</p>
+                                    </div>
+                                    <div className="mb-2">
+                                        <Label className="fw-semibold">Consumer Name:</Label>
+                                        <p className="mb-1">{doc?.consumer_name || 'N/A'}</p>
+                                    </div>
+                                    <div className="mb-2">
+                                        <Label className="fw-semibold">Consumer Address:</Label>
+                                        <p className="mb-1 text-break">{doc?.consumer_address || 'N/A'}</p>
+                                    </div>
+                                    
+                                    <hr className="my-3"/>
+
+                                    <div className="mb-2">
+                                        <Label className="fw-semibold">Division:</Label>
+                                        <p className="mb-1">{doc?.division || 'N/A'}</p>
+                                    </div>
+                                    <div className="mb-2">
+                                        <Label className="fw-semibold">Sub Division:</Label>
+                                        <p className="mb-1">{doc?.sub_division || 'N/A'}</p>
+                                    </div>
+                                    <div className="mb-2">
+                                        <Label className="fw-semibold">Section:</Label>
+                                        <p className="mb-1">{doc?.section || 'N/A'}</p>
+                                    </div>
+                                    <div className="mb-2">
+                                        <Label className="fw-semibold">Uploaded By:</Label>
+                                        <p className="mb-1">{doc?.CreatedByUserName || 'N/A'}</p>
+                                    </div>
+                                    <div className="mb-2">
+                                        <Label className="fw-semibold">Upload Date:</Label>
+                                        <p className="mb-1">{formatDate(doc?.CreatedAt)}</p>
+                                    </div>
+                                    <div className="mb-2">
+                                        <Label className="fw-semibold">Meta Tags:</Label>
+                                        <p className="mb-1">{doc?.MetaTags || 'N/A'}</p>
+                                    </div>
+                                    {doc?.Status === 'Rejected' && doc?.RejectionReason && (
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Rejection Reason:</Label>
+                                            <p className="mb-1 text-danger">{doc?.RejectionReason}</p>
+                                        </div>
+                                    )}
+                                </Col>
+                            </Row>
+                        </CardBody>
+                    </Card>
+                )}
+            </Col>
+
+            {/* Document Preview */}
+            <Col lg={8} md={12}>
+                <Card className="slide-in-right delay-3">
+                    <CardHeader className="bg-light p-3 position-relative"
+                        style={{
+                            borderTop: '3px solid #405189'
+                        }}>
+                        <h5 className="mb-0">Document Preview</h5>
+                    </CardHeader>
+                    <CardBody className="p-0">
+                        <div>
+                            {renderPreviewContent()}
+                        </div>
+                    </CardBody>
+                </Card>
+            </Col>
+        </Row>
+    );
+});
+
+// --- MOVED RejectionModal OUTSIDE THE MAIN COMPONENT ---
+const RejectionModal = React.memo(({ 
+    isOpen, 
+    onClose, 
+    onConfirm, 
+    rejectionReason, 
+    onRejectionReasonChange, 
+    actionLoading 
+}) => {
+    return (
+        <Modal isOpen={isOpen} toggle={onClose} centered>
+            <ModalHeader className="bg-primary text-white p-3" toggle={onClose}>
+                <span className="modal-title text-white">
+                    <i className="ri-close-circle-line me-2"></i>
+                    Reject Document
+                </span>
+            </ModalHeader>
+            <ModalBody>
+                <Alert color="warning" className="mb-3">
+                    <i className="ri-alert-line me-2"></i>
+                    Please provide a reason for rejecting this document.
+                </Alert>
+                <FormGroup>
+                    <Label for="rejectionReason">Reason for Rejection *</Label>
+                    <Input
+                        type="textarea"
+                        id="rejectionReason"
+                        value={rejectionReason}
+                        onChange={onRejectionReasonChange}
+                        rows="4"
+                        placeholder="Enter detailed reason for rejection..."
+                        required
+                    />
+                </FormGroup>
+            </ModalBody>
+            <ModalFooter style={{ borderTop: 'none' }}>
+                <Button color="light" onClick={onClose}>
+                    Cancel
+                </Button>
+                <Button
+                    color="danger"
+                    onClick={onConfirm}
+                    disabled={!rejectionReason.trim() || actionLoading}
+                >
+                    {actionLoading ? (
+                        <>
+                            <Spinner size="sm" className="me-2" />
+                            Rejecting...
+                        </>
+                    ) : (
+                        <>
+                            <i className="ri-close-line me-1"></i>
+                            Confirm Rejection
+                        </>
+                    )}
+                </Button>
+            </ModalFooter>
+        </Modal>
+    );
+});
+
 const QCViewDocuments = () => {
     // State initialization
     document.title = `Quality Control | DMS`;
@@ -52,7 +371,7 @@ const QCViewDocuments = () => {
     const [currentDoc, setCurrentDoc] = useState(null);
     const [actionLoading, setActionLoading] = useState(false);
     const [rejectionModal, setRejectionModal] = useState(false);
-    const [rejectionReason, setRejectionReason] = useState('');
+    const [localRejectionReason, setLocalRejectionReason] = useState('');
     const [searchValue, setSearchValue] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
     const [page, setPage] = useState(0);
@@ -196,16 +515,14 @@ const QCViewDocuments = () => {
                 setDivisionName(divisionData);
                 setSubDivisions(uniqueSubDivisions);
                 setSectionOptions(allSections);
-                setOriginalSectionOptions(allSections); // Store original sections
+                setOriginalSectionOptions(allSections);
 
                 setDivision(userZone.div_code);
                 setIsFieldsDisabled({ division: true, subDivision: false, section: false });
 
-                // Show dropdowns if there are multiple subdivisions
                 if (uniqueSubDivisions.length > 1) {
                     setShouldShowDropdowns(true);
                 } else {
-                    // If only one subdivision, auto-select it and check sections
                     setSubDivision(uniqueSubDivisions[0].sd_code);
                     const sectionsForSubDiv = allSections.filter(sec => sec.sd_code === uniqueSubDivisions[0].sd_code);
                     if (sectionsForSubDiv.length === 1) {
@@ -239,7 +556,7 @@ const QCViewDocuments = () => {
 
                     const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: selectedSdCode });
                     setSectionOptions(sections);
-                    setOriginalSectionOptions(sections); // Store original sections
+                    setOriginalSectionOptions(sections);
 
                     if (sections.length === 1) {
                         setSection(sections[0].so_code);
@@ -277,7 +594,7 @@ const QCViewDocuments = () => {
 
                         const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: subdivisions[0].sd_code });
                         setSectionOptions(sections);
-                        setOriginalSectionOptions(sections); // Store original sections
+                        setOriginalSectionOptions(sections);
 
                         if (sections.length === 1) {
                             setSection(sections[0].so_code);
@@ -320,23 +637,19 @@ const QCViewDocuments = () => {
     const handleSubDivisionChange = async (e) => {
         const selectedSdCode = e.target.value;
         setSubDivision(selectedSdCode);
-        setSection(''); // Clear section when subdivision changes
+        setSection('');
 
         if (selectedSdCode) {
-            // For section level users, filter sections based on selected subdivision
             if (userLevel === 'section') {
                 const filteredSections = originalSectionOptions.filter(sec => sec.sd_code === selectedSdCode);
                 setSectionOptions(filteredSections);
             } else {
-                // For other levels, fetch sections normally
                 const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: selectedSdCode });
                 setSectionOptions(sections);
                 setOriginalSectionOptions(sections);
             }
         } else {
-            // Reset sections if no subdivision selected
             if (userLevel === 'section') {
-                // Show all sections for section level users
                 setSectionOptions(originalSectionOptions);
             } else {
                 setSectionOptions([]);
@@ -369,7 +682,6 @@ const QCViewDocuments = () => {
         setActiveTab('');
         setStatusCounts({ pending: 0, approved: 0, rejected: 0 });
 
-        // Reload dropdown data from session
         loadDropdownDataFromSession();
     };
 
@@ -414,7 +726,7 @@ const QCViewDocuments = () => {
         try {
             await fetchDocumentCounts();
             setHasSearched(true);
-            setShowTable(false); // Don't show table initially
+            setShowTable(false);
         } catch (error) {
             console.error('Search error:', error);
             setResponse('Failed to load document counts');
@@ -502,7 +814,7 @@ const QCViewDocuments = () => {
                 setDocuments(docs);
                 setFilteredDocuments(docs);
                 if (tab === 'pending') {
-                    setDataBk(docs); // Update the backup for pending docs
+                    setDataBk(docs);
                 }
             } else {
                 setResponse(response.message || `Failed to fetch ${tab} documents`);
@@ -526,7 +838,7 @@ const QCViewDocuments = () => {
         setSearchValue('');
         setSortConfig({ key: null, direction: null });
         setLoading(true);
-        setShowTable(true); // Show table when tab is clicked
+        setShowTable(true);
 
         try {
             await fetchDocuments(tab, userInfo);
@@ -540,7 +852,6 @@ const QCViewDocuments = () => {
         if (activeTab) {
             setLoading(true);
             setSearchValue('');
-            setRejectionReason(''); // Clear any stale rejection reason
             try {
                 await Promise.all([
                     fetchDocuments(activeTab, userInfo),
@@ -554,7 +865,6 @@ const QCViewDocuments = () => {
                 setLoading(false);
             }
         } else {
-            // If no active tab, just refresh counts
             setSearchLoading(true);
             try {
                 await fetchDocumentCounts();
@@ -615,7 +925,7 @@ const QCViewDocuments = () => {
         setPage(0);
     };
 
-    // --- START: CORRECTED handleFileSelect (using direct axios and Version_Id) ---
+    // Handle file select for preview
     const handleFileSelect = async (doc) => {
         setCurrentDoc(doc);
         setPreviewLoading(true);
@@ -624,7 +934,6 @@ const QCViewDocuments = () => {
         setPreviewModal(true);
 
         try {
-            // *** CRITICAL CHANGE HERE ***
             if (!doc.Version_Id) {
                 throw new Error("Version_Id is missing for this document.");
             }
@@ -632,24 +941,20 @@ const QCViewDocuments = () => {
             
             const requestPayload = {
                 flagId: 2,
-                Version_Id: doc.Version_Id, // <-- *** CORRECTED: Using Version_Id ***
+                Version_Id: doc.Version_Id,
                 requestUserName: userInfo.email,
-                preview: false // This param seems to be from your old code, keeping it
+                preview: false
             };
 
             console.log('🚀 API Request Payload:', requestPayload);
 
-            // --- FIX: Use direct axios call ---
             const response = await axios.post(
                 VIEW_DOCUMENT_URL,
                 requestPayload,
-                { responseType: "blob" } // Critical: ensures data is treated as a blob
+                { responseType: "blob" }
             );
 
-            // The blob is in response.data
             const receivedBlob = response;
-            // --- END FIX ---
-
 
             if (!(receivedBlob instanceof Blob)) {
                 console.error('❌ Response data was not a Blob.', receivedBlob);
@@ -664,7 +969,6 @@ const QCViewDocuments = () => {
 
             let blobToView;
 
-            // Check if the blob is an error message (as JSON)
             if (receivedBlob.type === 'application/json') {
                 console.error('❌ Server returned an error as a JSON blob. Reading error...');
                 const errorText = await receivedBlob.text();
@@ -679,8 +983,6 @@ const QCViewDocuments = () => {
                 throw new Error(errorMessage);
             }
             
-            // If the blob type is not PDF, force it.
-            // This handles 'application/octet-stream' or empty type.
             if (receivedBlob.type !== 'application/pdf') {
                  console.warn(`⚠️ Blob type is '${receivedBlob.type}'. Forcing 'application/pdf'.`);
                  blobToView = new Blob([receivedBlob], { type: 'application/pdf' });
@@ -688,13 +990,12 @@ const QCViewDocuments = () => {
                  blobToView = receivedBlob;
             }
 
-            // Create object URL for the valid blob
             const fileUrl = URL.createObjectURL(blobToView);
             console.log('🔗 Object URL created:', fileUrl.substring(0, 50) + '...');
 
             setPreviewContent({
                 url: fileUrl,
-                type: 'application/pdf', // Always use this for the iframe
+                type: 'application/pdf',
                 name: doc.DocumentName,
                 blob: blobToView
             });
@@ -703,10 +1004,8 @@ const QCViewDocuments = () => {
 
         } catch (error) {
             console.error("❌ Preview error:", error);
-            // Handle axios errors
             let errorMessage = error.message;
             if (error.response && error.response) {
-                // If the error response was *also* a blob (e.g., json error), try to read it
                 if (error.response instanceof Blob) {
                     try {
                         const errorText = await error.response.text();
@@ -725,7 +1024,6 @@ const QCViewDocuments = () => {
             setPreviewLoading(false);
         }
     };
-    // --- END: CORRECTED handleFileSelect ---
     
     const closePreview = () => {
         if (previewContent?.url) {
@@ -736,18 +1034,18 @@ const QCViewDocuments = () => {
         setPreviewError(null);
     };
 
-    // Handlers for the rejection modal to ensure state is always clean
+    // Updated rejection modal handlers
     const openRejectionModal = () => {
-        setRejectionReason(''); // Clear previous reason before opening
+        setLocalRejectionReason('');
         setRejectionModal(true);
     };
 
     const closeRejectionModal = () => {
         setRejectionModal(false);
-        setRejectionReason(''); // Also clear reason on close
+        setLocalRejectionReason('');
     };
 
-    const handleDownload = () => {
+    const handleDownload = useCallback(() => {
         if (!previewContent?.blob) return;
 
         const blob = previewContent.blob;
@@ -759,36 +1057,33 @@ const QCViewDocuments = () => {
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-    };
+    }, [previewContent]);
 
-    // *** MODIFIED ***
-    // Updated handleStatusUpdate function (for APPROVAL)
-    // Now sends Version_Id instead of DocumentId
+    // Handle status update for approval
     const handleStatusUpdate = async (versionId, status, reason = '') => {
         setActionLoading(true);
         try {
             const payload = {
-                flagId: 5, // Using flagId 5 for approval as specified
+                flagId: 5,
                 User_Id: userInfo.userId,
-                Version_Id: versionId, // <-- CHANGED from DocumentId
+                Version_Id: versionId,
                 Role_Id: userInfo.roleId,
                 ...(status === 'Rejected' && { RejectionComment: reason })
             };
 
-            console.log('API Payload (Approve):', payload); // For debugging
+            console.log('API Payload (Approve):', payload);
 
             const response = await qcApproveReject(payload);
 
             if (response.status === "success") {
                 setPreviewModal(false);
-                closeRejectionModal(); // Use the new handler to close and clear
+                closeRejectionModal();
 
                 setResponse(response.message || (status === 'Approved'
                     ? 'Document approved successfully'
                     : 'Document rejected successfully'));
                 setSuccessModal(true);
 
-                // Refresh the view to get updated lists and counts
                 await handleRefresh();
             } else {
                 setResponse(response.message || 'Failed to update document status');
@@ -803,36 +1098,33 @@ const QCViewDocuments = () => {
         }
     };
 
-    // *** MODIFIED ***
-    // Handle approve action - passes Version_Id to handleStatusUpdate
+    // Handle approve action
     const handleApprove = async (versionId) => {
         await handleStatusUpdate(versionId, 'Approved');
     };
 
-    // *** MODIFIED ***
-    // Handle reject action - now sends Version_Id instead of DocumentId
+    // Handle reject action
     const handleReject = async (versionId, reason) => {
         setActionLoading(true);
         try {
             const payload = {
-                flagId: 6, // Using flagId 6 for rejection as specified
+                flagId: 6,
                 User_Id: userInfo.userId,
-                Version_Id: versionId, // <-- CHANGED from DocumentId
+                Version_Id: versionId,
                 comment: reason
             };
 
-            console.log('Reject API Payload:', payload); // For debugging
+            console.log('Reject API Payload:', payload);
 
             const response = await qcApproveReject(payload);
 
             if (response.status === "success") {
                 setPreviewModal(false);
-                closeRejectionModal(); // Close and clear rejection modal
+                closeRejectionModal();
 
                 setResponse(response.message || 'Document rejected successfully');
                 setSuccessModal(true);
 
-                // Refresh the view to get updated lists and counts
                 await handleRefresh();
             } else {
                 setResponse(response.message || 'Failed to reject document');
@@ -1110,262 +1402,6 @@ const QCViewDocuments = () => {
             </div>
         );
     };
-
-    // --- START: MODIFIED LazyPreviewContent ---
-    // This component now renders Details on the left (lg-4) and Preview on the right (lg-8)
-    const LazyPreviewContent = ({ doc }) => {
-        const [previewLoaded, setPreviewLoaded] = useState(false);
-        const [detailsLoaded, setDetailsLoaded] = useState(false);
-
-        useEffect(() => {
-            const previewTimer = setTimeout(() => {
-                setPreviewLoaded(true);
-            }, 1200);
-
-            return () => clearTimeout(previewTimer);
-        }, []);
-
-        useEffect(() => {
-            if (previewLoaded) {
-                const detailsTimer = setTimeout(() => {
-                    setDetailsLoaded(true);
-                }, 1000);
-
-                return () => clearTimeout(detailsTimer);
-            }
-        }, [previewLoaded]);
-
-        // Enhanced PDF/Image viewer
-        const renderPreviewContent = () => {
-            if (!previewLoaded) {
-                return (
-                    <div className="text-center h-100 d-flex flex-column justify-content-center align-items-center"
-                        style={{ minHeight: '400px' }}>
-                        <div className="spinner-border text-primary" role="status">
-                            <span className="visually-hidden">Loading...</span>
-                        </div>
-                        <p className="mt-2">Loading preview...</p>
-                    </div>
-                );
-            }
-
-            if (previewLoading) {
-                return (
-                    <div className="text-center h-100 d-flex flex-column justify-content-center align-items-center"
-                        style={{ minHeight: '400px' }}>
-                        <div className="spinner-border text-primary" role="status">
-                            <span className="visually-hidden">Loading...</span>
-                        </div>
-                        <p className="mt-2">Loading document content...</p>
-                    </div>
-                );
-            }
-
-            if (previewError) {
-                return (
-                    <Alert color="danger" className="m-3 fade-in">
-                        <i className="ri-error-warning-line me-2"></i>
-                        {previewError}
-                    </Alert>
-                );
-            }
-
-            if (previewContent) {
-                const isPDF = previewContent.type.includes('pdf');
-                const isImage = previewContent.type.includes('image');
-
-                return (
-                    // MODIFIED: Removed h-100
-                    <div className="d-flex flex-column"> 
-                        {/* Preview Header */}
-                        <div className="d-flex justify-content-between align-items-center p-3 border-bottom">
-                            <h6 className="mb-0">
-                                <i className="ri-file-text-line me-2"></i>
-                                {previewContent.name}
-                            </h6>
-                            <Button
-                                color="primary"
-                                size="sm"
-                                onClick={handleDownload}
-                            >
-                                <i className="ri-download-line me-1"></i> Download
-                            </Button>
-                        </div>
-
-                        {/* Preview Content */}
-                        <div className="flex-grow-1 preview-content">
-                            {isPDF ? (
-                                // MODIFIED: Removed h-100
-                                <div className="pdf-viewer-container fade-in">
-                                    <iframe
-                                        src={`${previewContent.url}#toolbar=0&navpanes=0&scrollbar=0`}
-                                        title="PDF Viewer"
-                                        // MODIFIED: Removed h-100
-                                        className="w-100" 
-                                        style={{ border: 'none' }}
-                                    />
-                                </div>
-                            ) : isImage ? (
-                                <div className="text-center fade-in p-3 h-100 d-flex align-items-center justify-content-center">
-                                    <img
-                                        src={previewContent.url}
-                                        alt="Document Preview"
-                                        className="img-fluid"
-                                        style={{
-                                            maxHeight: '100%',
-                                            maxWidth: '100%',
-                                            objectFit: 'contain'
-                                        }}
-                                    />
-                                </div>
-                            ) : (
-                                <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
-                                    <i className="ri-file-line display-4 text-muted"></i>
-                                    <h5 className="mt-3">Preview not available</h5>
-                                    <p className="text-muted">
-                                        This file type ({previewContent.type}) cannot be previewed in the browser.
-                                    </p>
-                                    <Button
-                                        color="primary"
-                                        onClick={handleDownload}
-                                        className="mt-2"
-                                    >
-                                        <i className="ri-download-line me-1"></i> Download File
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                );
-            }
-
-            return (
-                <div className="text-center text-muted py-5 h-100 d-flex flex-column justify-content-center fade-in">
-                    <i className="ri-file-line display-4"></i>
-                    <h5 className="mt-3">No document selected</h5>
-                    <p>Select a file from the list to preview it here</p>
-                </div>
-            );
-        };
-
-        return (
-            <Row>
-                {/* --- START: Document Details (SMALLER: lg={4}) --- */}
-                {/* MODIFIED: Added md={12} and stacking margin */}
-                <Col lg={4} md={12} className="mb-3 mb-lg-0">
-                    {!detailsLoaded ? (
-                         // MODIFIED: Removed h-100
-                        <Card className="shadow-sm slide-in-left">
-                            <CardHeader className="bg-light p-3 position-relative card-header border-top-primary">
-                                <h6 className="mb-0 d-flex align-items-center">
-                                    <i className="ri-information-line me-2"></i> Document Details
-                                </h6>
-                            </CardHeader>
-                            <CardBody className="py-5 d-flex justify-content-center">
-                                <Spinner color="primary" />
-                            </CardBody>
-                        </Card>
-                    ) : (
-                         // MODIFIED: Removed h-100
-                        <Card className="shadow-sm slide-in-left">
-                            <CardHeader className="bg-light p-3 position-relative card-header border-top-primary">
-                                <h6 className="mb-0 d-flex align-items-center">
-                                    <i className="ri-information-line me-2"></i> Document Details
-                                </h6>
-                            </CardHeader>
-
-                            {/* Body is now scrollable to fit in the small column */}
-                            {/* MODIFIED: Set maxHeight to 70vh to match preview */}
-                            <CardBody className="py-3 px-4" style={{ overflowY: 'auto', maxHeight: '70vh' }}>
-                                <Row>
-                                    <Col md={12}>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Document Name:</Label>
-                                            <p className="mb-1 text-break">{doc.DocumentName}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Account ID:</Label>
-                                            <p className="mb-1">{doc.Account_Id || 'N/A'}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">RR No:</Label>
-                                            <p className="mb-1">{doc.rr_no || 'N/A'}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Consumer Name:</Label>
-                                            <p className="mb-1">{doc.consumer_name || 'N/A'}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Consumer Address:</Label>
-                                            <p className="mb-1 text-break">{doc.consumer_address || 'N/A'}</p>
-                                        </div>
-                                        
-                                        <hr className="my-3"/>
-
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Division:</Label>
-                                            <p className="mb-1">{doc.division || 'N/A'}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Sub Division:</Label>
-                                            <p className="mb-1">{doc.sub_division || 'N/A'}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Section:</Label>
-                                            <p className="mb-1">{doc.section || 'N/A'}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Uploaded By:</Label>
-                                            <p className="mb-1">{doc.CreatedByUserName || 'N/A'}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Upload Date:</Label>
-                                            <p className="mb-1">{formatDate(doc.CreatedAt)}</p>
-                                        </div>
-                                        <div className="mb-2">
-                                            <Label className="fw-semibold">Meta Tags:</Label>
-                                            <p className="mb-1">{doc.MetaTags || 'N/A'}</p>
-                                        </div>
-                                        {doc.Status === 'Rejected' && doc.RejectionReason && (
-                                            <div className="mb-2">
-                                                <Label className="fw-semibold">Rejection Reason:</Label>
-                                                <p className="mb-1 text-danger">{doc.RejectionReason}</p>
-                                            </div>
-                                        )}
-                                    </Col>
-                                </Row>
-                            </CardBody>
-                        </Card>
-                    )}
-                </Col>
-                {/* --- END: Document Details --- */}
-
-                {/* --- START: Document Preview (BIGGER: lg={8}) --- */}
-                {/* MODIFIED: Added md={12}, removed h-100, d-flex */}
-                <Col lg={8} md={12}>
-                    {/* MODIFIED: Removed h-100, fixed-height-card */}
-                    <Card className="slide-in-right delay-3">
-                        <CardHeader className="bg-light p-3 position-relative"
-                            style={{
-                                borderTop: '3px solid #405189'
-                            }}>
-                            <h5 className="mb-0">Document Preview</h5>
-                        </CardHeader>
-                        {/* MODIFIED: Removed p-0, preview-container */}
-                        <CardBody className="p-0">
-                            {/* MODIFIED: Removed preview-scrollable */}
-                            <div>
-                                {renderPreviewContent()}
-                            </div>
-                        </CardBody>
-                    </Card>
-                </Col>
-                {/* --- END: Document Preview --- */}
-            </Row>
-        );
-    };
-    // --- END: MODIFIED LazyPreviewContent ---
-
 
     return (
         <React.Fragment>
@@ -1672,14 +1708,14 @@ const QCViewDocuments = () => {
                         </CardBody>
                     </Card>
 
-                    {/* --- START: MODIFIED Document Preview Modal --- */}
+                    {/* Document Preview Modal */}
                     <Modal
                         isOpen={previewModal}
                         toggle={closePreview}
                         size="xl"
                         centered
                         className="document-preview-modal"
-                        style={{ maxWidth: '85%' }} // <-- MODIFIED: Made "smaler"
+                        style={{ maxWidth: '85%' }}
                     >
                         <ModalHeader className="bg-primary text-white p-3" toggle={closePreview}>
                             <span className="modal-title text-white">
@@ -1694,14 +1730,22 @@ const QCViewDocuments = () => {
                             </span>
                         </ModalHeader>
                         <ModalBody style={{
-                            maxHeight: '80vh', // <-- MODIFIED: Made taller for new layout
+                            maxHeight: '80vh',
                             overflowY: 'auto',
                             padding: '16px',
                             display: 'flex',
                             flexDirection: 'column'
                         }}>
-                            {/* LazyPreviewContent now renders the new 4/8 layout */}
-                            {currentDoc && <LazyPreviewContent doc={currentDoc} />}
+                            {/* Use the memoized LazyPreviewContent component */}
+                            {currentDoc && (
+                                <LazyPreviewContent 
+                                    doc={currentDoc}
+                                    previewLoading={previewLoading}
+                                    previewError={previewError}
+                                    previewContent={previewContent}
+                                    onDownload={handleDownload}
+                                />
+                            )}
                         </ModalBody>
                         <ModalFooter style={{ borderTop: 'none' }}>
                             <Button color="secondary" onClick={closePreview}>
@@ -1739,62 +1783,20 @@ const QCViewDocuments = () => {
                             )}
                         </ModalFooter>
                     </Modal>
-                    {/* --- END: MODIFIED Document Preview Modal --- */}
 
-
-                    {/* Rejection Reason Modal */}
-                    <Modal isOpen={rejectionModal} toggle={closeRejectionModal} centered>
-                        <ModalHeader className="bg-primary text-white p-3" toggle={closeRejectionModal}>
-                            <span className="modal-title text-white">
-                                <i className="ri-close-circle-line me-2"></i>
-                                Reject Document
-                            </span>
-                        </ModalHeader>
-                        <ModalBody>
-                            <Alert color="warning" className="mb-3">
-                                <i className="ri-alert-line me-2"></i>
-                                Please provide a reason for rejecting this document.
-                            </Alert>
-                            <FormGroup>
-                                <Label for="rejectionReason">Reason for Rejection *</Label>
-                                <Input
-                                    type="textarea"
-                                    id="rejectionReason"
-                                    value={rejectionReason}
-                                    onChange={(e) => setRejectionReason(e.target.value)}
-                                    rows="4"
-                                    placeholder="Enter detailed reason for rejection..."
-                                    required
-                                />
-                            </FormGroup>
-                        </ModalBody>
-                        <ModalFooter style={{ borderTop: 'none' }}>
-                            <Button color="light" onClick={closeRejectionModal}>
-                                Cancel
-                            </Button>
-                            <Button
-                                color="danger"
-                                onClick={() => {
-                                    if (rejectionReason.trim()) {
-                                        handleReject(currentDoc.Version_Id, rejectionReason.trim());
-                                    }
-                                }}
-                                disabled={!rejectionReason.trim() || actionLoading}
-                            >
-                                {actionLoading ? (
-                                    <>
-                                        <Spinner size="sm" className="me-2" />
-                                        Rejecting...
-                                    </>
-                                ) : (
-                                    <>
-                                        <i className="ri-close-line me-1"></i>
-                                        Confirm Rejection
-                                    </>
-                                )}
-                            </Button>
-                        </ModalFooter>
-                    </Modal>
+                    {/* Use the memoized RejectionModal component */}
+                    <RejectionModal
+                        isOpen={rejectionModal}
+                        onClose={closeRejectionModal}
+                        onConfirm={() => {
+                            if (localRejectionReason.trim()) {
+                                handleReject(currentDoc.Version_Id, localRejectionReason.trim());
+                            }
+                        }}
+                        rejectionReason={localRejectionReason}
+                        onRejectionReasonChange={(e) => setLocalRejectionReason(e.target.value)}
+                        actionLoading={actionLoading}
+                    />
                 </Container>
             </div>
 
@@ -1809,7 +1811,6 @@ const QCViewDocuments = () => {
                 errorMsg={response}
             />
 
-            {/* --- MODIFIED <style> block --- */}
             <style>
                 {`
                 .page-content { min-height: 100vh; padding-bottom: 60px; }
@@ -1823,19 +1824,18 @@ const QCViewDocuments = () => {
                 .preview-body { overflow: hidden !important; height: calc(100% - 60px); }
                 .preview-content { overflow: hidden; position: relative; }
                 
-                /* --- MODIFIED CSS FOR PREVIEW MODAL --- */
+                /* PDF Viewer Styles */
                 .pdf-viewer-container { 
                     width: 100%; 
-                    height: 70vh; /* Responsive height */
+                    height: 70vh;
                     overflow: hidden; 
                     background: #f8f9fa;
                 }
                 .pdf-viewer-container iframe { 
                     width: 100%; 
-                    height: 100%; /* Fill the container */
+                    height: 100%;
                     border: none; 
                 }
-                /* --- END OF MODIFICATION --- */
 
                 .document-details { height: 100%; display: flex; flex-direction: column; }
                 .slide-in-left { animation: slideInLeft 0.5s ease-out forwards; opacity: 0; transform: translateX(-20px); }
@@ -1857,11 +1857,9 @@ const QCViewDocuments = () => {
                     .results-container .col-lg-3:first-child .fixed-height-card:first-child,
                     .results-container .col-lg-3:first-child .fixed-height-card:last-child { height: 350px; }
                     
-                    /* --- MODIFIED CSS FOR PREVIEW MODAL (Mobile) --- */
                     .pdf-viewer-container {
-                        height: 60vh; /* Slightly shorter on mobile */
+                        height: 60vh;
                     }
-                    /* --- END OF MODIFICATION --- */
                 }
                 `}
             </style>
