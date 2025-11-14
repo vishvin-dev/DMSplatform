@@ -43,6 +43,8 @@ const applyRoutes = (app) => {
   app.use(backendHelpers.DOCUMENT_AUDIT_LOGS, DocumentsAuditLogs);
 
   app.use(backendHelpers.INDENT, Indent);
+
+  // app.use(backendHelpers.MISReport, MISReport);
   
 };
 
