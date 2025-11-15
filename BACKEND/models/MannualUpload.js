@@ -117,6 +117,7 @@ export const getDocsMetaInfo = async (accountId) => {
                 du.Category_Id,
                 cat.CategoryName,
                 dv.Status_Id AS VersionStatus_Id,  -- Status from version table
+                dsm.StatusName AS VersionStatusName,
 
                 -- Consumer Info
                 cd.consumer_name,
@@ -146,6 +147,10 @@ export const getDocsMetaInfo = async (accountId) => {
                 ON zc.div_code = du.div_code
                 AND zc.sd_code = du.sd_code
                 AND zc.so_code = du.so_code
+                 
+            LEFT JOIN 
+                documentstatusmaster dsm
+                ON dv.Status_Id = dsm.Status_Id
             WHERE 
                 du.Account_Id = ?
             ORDER BY

@@ -656,41 +656,55 @@ export const clickGetPendingDocs = async (so_code) => {
         const [result] = await pool.execute(
             `
                         SELECT 
-                            du.DocumentId,
-                            du.DocumentName AS MainDocumentName,
-                            du.DocumentDescription AS MainDocumentDescription,
-                            du.MetaTags AS MainMetaTags,
-                            du.Account_Id,
-                            du.CreatedByUser_Id,
-                            du.CreatedByUserName,
-                            du.Category_Id,
-                            -- removed du.Status_Id since it's now in documentversion
-                            du.CreatedAt,
-                            du.UpdatedOn,
-                            du.div_code,
-                            du.sd_code,
-                            du.so_code,
-                            c.consumer_name,
-                            c.rr_no,
-                            c.consumer_address,
-                            dv.Version_Id,
-                            dv.VersionLabel,
-                            dv.UploadedByUser_Id,
-                            dv.UploadedAt,
-                            dv.IsLatest,
-                            dv.ChangeReason,
-                            dv.DocumentName AS VersionDocumentName,
-                            dv.DocumentDescription AS VersionDocumentDescription,
-                            dv.MetaTags AS VersionMetaTags,
-                            dv.Status_Id AS VersionStatus_Id
-                        FROM DocumentUpload du
-                        JOIN consumer_details c 
-                            ON du.Account_Id = c.account_id
-                        LEFT JOIN documentversion dv 
-                            ON du.DocumentId = dv.DocumentId
-                        WHERE dv.Status_Id = 1 AND isLatest = 1  -- <-- filter by pending status from version table
-                        AND du.so_code = ?
-                        ORDER BY du.DocumentId DESC, dv.UploadedAt DESC;
+                    du.DocumentId,
+                    du.DocumentName AS MainDocumentName,
+                    du.DocumentDescription AS MainDocumentDescription,
+                    du.MetaTags AS MainMetaTags,
+                    du.Account_Id,
+                    du.CreatedByUser_Id,
+                    du.CreatedByUserName,
+                    du.Category_Id,
+                    du.CreatedAt,
+                    du.UpdatedOn,
+                    du.div_code,
+                    du.sd_code,
+                    du.so_code,
+
+                    -- zone names added (no other change)
+                    zc.zone AS ZoneName,
+                    zc.circle AS CircleName,
+                    zc.division AS DivisionName,
+                    zc.sub_division AS SubDivisionName,
+                    zc.section_office AS SectionOfficeName,
+
+                    c.consumer_name,
+                    c.rr_no,
+                    c.consumer_address,
+
+                    dv.Version_Id,
+                    dv.VersionLabel,
+                    dv.UploadedByUser_Id,
+                    dv.UploadedAt,
+                    dv.IsLatest,
+                    dv.ChangeReason,
+                    dv.DocumentName AS VersionDocumentName,
+                    dv.DocumentDescription AS VersionDocumentDescription,
+                    dv.MetaTags AS VersionMetaTags,
+                    dv.Status_Id AS VersionStatus_Id
+
+                FROM DocumentUpload du
+                JOIN consumer_details c 
+                    ON du.Account_Id = c.account_id
+                LEFT JOIN documentversion dv 
+                    ON du.DocumentId = dv.DocumentId
+
+                -- *** ONLY ADD THIS NEW JOIN ***
+                LEFT JOIN zone_codes zc
+                    ON du.so_code = zc.so_code
+
+                WHERE dv.Status_Id = 1 AND isLatest = 1  
+                AND du.so_code = ?
+                ORDER BY du.DocumentId DESC, dv.UploadedAt DESC;
 
             `,
             [so_code]
@@ -708,34 +722,50 @@ export const clickGetApprovedDocs = async (User_Id, so_code) => {
         const [result] = await pool.execute(
             `
                 SELECT 
-                du.DocumentId,
-                du.DocumentName,
-                du.DocumentDescription,
-                du.MetaTags,
-                du.Account_Id,
-                du.CreatedByUser_Id,
-                du.CreatedByUserName,
-                du.Category_Id,
-                dv.Version_Id,
-                dwh.ActionByUser_Id,
-                dwh.ActionTime,
-                dwh.Comment,
-                c.consumer_name,
-                c.rr_no,
-                c.consumer_address
-            FROM DocumentUpload du
-            JOIN DocumentWorkflowHistory dwh 
-                ON du.DocumentId = dwh.DocumentId
-                AND dwh.IsLatest = 1
-                AND dwh.Status_Id = 2           -- Approved in workflow
-            JOIN DocumentVersion dv 
-                ON dwh.Version_Id = dv.Version_Id
-                AND dv.Status_Id = 2            -- Version also approved
-            JOIN consumer_details c 
-                ON du.Account_Id = c.account_id
-            WHERE dwh.ActionByUser_Id = ?
-              AND du.so_code = ?
-            ORDER BY dwh.ActionTime DESC;
+                    du.DocumentId,
+                    du.DocumentName,
+                    du.DocumentDescription,
+                    du.MetaTags,
+                    du.Account_Id,
+                    du.CreatedByUser_Id,
+                    du.CreatedByUserName,
+                    du.Category_Id,
+
+                    -- added zone names
+                    zc.zone AS ZoneName,
+                    zc.circle AS CircleName,
+                    zc.division AS DivisionName,
+                    zc.sub_division AS SubDivisionName,
+                    zc.section_office AS SectionOfficeName,
+
+                    dv.Version_Id,
+                    dwh.ActionByUser_Id,
+                    dwh.ActionTime,
+                    dwh.Comment,
+                    c.consumer_name,
+                    c.rr_no,
+                    c.consumer_address,
+
+                    dv.uploadedAt AS uploadedAt
+
+                FROM DocumentUpload du
+                JOIN DocumentWorkflowHistory dwh 
+                    ON du.DocumentId = dwh.DocumentId
+                    AND dwh.IsLatest = 1
+                    AND dwh.Status_Id = 2           
+                JOIN DocumentVersion dv 
+                    ON dwh.Version_Id = dv.Version_Id
+                    AND dv.Status_Id = 2
+                JOIN consumer_details c 
+                    ON du.Account_Id = c.account_id
+
+                -- added zone join (only this)
+                LEFT JOIN zone_codes zc
+                    ON du.so_code = zc.so_code
+
+                WHERE dwh.ActionByUser_Id = ?
+                AND du.so_code = ?
+                ORDER BY dwh.ActionTime DESC;
             `,
             [User_Id, so_code]
         );
@@ -751,7 +781,7 @@ export const clickGetRejectedDocs = async (User_Id, so_code) => {
     try {
         const [result] = await pool.execute(
             `
-            SELECT 
+             SELECT 
                 dv.Version_Id,
                 dv.DocumentId,
                 dv.DocumentName,
@@ -761,6 +791,14 @@ export const clickGetRejectedDocs = async (User_Id, so_code) => {
                 du.CreatedByUser_Id,
                 du.CreatedByUserName,
                 du.Category_Id,
+
+                -- added zone names
+                zc.zone AS ZoneName,
+                zc.circle AS CircleName,
+                zc.division AS DivisionName,
+                zc.sub_division AS SubDivisionName,
+                zc.section_office AS SectionOfficeName,
+
                 drq.Rejection_Id,
                 drq.RejectedByUser_Id,
                 drq.RejectedOn,
@@ -768,7 +806,9 @@ export const clickGetRejectedDocs = async (User_Id, so_code) => {
                 dv.Version_Id,
                 c.consumer_name,
                 c.rr_no,
-                c.consumer_address
+                c.consumer_address,
+                dv.uploadedAt AS uploadedAt
+
             FROM documentrejectionqueue drq
             JOIN documentversion dv 
                 ON drq.Version_Id = dv.Version_Id
@@ -776,6 +816,11 @@ export const clickGetRejectedDocs = async (User_Id, so_code) => {
                 ON dv.DocumentId = du.DocumentId
             JOIN consumer_details c 
                 ON du.Account_Id = c.account_id
+
+            -- added only this join
+            LEFT JOIN zone_codes zc
+                ON du.so_code = zc.so_code
+
             WHERE drq.Status_Id = 3
             AND drq.RejectedByUser_Id = ?
             AND drq.IsResolved = 0

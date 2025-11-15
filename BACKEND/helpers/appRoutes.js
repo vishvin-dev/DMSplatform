@@ -14,6 +14,7 @@ import DocumentCategory from "../Routes/DocumentCategory/DocumentCategory.js"
 import Qcupload from "../Routes/Qcupload/Qcupload.js"
 import DocumentsAuditLogs from "../Routes/DocumentsAuditLogs/DocumentsAuditLogs.js"
 import Indent from "../Routes/Indent/Indent.js"
+import MISReport from "../Routes/MISReport/MISReport.js"
 
 
 // Ensure uploads directory exists
@@ -43,6 +44,8 @@ const applyRoutes = (app) => {
   app.use(backendHelpers.DOCUMENT_AUDIT_LOGS, DocumentsAuditLogs);
 
   app.use(backendHelpers.INDENT, Indent);
+
+  app.use(backendHelpers.MISREPORT, MISReport);
   
 };
 
