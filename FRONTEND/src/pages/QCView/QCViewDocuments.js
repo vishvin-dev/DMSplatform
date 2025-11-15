@@ -457,6 +457,44 @@ const QCViewDocuments = () => {
         }
     };
 
+    // *** MODIFIED ***
+    // Enhanced document mapper to handle different field names from different APIs
+    const mapDocumentFields = (doc, tab) => {
+        // For pending documents (flagId: 2)
+        if (tab === 'pending') {
+            return {
+                ...doc,
+                DocumentName: doc.VersionDocumentName || doc.MainDocumentName || doc.DocumentName,
+                division: doc.DivisionName || doc.division,
+                sub_division: doc.SubDivisionName || doc.sub_division,
+                section: doc.SectionOfficeName || doc.section,
+                CreatedAt: doc.UploadedAt || doc.CreatedAt
+            };
+        }
+        // For approved documents (flagId: 3)
+        else if (tab === 'approved') {
+            return {
+                ...doc,
+                division: doc.DivisionName || doc.division,
+                sub_division: doc.SubDivisionName || doc.sub_division,
+                section: doc.SectionOfficeName || doc.section,
+                CreatedAt: doc.ActionTime || doc.CreatedAt
+            };
+        }
+        // For rejected documents (flagId: 4)
+        else if (tab === 'rejected') {
+            return {
+                ...doc,
+                division: doc.DivisionName || doc.division,
+                sub_division: doc.SubDivisionName || doc.sub_division,
+                section: doc.SectionOfficeName || doc.section,
+                CreatedAt: doc.RejectedOn || doc.CreatedAt,
+                RejectionReason: doc.RejectionComment || doc.RejectionReason
+            };
+        }
+        return doc;
+    };
+
     // Fetch documents for a specific tab
     const fetchDocuments = async (tab, userData) => {
         let flagId;
@@ -499,10 +537,12 @@ const QCViewDocuments = () => {
 
             if (response.status === "success") {
                 const docs = response.results || [];
-                setDocuments(docs);
-                setFilteredDocuments(docs);
+                // *** MODIFIED: Map document fields to ensure consistent field names ***
+                const mappedDocs = docs.map(doc => mapDocumentFields(doc, tab));
+                setDocuments(mappedDocs);
+                setFilteredDocuments(mappedDocs);
                 if (tab === 'pending') {
-                    setDataBk(docs); // Update the backup for pending docs
+                    setDataBk(mappedDocs); // Update the backup for pending docs
                 }
             } else {
                 setResponse(response.message || `Failed to fetch ${tab} documents`);
@@ -1302,17 +1342,18 @@ const QCViewDocuments = () => {
                                         
                                         <hr className="my-3"/>
 
+                                        {/* *** MODIFIED: Using the mapped field names *** */}
                                         <div className="mb-2">
                                             <Label className="fw-semibold">Division:</Label>
-                                            <p className="mb-1">{doc.division || 'N/A'}</p>
+                                            <p className="mb-1">{doc.division || doc.DivisionName || 'N/A'}</p>
                                         </div>
                                         <div className="mb-2">
                                             <Label className="fw-semibold">Sub Division:</Label>
-                                            <p className="mb-1">{doc.sub_division || 'N/A'}</p>
+                                            <p className="mb-1">{doc.sub_division || doc.SubDivisionName || 'N/A'}</p>
                                         </div>
                                         <div className="mb-2">
                                             <Label className="fw-semibold">Section:</Label>
-                                            <p className="mb-1">{doc.section || 'N/A'}</p>
+                                            <p className="mb-1">{doc.section || doc.SectionOfficeName || 'N/A'}</p>
                                         </div>
                                         <div className="mb-2">
                                             <Label className="fw-semibold">Uploaded By:</Label>
@@ -1324,12 +1365,12 @@ const QCViewDocuments = () => {
                                         </div>
                                         <div className="mb-2">
                                             <Label className="fw-semibold">Meta Tags:</Label>
-                                            <p className="mb-1">{doc.MetaTags || 'N/A'}</p>
+                                            <p className="mb-1">{doc.MetaTags || doc.VersionMetaTags || 'N/A'}</p>
                                         </div>
-                                        {doc.Status === 'Rejected' && doc.RejectionReason && (
+                                        {doc.Status === 'Rejected' && (doc.RejectionReason || doc.RejectionComment) && (
                                             <div className="mb-2">
                                                 <Label className="fw-semibold">Rejection Reason:</Label>
-                                                <p className="mb-1 text-danger">{doc.RejectionReason}</p>
+                                                <p className="mb-1 text-danger">{doc.RejectionReason || doc.RejectionComment}</p>
                                             </div>
                                         )}
                                     </Col>
