@@ -10,14 +10,17 @@ import { getDocumentDropdowns, postDocumentManualUpload, qcReviewed, view, getAl
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
 import '../AddDocuments/AddDocuments.css';
+import axios from 'axios';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB in bytes
+
+
+const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
 
 const DocumentManagement = () => {
     // Modal states
     const [modalOpen, setModalOpen] = useState(false);
-    const [statusModalOpen, setStatusModalOpen] = useState(false); // This seems unused, replaced by specific modals
-    const [currentStatus, setCurrentStatus] = useState('');
+    const [statusModalOpen, setStatusModalOpen] = useState(false);
     const [editMode, setEditMode] = useState(false);
     const [currentDocument, setCurrentDocument] = useState(null);
     const [hasSearched, setHasSearched] = useState(false);
@@ -51,19 +54,17 @@ const DocumentManagement = () => {
         pending: 0,
         rejected: 0
     });
-    
+
     // *** ADDED/MODIFIED STATES ***
     const [approvedModalOpen, setApprovedModalOpen] = useState(false);
     const [rejectedModalOpen, setRejectedModalOpen] = useState(false);
-    const [pendingModalOpen, setPendingModalOpen] = useState(false); // <-- ADDED
-    
+    const [pendingCountModalOpen, setPendingCountModalOpen] = useState(false); // <-- ADDED FOR SIMPLE COUNT
+
     const [approvedDocuments, setApprovedDocuments] = useState([]);
     const [rejectedDocuments, setRejectedDocuments] = useState([]);
-    const [pendingDocuments, setPendingDocuments] = useState([]); // <-- ADDED
 
     const [selectedFile, setSelectedFile] = useState(null); // Used for Approved
     const [selectedRejectedFile, setSelectedRejectedFile] = useState(null); // Used for Rejected
-    const [selectedPendingFile, setSelectedPendingFile] = useState(null); // <-- ADDED
     // *** END OF ADDED/MODIFIED STATES ***
 
     const [previewContent, setPreviewContent] = useState(null);
@@ -91,55 +92,93 @@ const DocumentManagement = () => {
 
     document.title = `Document Upload | DMS`;
 
-    // Handle document re-upload
     const handleReuploadSubmit = async () => {
-        if (!newDocumentFile || !reuploadDocument || !changeReason) {
-            setResponse('Please provide all required fields');
+    if (!newDocumentFile || !reuploadDocument || !changeReason) {
+        setResponse('Please provide all required fields');
+        setErrorModal(true);
+        return;
+    }
+
+    try {
+        setUploadLoading(true);
+        const authUser = JSON.parse(sessionStorage.getItem("authUser"));
+        const userId = authUser?.user?.User_Id;
+        const userName = authUser?.user?.Email || 'Admin';
+
+        // Debug: Check what data we have
+        console.log("Reupload Document Data:", reuploadDocument);
+        console.log("Account_Id from document:", reuploadDocument.Account_Id);
+
+        const formData = new FormData();
+
+        // Use Account_Id from document, fallback to account search values
+        const accountId = reuploadDocument.Account_Id || account_id || accountSearchInput;
+        if (!accountId) {
+            setResponse('Account ID is required for re-upload');
             setErrorModal(true);
             return;
         }
 
-        try {
-            setUploadLoading(true);
-            const authUser = JSON.parse(sessionStorage.getItem("authUser"));
-            const userId = authUser?.user?.User_Id;
-            const userDivCode = authUser?.user?.zones?.[0]?.div_code || '';
+        // Match the exact structure from your image
+        formData.append('Account_Id', accountId);
+        formData.append('mannualFile', newDocumentFile);
+        formData.append('DocumentName', reuploadDocument.DocumentName || reuploadDocument.name || 'Reuploaded Document');
+        formData.append('DocumentDescription', reuploadDocument.DocumentDescription || reuploadDocument.description || 'Reuploaded after rejection');
+        formData.append('MetaTags', reuploadDocument.MetaTags || reuploadDocument.metaTags || 'reupload,document');
+        formData.append('CreatedByUser_Id', userId);
+        formData.append('CreatedByUserName', userName);
+        formData.append('Category_Id', reuploadDocument.Category_Id || reuploadDocument.category || '1');
+        formData.append('Status_Id', '1'); 
+        formData.append('div_code', reuploadDocument.div_code || authUser?.user?.zones?.[0]?.div_code || '43005');
+        formData.append('sd_code', reuploadDocument.sd_code || authUser?.user?.zones?.[0]?.sd_code || 'AURAD');
+        formData.append('so_code', reuploadDocument.so_code || authUser?.user?.zones?.[0]?.so_code || 'CHINTAKI');
+        formData.append('Role_Id', '1');
+        formData.append('ChangeReason', changeReason);
 
+        console.log("Reupload FormData:", {
+            Account_id: accountId,
+            DocumentName: reuploadDocument.DocumentName || reuploadDocument.name || 'Reuploaded Document',
+            DocumentDescription: reuploadDocument.DocumentDescription || reuploadDocument.description || 'Reuploaded after rejection',
+            MetaTags: reuploadDocument.MetaTags || reuploadDocument.metaTags || 'reupload,document',
+            CreatedByUser_Id: userId,
+            CreatedByUserName: userName,
+            Category_Id: reuploadDocument.Category_Id || reuploadDocument.category || '1',
+            Status_Id: '1',
+            div_code: reuploadDocument.div_code || authUser?.user?.zones?.[0]?.div_code || '43005',
+            sd_code: reuploadDocument.sd_code || authUser?.user?.zones?.[0]?.sd_code || 'AURAD',
+            so_code: reuploadDocument.so_code || authUser?.user?.zones?.[0]?.so_code || 'CHINTAKI',
+            Role_Id: '1',
+            ChangeReason: changeReason,
+            hasFile: !!newDocumentFile
+        });
 
-            const formData = new FormData();
-            formData.append('ReUploadDocumentId', reuploadDocument.DocumentId);
-            formData.append('ChangeReason', changeReason);
-            formData.append('CreatedByUser_Id', userId);
-            formData.append('mannualFile', newDocumentFile);
-            formData.append("Status_Id", "1");
-            formData.append('div_code', userDivCode);
+        const response = await postDocumentManualUpload(formData);
 
-            const response = await postDocumentManualUpload(formData);
-
-            if (response?.status === 'success') {
-                setResponse(response.message || 'Document re-uploaded successfully!');
-                setSuccessModal(true);
-                await fetchRejectedDocuments();
-            } else {
-                setResponse(response?.message || 'Failed to re-upload document');
-                setErrorModal(true);
-            }
-        } catch (error) {
-            console.error('Re-upload failed:', error);
-            setResponse(error.response?.data?.message ||
-                error.message ||
-                'Error re-uploading document. Please try again.');
+        if (response?.status === 'success') {
+            setResponse(response.message || 'Document re-uploaded successfully!');
+            setSuccessModal(true);
+            await fetchRejectedDocuments();
+            await fetchDocumentCounts();
+        } else {
+            setResponse(response?.message || 'Failed to re-upload document');
             setErrorModal(true);
-        } finally {
-            setUploadLoading(false);
-            setShowReuploadModal(false);
-            setReuploadDocument(null);
-            setNewDocumentFile(null);
-            setNewDocumentPreview(null);
-            setReuploadOldDocPreview(null);
-            setChangeReason('');
         }
+    } catch (error) {
+        console.error('Re-upload failed:', error);
+        setResponse(error.response?.data?.message ||
+            error.message ||
+            'Error re-uploading document. Please try again.');
+        setErrorModal(true);
+    } finally {
+        setUploadLoading(false);
+        setShowReuploadModal(false);
+        setReuploadDocument(null);
+        setNewDocumentFile(null);
+        setNewDocumentPreview(null);
+        setReuploadOldDocPreview(null);
+        setChangeReason('');
     }
+}
 
     // Get user level and access data from session storage
     useEffect(() => {
@@ -415,7 +454,6 @@ const DocumentManagement = () => {
     const handleApprovedClick = () => {
         setSelectedFile(null);
         setSelectedRejectedFile(null);
-        setSelectedPendingFile(null); // <-- ADDED
         setPreviewContent(null);
         setPreviewError(null);
         setApprovedModalOpen(true);
@@ -426,7 +464,6 @@ const DocumentManagement = () => {
     const handleRejectedClick = () => {
         setSelectedFile(null);
         setSelectedRejectedFile(null);
-        setSelectedPendingFile(null); // <-- ADDED
         setPreviewContent(null);
         setPreviewError(null);
         setRejectedModalOpen(true);
@@ -436,14 +473,8 @@ const DocumentManagement = () => {
 
     // *** MODIFIED FUNCTION ***
     const handlePendingClick = () => {
-        setSelectedFile(null);
-        setSelectedRejectedFile(null);
-        setSelectedPendingFile(null);
-        setPreviewContent(null);
-        setPreviewError(null);
-        setPendingModalOpen(true); // <-- CHANGED
-        fetchPendingDocuments();  // <-- ADDED
-        fetchDocumentCounts();
+        fetchDocumentCounts(); // Refresh the count
+        setPendingCountModalOpen(true); // Open the simple count modal
     };
 
     // Simplified Validation Schema
@@ -499,7 +530,7 @@ const DocumentManagement = () => {
                 qcReviewed(pendingParams) // <-- ADDED
             ]);
             // --- END OF ADDED CALL ---
-            
+
             setDocumentCounts({
                 approved: approvedResponse?.results?.[0]?.ApprovedCount || 0,
                 pending: pendingResponse?.results?.[0]?.PendingDocsCount || 0, // <-- MODIFIED
@@ -529,8 +560,9 @@ const DocumentManagement = () => {
 
             if (response?.status === 'success' && response?.results) {
                 const transformedDocuments = response.results.map(doc => ({
-                    id: doc.DocumentId,
+                    id: doc.DocumentId + '_' + doc.Version_Id, // Unique ID combining DocumentId and Version_Id
                     DocumentId: doc.DocumentId,
+                    Version_Id: doc.Version_Id, // <-- ADD THIS CRITICAL FIELD
                     name: doc.documentName,
                     type: getFileTypeFromPath(doc.FilePath),
                     category: doc.DocumentType || getDocumentTypeFromPath(doc.FilePath),
@@ -544,7 +576,9 @@ const DocumentManagement = () => {
                     section: doc.section,
                     rr_no: doc.rr_no,
                     consumer_name: doc.consumer_name,
-                    consumer_address: doc.consumer_address
+                    consumer_address: doc.consumer_address,
+                    versionLabel: doc.VersionLabel || '1.0', // <-- ADD version info
+                    isLatest: doc.IsLatest || true
                 }));
 
                 setApprovedDocuments(transformedDocuments);
@@ -567,20 +601,21 @@ const DocumentManagement = () => {
             setLoading(true);
             const authUser = JSON.parse(sessionStorage.getItem("authUser"));
             const userId = authUser?.user?.User_Id;
-            const so_code = authUser?.user?.zones?.[0]?.so_code || ''; // Get so_code from session
+            const so_code = authUser?.user?.zones?.[0]?.so_code || ''; 
 
             const params = {
-                flagId: 4, // Use flagId 4 for rejected data
+                flagId: 4, 
                 User_Id: userId,
-                so_code: so_code // Add so_code
+                so_code: so_code 
             };
 
             const response = await qcReviewed(params);
 
             if (response?.status === 'success' && response?.results) {
                 const transformedDocuments = response.results.map(doc => ({
-                    id: doc.DocumentId,
+                    id: doc.DocumentId + '_' + doc.Version_Id, 
                     DocumentId: doc.DocumentId,
+                    Version_Id: doc.Version_Id, 
                     name: doc.DocumentName || `Document_${doc.DocumentId}`,
                     type: getFileTypeFromPath(doc.FilePath),
                     category: doc.DocumentType || getDocumentTypeFromPath(doc.FilePath),
@@ -596,7 +631,18 @@ const DocumentManagement = () => {
                     consumer_name: doc.consumer_name,
                     consumer_address: doc.consumer_address,
                     Rejection_Id: doc.Rejection_Id,
-                    RejectionComment: doc.RejectionComment
+                    RejectionComment: doc.RejectionComment,
+                    versionLabel: doc.VersionLabel || '1.0', // <-- ADD version info
+                    isLatest: doc.IsLatest || true,
+                    // ADD THESE FIELDS FOR REUPLOAD
+                    Account_Id: doc.Account_Id, // <-- ADD THIS
+                    DocumentName: doc.DocumentName, // <-- ADD THIS
+                    DocumentDescription: doc.DocumentDescription, // <-- ADD THIS
+                    MetaTags: doc.MetaTags, // <-- ADD THIS
+                    Category_Id: doc.Category_Id, // <-- ADD THIS
+                    div_code: doc.div_code, // <-- ADD THIS
+                    sd_code: doc.sd_code, // <-- ADD THIS
+                    so_code: doc.so_code // <-- ADD THIS
                 }));
                 setRejectedDocuments(transformedDocuments);
             } else {
@@ -611,56 +657,6 @@ const DocumentManagement = () => {
             setLoading(false);
         }
     };
-
-    // *** NEW FUNCTION ***
-    const fetchPendingDocuments = async () => {
-        try {
-            setLoading(true);
-            const authUser = JSON.parse(sessionStorage.getItem("authUser"));
-            const userId = authUser?.user?.User_Id;
-            const so_code = authUser?.user?.zones?.[0]?.so_code || '';
-
-            const params = {
-                flagId: 6, // Following pattern (1/2, 3/4, 5/6)
-                User_Id: userId,
-                so_code: so_code
-            };
-
-            const response = await qcReviewed(params);
-
-            if (response?.status === 'success' && response?.results) {
-                const transformedDocuments = response.results.map(doc => ({
-                    id: doc.DocumentId,
-                    DocumentId: doc.DocumentId,
-                    name: doc.DocumentName || `Document_${doc.DocumentId}`,
-                    type: getFileTypeFromPath(doc.FilePath),
-                    category: doc.DocumentType || getDocumentTypeFromPath(doc.FilePath),
-                    createdAt: new Date(doc.CreatedAt).toLocaleDateString(), // Assuming CreatedAt for pending
-                    createdBy: doc.CreatedByUserName, // Assuming CreatedByUserName
-                    description: doc.DocumentDescription,
-                    status: doc.StatusName,
-                    FilePath: doc.FilePath,
-                    division: doc.division,
-                    sub_division: doc.sub_division,
-                    section: doc.section,
-                    rr_no: doc.rr_no,
-                    consumer_name: doc.consumer_name,
-                    consumer_address: doc.consumer_address,
-                }));
-                setPendingDocuments(transformedDocuments);
-            } else {
-                setPendingDocuments([]);
-            }
-        } catch (error) {
-            console.error("Error fetching pending documents:", error);
-            setPendingDocuments([]);
-            setResponse('Error fetching pending documents');
-            setErrorModal(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-    // *** END OF NEW FUNCTION ***
 
     const getFileTypeFromPath = (filePath) => {
         if (!filePath) return 'application/octet-stream';
@@ -689,46 +685,216 @@ const DocumentManagement = () => {
         return 'Additional Document';
     };
 
-    // NOTE: This function still uses the broken 'view' helper.
-    // You should replace this with the 'axios' logic from your other files.
+    // *** MODIFIED: handleFileSelect (using direct axios with Version_Id) ***
     const handleFileSelect = async (file) => {
-        console.log("File", file.DocumentId)
-        setSelectedFile(file); // Keep this for approved
-        setSelectedRejectedFile(file); // Keep this for rejected
-        setSelectedPendingFile(file); // <-- ADDED
+        console.log('📄 File selected:', file);
+        console.log('🔑 Version_Id to be sent:', file.Version_Id);
+
+        setSelectedFile(file);
         setPreviewLoading(true);
         setPreviewContent(null);
         setPreviewError(null);
 
         try {
-            const response = await view(
-                {
-                    flagId: 2,
-                    DocumentId: file.DocumentId,
-                },
-                {
-                    responseType: "blob",
-                    headers: { "Content-Type": "application/json" },
-                    transformResponse: [(data, headers) => ({ data, headers })],
-                }
+            if (!file.Version_Id) {
+                throw new Error("Version_Id is required for document preview");
+            }
+
+            const requestPayload = {
+                flagId: 2,
+                Version_Id: file.Version_Id,
+                requestUserName: userName,
+            };
+
+            console.log('🚀 API Request Payload:', requestPayload);
+
+            // Use direct axios call
+            const response = await axios.post(
+                VIEW_DOCUMENT_URL,
+                requestPayload,
+                { responseType: "blob" } // Critical: ensures data is treated as a blob
             );
 
-            const blob = response.data;
-            const fileUrl = URL.createObjectURL(blob);
-            const fileType = blob.type.split('/')[1] || file.type || 'unknown';
+            // The blob is in response.data
+            const receivedBlob = response;
+
+            if (!(receivedBlob instanceof Blob)) {
+                console.error('❌ Response data was not a Blob.', receivedBlob);
+                throw new Error("Received invalid file data from server.");
+            }
+
+            console.log('📦 Received Blob. Type:', receivedBlob.type, 'Size:', receivedBlob.size);
+
+            if (receivedBlob.size === 0) {
+                throw new Error("Received empty file data (0 bytes).");
+            }
+
+            let blobToView;
+
+            // Check if the blob is an error message (as JSON)
+            if (receivedBlob.type === 'application/json') {
+                console.error('❌ Server returned an error as a JSON blob. Reading error...');
+                const errorText = await receivedBlob.text();
+                let errorMessage;
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.message || errorJson.error || "Server returned an error.";
+                } catch (e) {
+                    errorMessage = errorText || "Failed to load document: Unknown server error.";
+                }
+                console.error('Error content:', errorText);
+                throw new Error(errorMessage);
+            }
+
+            // If the blob type is not PDF, force it.
+            // This handles 'application/octet-stream' or empty type.
+            if (receivedBlob.type !== 'application/pdf') {
+                console.warn(`⚠️ Blob type is '${receivedBlob.type}'. Forcing 'application/pdf'.`);
+                blobToView = new Blob([receivedBlob], { type: 'application/pdf' });
+            } else {
+                blobToView = receivedBlob;
+            }
+
+            // Create object URL for the valid blob
+            const fileUrl = URL.createObjectURL(blobToView);
+            console.log('🔗 Object URL created:', fileUrl.substring(0, 50) + '...');
 
             setPreviewContent({
                 url: fileUrl,
-                type: fileType,
-                name: file.name
+                type: 'application/pdf', // Always use this for the iframe
+                name: file.name,
+                blob: blobToView
             });
+
+            console.log('✅ Preview content set successfully');
+
         } catch (error) {
-            console.error("Preview error:", error);
-            setPreviewError(error.message || "Failed to load preview");
+            console.error("❌ Preview error:", error);
+            // Handle axios errors
+            let errorMessage = error.message;
+            if (error.response && error.response.data) {
+                // If the error response was *also* a blob (e.g., json error), try to read it
+                if (error.response.data instanceof Blob) {
+                    try {
+                        const errorText = await error.response.data.text();
+                        const errorJson = JSON.parse(errorText);
+                        errorMessage = errorJson.message || errorJson.error || "Server error";
+                    } catch (e) {
+                        errorMessage = "Failed to load document (unreadable error response).";
+                    }
+                }
+            }
+
+            setPreviewError(errorMessage);
+            setResponse(errorMessage);
+            setErrorModal(true);
         } finally {
             setPreviewLoading(false);
         }
     };
+    // *** END OF MODIFIED handleFileSelect ***
+
+    // *** MODIFIED: handleDownload (using direct axios with Version_Id) ***
+    const handleDownload = async (file) => {
+        try {
+            console.log('📥 Starting download for Version_Id:', file.Version_Id);
+
+            if (!file.Version_Id) {
+                throw new Error("Version_Id is required for download");
+            }
+
+            const requestPayload = {
+                flagId: 2,
+                Version_Id: file.Version_Id,
+                requestUserName: userName,
+            };
+
+            console.log('🚀 Download API Request:', requestPayload);
+
+            // Use direct axios call
+            const response = await axios.post(
+                VIEW_DOCUMENT_URL,
+                requestPayload,
+                { responseType: "blob" } // Critical: ensures data is treated as a blob
+            );
+
+            // The blob is in response.data
+            const receivedBlob = response;
+
+            if (!(receivedBlob instanceof Blob)) {
+                console.error('❌ Download response was not a Blob.', receivedBlob);
+                throw new Error("Received invalid file data from server.");
+            }
+
+            console.log('📥 Download Blob. Type:', receivedBlob.type, 'Size:', receivedBlob.size);
+
+            if (receivedBlob.size === 0) {
+                throw new Error("Received empty file for download (0 bytes).");
+            }
+
+            // Check for JSON error blob
+            if (receivedBlob.type === 'application/json') {
+                console.error('❌ Server returned an error as a JSON blob. Reading error...');
+                const errorText = await receivedBlob.text();
+                let errorMessage;
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.message || errorJson.error || "Server returned an error.";
+                } catch (e) {
+                    errorMessage = errorText || "Failed to download: Unknown server error.";
+                }
+                console.error('Error content:', errorText);
+                throw new Error(errorMessage);
+            }
+
+            let blobToDownload;
+
+            if (receivedBlob.type !== 'application/pdf') {
+                console.warn(`⚠️ Download: Blob type is '${receivedBlob.type}'. Forcing 'application/pdf'.`);
+                blobToDownload = new Blob([receivedBlob], { type: 'application/pdf' });
+            } else {
+                blobToDownload = receivedBlob;
+            }
+
+            // Create download link
+            const url = URL.createObjectURL(blobToDownload);
+            const link = document.createElement("a");
+            link.href = url;
+
+            // Create filename
+            const fileExtension = 'pdf'; // Forcing .pdf as it's the only type we handle
+            const fileName = `${file.name || 'document'}_v${file.versionLabel || file.Version_Id}.${fileExtension}`;
+
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Clean up URL after download
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 100);
+
+            console.log('✅ Download completed successfully');
+
+        } catch (err) {
+            console.error("❌ Download failed:", err);
+            let errorMessage = err.message;
+            // Try to read error from blob if it exists
+            if (err.response && err.response.data && err.response.data instanceof Blob) {
+                try {
+                    const errorText = await err.response.data.text();
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.message || errorJson.error || "Server error";
+                } catch (e) {
+                    errorMessage = "Failed to download (unreadable error response).";
+                }
+            }
+            setResponse(errorMessage);
+            setErrorModal(true);
+        }
+    };
+    // *** END OF MODIFIED handleDownload ***
 
     const handleRejectedFileSelect = async (file) => {
         setSelectedRejectedFile(file);
@@ -736,16 +902,7 @@ const DocumentManagement = () => {
         await handleFileSelect(file);
     };
 
-    // *** NEW FUNCTION ***
-    const handlePendingFileSelect = async (file) => {
-        setSelectedPendingFile(file);
-        setSelectedFile(null);
-        setSelectedRejectedFile(null);
-        await handleFileSelect(file);
-    };
-    // *** END OF NEW FUNCTION ***
-
-    // NOTE: This function also uses the broken 'view' helper.
+    // *** MODIFIED: handleReuploadClick (using direct axios with Version_Id) ***
     const handleReuploadClick = async (doc) => {
         setReuploadDocument(doc);
         setSelectedRejectedFile(doc);
@@ -753,34 +910,71 @@ const DocumentManagement = () => {
         setReuploadFileLoading(true);
 
         try {
-            const response = await view(
-                {
-                    flagId: 2,
-                    DocumentId: doc.DocumentId,
-                },
-                {
-                    responseType: "blob",
-                    headers: { "Content-Type": "application/json" },
-                    transformResponse: [(data, headers) => ({ data, headers })],
-                }
+            console.log('🔑 Reupload - Version_Id to be sent:', doc.Version_Id);
+
+            if (!doc.Version_Id) {
+                throw new Error("Version_Id is required for document preview");
+            }
+
+            const requestPayload = {
+                flagId: 2,
+                Version_Id: doc.Version_Id,
+                requestUserName: userName,
+            };
+
+            const response = await axios.post(
+                VIEW_DOCUMENT_URL,
+                requestPayload,
+                { responseType: "blob" }
             );
 
-            const blob = response.data;
-            const fileUrl = URL.createObjectURL(blob);
-            const fileType = blob.type.split('/')[1] || doc.type || 'unknown';
+            const receivedBlob = response;
+
+            if (!(receivedBlob instanceof Blob)) {
+                throw new Error("Received invalid file data from server.");
+            }
+
+            if (receivedBlob.size === 0) {
+                throw new Error("Received empty file data (0 bytes).");
+            }
+
+            let blobToView;
+
+            if (receivedBlob.type === 'application/json') {
+                const errorText = await receivedBlob.text();
+                let errorMessage;
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.message || errorJson.error || "Server returned an error.";
+                } catch (e) {
+                    errorMessage = errorText || "Failed to load document: Unknown server error.";
+                }
+                throw new Error(errorMessage);
+            }
+
+            if (receivedBlob.type !== 'application/pdf') {
+                blobToView = new Blob([receivedBlob], { type: 'application/pdf' });
+            } else {
+                blobToView = receivedBlob;
+            }
+
+            const fileUrl = URL.createObjectURL(blobToView);
 
             setReuploadOldDocPreview({
                 url: fileUrl,
-                type: fileType,
+                type: 'application/pdf',
                 name: doc.name
             });
         } catch (error) {
             console.error("Preview error:", error);
             setReuploadOldDocPreview(null);
+            setResponse(error.message || "Failed to load document preview");
+            setErrorModal(true);
         } finally {
             setReuploadFileLoading(false);
         }
     };
+    // *** END OF MODIFIED handleReuploadClick ***
 
     // Formik form setup - Simplified for single file upload
     const formik = useFormik({
@@ -1137,6 +1331,32 @@ const DocumentManagement = () => {
                     onCloseClick={() => setErrorModal(false)}
                     errorMsg={response || 'An error occurred'}
                 />
+
+                {/* --- ADDED: Simple Modal for Pending Count --- */}
+                <Modal
+                    isOpen={pendingCountModalOpen}
+                    toggle={() => setPendingCountModalOpen(false)}
+                    centered
+                >
+                    <ModalHeader
+                        className="bg-primary text-white p-3"
+                        toggle={() => setPendingCountModalOpen(false)}
+                    >
+                        <span className="modal-title text-white">Pending Documents</span>
+                    </ModalHeader>
+                    <ModalBody className="text-center p-4">
+                        <h4>
+                            You have <Badge color="warning" pill className="fs-5 px-3 py-2">{documentCounts.pending}</Badge> pending document(s).
+                        </h4>
+                        <p className="text-muted">These documents are awaiting review.</p>
+                    </ModalBody>
+                    <ModalFooter>
+                        <Button color="primary" onClick={() => setPendingCountModalOpen(false)}>
+                            OK
+                        </Button>
+                    </ModalFooter>
+                </Modal>
+                {/* --- END OF ADDED MODAL --- */}
 
                 <Row>
                     <Col lg={12}>
@@ -1959,6 +2179,19 @@ const DocumentManagement = () => {
                                                                 </div>
                                                             </div>
                                                         </div>
+
+                                                        {/* ADDED: Version Information */}
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-git-branch-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Version:</Label>
+                                                                    <Badge color="info" className="badge-soft-info x-small">
+                                                                        {selectedFile.versionLabel} {selectedFile.isLatest && '(Latest)'}
+                                                                    </Badge>
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ) : (
@@ -1995,18 +2228,18 @@ const DocumentManagement = () => {
                                                     <ListGroup flush style={{ minHeight: '100%' }}>
                                                         {approvedDocuments.map((doc, index) => (
                                                             <div
-                                                                key={doc.DocumentId}
+                                                                key={doc.id}
                                                                 className="fade-in-list-item"
                                                                 style={{ animationDelay: `${0.1 * index}s` }}
                                                             >
                                                                 <ListGroupItem
                                                                     action
-                                                                    active={selectedFile?.DocumentId === doc.DocumentId}
+                                                                    active={selectedFile?.id === doc.id}
                                                                     onClick={() => handleFileSelect(doc)}
                                                                     className="d-flex align-items-center"
                                                                     style={{
-                                                                        backgroundColor: selectedFile?.DocumentId === doc.DocumentId ? '#e9ecef' : 'transparent',
-                                                                        borderLeft: selectedFile?.DocumentId === doc.DocumentId ? '3px solid #9299b1ff' : '3px solid transparent',
+                                                                        backgroundColor: selectedFile?.id === doc.id ? '#e9ecef' : 'transparent',
+                                                                        borderLeft: selectedFile?.id === doc.id ? '3px solid #9299b1ff' : '3px solid transparent',
                                                                         cursor: "pointer"
                                                                     }}
                                                                 >
@@ -2017,7 +2250,21 @@ const DocumentManagement = () => {
                                                                         <h6 className="mb-0 text-truncate" title={doc.name}>
                                                                             {doc.name}
                                                                         </h6>
+                                                                        <small className="text-muted d-block text-truncate">
+                                                                            Version: {doc.versionLabel} {doc.isLatest && '(Latest)'}
+                                                                        </small>
                                                                     </div>
+                                                                    <Button
+                                                                        color="link"
+                                                                        size="sm"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleDownload(doc);
+                                                                        }}
+                                                                        title="Download"
+                                                                    >
+                                                                        <i className="ri-download-line"></i>
+                                                                    </Button>
                                                                 </ListGroupItem>
                                                             </div>
                                                         ))}
@@ -2037,6 +2284,18 @@ const DocumentManagement = () => {
                                         <CardHeader className="bg-light p-3 position-relative"
                                             style={{ borderTop: '3px solid #405189' }}>
                                             <h5 className="mb-0">Document Preview</h5>
+                                            {selectedFile && (
+                                                <div className="position-absolute top-50 end-0 translate-middle-y me-3">
+                                                    <Button
+                                                        color="primary"
+                                                        size="sm"
+                                                        onClick={() => handleDownload(selectedFile)}
+                                                        disabled={!previewContent}
+                                                    >
+                                                        <i className="ri-download-line me-1"></i> Download
+                                                    </Button>
+                                                </div>
+                                            )}
                                         </CardHeader>
                                         <CardBody className="p-0 preview-container">
                                             <div className="preview-scrollable">
@@ -2055,29 +2314,61 @@ const DocumentManagement = () => {
                                                 ) : selectedFile && previewContent ? (
                                                     <div className="d-flex flex-column h-100">
                                                         <div className="flex-grow-1 preview-content">
-                                                            {previewContent.type === 'pdf' ? (
+                                                            {previewContent.type.includes('pdf') ? (
                                                                 <div className="pdf-viewer-container fade-in h-100">
-                                                                    <embed
+                                                                    <iframe
                                                                         src={`${previewContent.url}#toolbar=0&navpanes=0&scrollbar=0`}
-                                                                        type="application/pdf"
+                                                                        title="PDF Viewer"
                                                                         className="w-100 h-100"
                                                                         style={{ border: 'none' }}
+                                                                        onLoad={(e) => {
+                                                                            console.log('📄 PDF iframe loaded');
+                                                                            // Check if iframe has content
+                                                                            const iframe = e.target;
+                                                                            try {
+                                                                                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                                                                                console.log('📄 Iframe document readyState:', iframeDoc.readyState);
+                                                                            } catch (err) {
+                                                                                console.log('🔒 Cannot access iframe content (cross-origin)');
+                                                                            }
+                                                                        }}
+                                                                        onError={(e) => {
+                                                                            console.error('❌ PDF iframe error:', e);
+                                                                            setPreviewError('Failed to load PDF in iframe');
+                                                                        }}
                                                                     />
                                                                 </div>
-                                                            ) : ['jpeg', 'jpg', 'png', 'gif'].includes(previewContent.type) ? (
-                                                                <div className="text-center fade-in p-3 h-100 d-flex alignItems-center justify-content-center">
+                                                            ) : previewContent.type.includes('image') ? (
+                                                                <div className="text-center fade-in p-3 h-100 d-flex align-items-center justify-content-center">
                                                                     <img
                                                                         src={previewContent.url}
                                                                         alt="Document Preview"
                                                                         className="img-fluid"
-                                                                        style={{ maxHeight: '100%', maxWidth: '100%' }}
+                                                                        style={{
+                                                                            maxHeight: '100%',
+                                                                            maxWidth: '100%',
+                                                                            objectFit: 'contain'
+                                                                        }}
+                                                                        onError={(e) => {
+                                                                            console.error('❌ Image load error:', e);
+                                                                            setPreviewError('Failed to load image preview');
+                                                                        }}
                                                                     />
                                                                 </div>
                                                             ) : (
                                                                 <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
                                                                     <i className="ri-file-line display-4 text-muted"></i>
                                                                     <h5 className="mt-3">Preview not available</h5>
-                                                                    <p>This file type cannot be previewed in the browser.</p>
+                                                                    <p className="text-muted">
+                                                                        This file type ({previewContent.type}) cannot be previewed in the browser.
+                                                                    </p>
+                                                                    <Button
+                                                                        color="primary"
+                                                                        onClick={() => handleDownload(selectedFile)}
+                                                                        className="mt-2"
+                                                                    >
+                                                                        <i className="ri-download-line me-1"></i> Download File
+                                                                    </Button>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -2256,12 +2547,15 @@ const DocumentManagement = () => {
                                                             </div>
                                                         </div>
 
+                                                        {/* ADDED: Version Information */}
                                                         <div className="col-12 mb-3">
                                                             <div className="d-flex alignItems-center">
-                                                                <i className="ri-file-list-line me-1 text-primary fs-6"></i>
+                                                                <i className="ri-git-branch-line me-1 text-primary fs-6"></i>
                                                                 <div className="d-flex alignItems-center gap-3">
-                                                                    <Label className="fw-medium text-muted x-small mb-0">RR Number:</Label>
-                                                                    <span className="fw-semibold x-small">{selectedRejectedFile.rr_no || 'N/A'}</span>
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Version:</Label>
+                                                                    <Badge color="info" className="badge-soft-info x-small">
+                                                                        {selectedRejectedFile.versionLabel} {selectedRejectedFile.isLatest && '(Latest)'}
+                                                                    </Badge>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -2309,7 +2603,7 @@ const DocumentManagement = () => {
                                                                     <div className="flex-grow-1 overflow-hidden">
                                                                         <h6 className="mb-0 text-truncate" title={doc.name}>{doc.name}</h6>
                                                                         <small className="text-muted d-block text-truncate">
-                                                                            {doc.createdAt} • {doc.category}
+                                                                            Version: {doc.versionLabel} {doc.isLatest && '(Latest)'}
                                                                         </small>
                                                                     </div>
                                                                     <div className="flex-shrink-0 ms-2">
@@ -2346,6 +2640,18 @@ const DocumentManagement = () => {
                                         <CardHeader className="bg-light p-3 position-relative"
                                             style={{ borderTop: '3px solid #405189' }}>
                                             <h5 className="mb-0">Document Preview</h5>
+                                            {selectedRejectedFile && (
+                                                <div className="position-absolute top-50 end-0 translate-middle-y me-3">
+                                                    <Button
+                                                        color="primary"
+                                                        size="sm"
+                                                        onClick={() => handleDownload(selectedRejectedFile)}
+                                                        disabled={!previewContent}
+                                                    >
+                                                        <i className="ri-download-line me-1"></i> Download
+                                                    </Button>
+                                                </div>
+                                            )}
                                         </CardHeader>
                                         <CardBody className="p-0 preview-container">
                                             <div className="preview-scrollable">
@@ -2364,29 +2670,60 @@ const DocumentManagement = () => {
                                                 ) : selectedRejectedFile && previewContent ? (
                                                     <div className="d-flex flex-column h-100">
                                                         <div className="flex-grow-1 preview-content">
-                                                            {previewContent.type === 'pdf' ? (
+                                                            {previewContent.type.includes('pdf') ? (
                                                                 <div className="pdf-viewer-container fade-in h-100">
-                                                                    <embed
+                                                                    <iframe
                                                                         src={`${previewContent.url}#toolbar=0&navpanes=0&scrollbar=0`}
-                                                                        type="application/pdf"
+                                                                        title="PDF Viewer"
                                                                         className="w-100 h-100"
                                                                         style={{ border: 'none' }}
+                                                                        onLoad={(e) => {
+                                                                            console.log('📄 PDF iframe loaded');
+                                                                            const iframe = e.target;
+                                                                            try {
+                                                                                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                                                                                console.log('📄 Iframe document readyState:', iframeDoc.readyState);
+                                                                            } catch (err) {
+                                                                                console.log('🔒 Cannot access iframe content (cross-origin)');
+                                                                            }
+                                                                        }}
+                                                                        onError={(e) => {
+                                                                            console.error('❌ PDF iframe error:', e);
+                                                                            setPreviewError('Failed to load PDF in iframe');
+                                                                        }}
                                                                     />
                                                                 </div>
-                                                            ) : ['jpeg', 'jpg', 'png', 'gif'].includes(previewContent.type) ? (
-                                                                <div className="text-center fade-in p-3 h-100 d-flex alignItems-center justify-content-center">
+                                                            ) : previewContent.type.includes('image') ? (
+                                                                <div className="text-center fade-in p-3 h-100 d-flex align-items-center justify-content-center">
                                                                     <img
                                                                         src={previewContent.url}
                                                                         alt="Document Preview"
                                                                         className="img-fluid"
-                                                                        style={{ maxHeight: '100%', maxWidth: '100%' }}
+                                                                        style={{
+                                                                            maxHeight: '100%',
+                                                                            maxWidth: '100%',
+                                                                            objectFit: 'contain'
+                                                                        }}
+                                                                        onError={(e) => {
+                                                                            console.error('❌ Image load error:', e);
+                                                                            setPreviewError('Failed to load image preview');
+                                                                        }}
                                                                     />
                                                                 </div>
                                                             ) : (
                                                                 <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
                                                                     <i className="ri-file-line display-4 text-muted"></i>
                                                                     <h5 className="mt-3">Preview not available</h5>
-                                                                    <p>This file type cannot be previewed in the browser.</p>
+                                                                    <p className="text-muted">
+                                                                        This file type ({previewContent.type}) cannot be previewed in the browser.
+                                                                    </p>
+                                                                    <Button
+                                                                        color="primary"
+                                                                        onClick={() => handleDownload(selectedRejectedFile)}
+                                                                        className="mt-2"
+                                                                    >
+                                                                        <i className="ri-download-line me-1"></i> Download File
+                                                                    </Button>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -2417,287 +2754,6 @@ const DocumentManagement = () => {
                         </Button>
                     </ModalFooter>
                 </Modal>
-
-                {/* --- START: NEW PENDING MODAL --- */}
-                <Modal
-                    isOpen={pendingModalOpen}
-                    toggle={() => {
-                        setPendingModalOpen(false);
-                        setSelectedPendingFile(null);
-                        setPreviewContent(null);
-                        setPreviewError(null);
-                    }}
-                    size="xl"
-                    className="custom-large-modal"
-                >
-                    <ModalHeader
-                        className="bg-primary text-white"
-                        toggle={() => {
-                            setPendingModalOpen(false);
-                            setSelectedPendingFile(null);
-                            setPreviewContent(null);
-                            setPreviewError(null);
-                        }}
-                        style={{
-                            borderBottom: '1px solid rgba(255,255,255,0.2)',
-                            padding: '1rem 1.5rem'
-                        }}
-                    >
-                        <div className="d-flex alignItems-center">
-                            <h5 className="mb-0 text-white">Pending Documents</h5>
-                            <Badge color="light" pill className="ms-2 text-warning">
-                                {documentCounts.pending} Pending
-                            </Badge>
-                        </div>
-                    </ModalHeader>
-                    <ModalBody className="p-3">
-                        <Container fluid>
-                            <Row className="g-3 results-container">
-                                {/* Left Column (Consumer & Doc Info) */}
-                                <Col lg={3} className="h-100 d-flex flex-column">
-                                    <Card className="mb-3 slide-in-left fixed-height-card">
-                                        <CardHeader className="bg-light p-3 position-relative" style={{ borderTop: '3px solid #405189' }}>
-                                            <h5 className="mb-0">Consumer Information</h5>
-                                        </CardHeader>
-                                        <CardBody className="p-1 custom-scrollbar">
-                                            {selectedPendingFile ? (
-                                                <div className="consumer-details">
-                                                    <div className="row g-0">
-                                                        <div className="col-12 mb-3">
-                                                            <div className="d-flex alignItems-center mb-1">
-                                                                <i className="ri-user-3-line me-1 text-primary fs-6"></i>
-                                                                <div className="d-flex alignItems-center gap-3">
-                                                                    <Label className="fw-medium text-muted x-small mb-0">RR No:</Label>
-                                                                    <span className="fw-semibold x-small">{selectedPendingFile.rr_no || '-'}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-12 mb-3">
-                                                            <div className="d-flex alignItems-center mb-1">
-                                                                <i className="ri-profile-line me-1 text-primary fs-6"></i>
-                                                                <div className="d-flex alignItems-center gap-3">
-                                                                    <Label className="fw-medium text-muted x-small mb-0">Name:</Label>
-                                                                    <span className="fw-semibold x-small">{selectedPendingFile.consumer_name || '-'}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-12 mb-3">
-                                                            <div className="d-flex alignItems-center mb-1">
-                                                                <i className="ri-map-pin-line me-1 text-primary fs-6"></i>
-                                                                <div className="d-flex alignItems-center gap-3">
-                                                                    <Label className="fw-medium text-muted x-small mb-0">Address:</Label>
-                                                                    <span className="fw-semibold x-small">{selectedPendingFile.consumer_address || '-'}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="text-center text-muted py-1 h-100 d-flex flex-column justify-content-center">
-                                                    <i className="ri-user-line fs-5"></i>
-                                                    <p className="mt-1 x-small mb-0">No document selected</p>
-                                                </div>
-                                            )}
-                                        </CardBody>
-                                    </Card>
-                                    <Card className="slide-in-left delay-1 fixed-height-card">
-                                        <CardHeader className="bg-light p-3 position-relative" style={{ borderTop: '3px solid #405189' }}>
-                                            <h5 className="mb-0">Document Information</h5>
-                                        </CardHeader>
-                                        <CardBody className="p-1 custom-scrollbar">
-                                            {selectedPendingFile ? (
-                                                <div className="document-details">
-                                                    <div className="d-flex alignItems-center mb-3">
-                                                        <div className="flex-shrink-0 me-1">
-                                                            {getFileIcon(selectedPendingFile.name)}
-                                                        </div>
-                                                        <div>
-                                                            <h6 className="mb-0 x-small">{selectedPendingFile.name}</h6>
-                                                            <small className="text-muted x-small">{selectedPendingFile.category}</small>
-                                                        </div>
-                                                    </div>
-                                                    <div className="row g-0">
-                                                        <div className="col-12 mb-3">
-                                                            <div className="d-flex alignItems-center">
-                                                                <i className="ri-user-line me-1 text-primary fs-6"></i>
-                                                                <div className="d-flex alignItems-center gap-3">
-                                                                    <Label className="fw-medium text-muted x-small mb-0">Uploaded By:</Label>
-                                                                    <span className="fw-semibold x-small">{selectedPendingFile.createdBy}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-12 mb-3">
-                                                            <div className="d-flex alignItems-center">
-                                                                <i className="ri-calendar-line me-1 text-primary fs-6"></i>
-                                                                <div className="d-flex alignItems-center gap-3">
-                                                                    <Label className="fw-medium text-muted x-small mb-0">Uploaded On:</Label>
-                                                                    <span className="fw-semibold x-small">{selectedPendingFile.createdAt}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-12 mb-3">
-                                                            <div className="d-flex alignItems-center">
-                                                                <i className="ri-time-line me-1 text-primary fs-6"></i>
-                                                                <div className="d-flex alignItems-center gap-3">
-                                                                    <Label className="fw-medium text-muted x-small mb-0">Status:</Label>
-                                                                    <Badge color="warning" className="badge-soft-warning x-small">
-                                                                        {selectedPendingFile.status}
-                                                                    </Badge>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="text-center text-muted py-1 h-100 d-flex flex-column justify-content-center">
-                                                    <i className="ri-file-line fs-5"></i>
-                                                    <p className="mt-1 x-small mb-0">No document selected</p>
-                                                </div>
-                                            )}
-                                        </CardBody>
-                                    </Card>
-                                </Col>
-
-                                {/* Middle Column (Document List) */}
-                                <Col lg={3} className="h-100 d-flex flex-column">
-                                    <Card className="h-100 fade-in delay-2">
-                                        <CardHeader
-                                            className="bg-light d-flex justify-content-between align-items-center"
-                                            style={{ borderTop: '3px solid #405189' }}
-                                        >
-                                            <h5 className="mb-0">Pending Documents</h5>
-                                            <Badge color="warning" pill className="text-uppercase px-3 py-2">
-                                                {pendingDocuments.length} {pendingDocuments.length === 1 ? 'file' : 'files'}
-                                            </Badge>
-                                        </CardHeader>
-                                        <CardBody className="p-0 uploaded-documents-container">
-                                            <div className="uploaded-documents-scrollable" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                                                {loading ? (
-                                                    <div className="text-center py-4">
-                                                        <div className="spinner-border text-primary" role="status">
-                                                            <span className="visually-hidden">Loading...</span>
-                                                        </div>
-                                                        <p className="mt-2">Loading pending documents...</p>
-                                                    </div>
-                                                ) : pendingDocuments.length > 0 ? (
-                                                    <ListGroup flush style={{ minHeight: '100%' }}>
-                                                        {pendingDocuments.map((doc, index) => (
-                                                            <div
-                                                                key={doc.DocumentId}
-                                                                className="fade-in-list-item"
-                                                                style={{ animationDelay: `${0.1 * index}s` }}
-                                                            >
-                                                                <ListGroupItem
-                                                                    action
-                                                                    active={selectedPendingFile?.DocumentId === doc.DocumentId}
-                                                                    onClick={() => handlePendingFileSelect(doc)}
-                                                                    className="d-flex align-items-center"
-                                                                    style={{
-                                                                        backgroundColor: selectedPendingFile?.DocumentId === doc.DocumentId ? '#e9ecef' : 'transparent',
-                                                                        borderLeft: selectedPendingFile?.DocumentId === doc.DocumentId ? '3px solid #9299b1ff' : '3px solid transparent',
-                                                                        cursor: "pointer"
-                                                                    }}
-                                                                >
-                                                                    <div className="flex-shrink-0 me-3">
-                                                                        {getFileIcon(doc.name)}
-                                                                    </div>
-                                                                    <div className="flex-grow-1 text-truncate">
-                                                                        <h6 className="mb-0 text-truncate" title={doc.name}>
-                                                                            {doc.name}
-                                                                        </h6>
-                                                                    </div>
-                                                                </ListGroupItem>
-                                                            </div>
-                                                        ))}
-                                                    </ListGroup>
-                                                ) : (
-                                                    <div className="text-center text-muted py-4 h-100 d-flex flex-column justify-content-center">
-                                                        No pending documents found
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </CardBody>
-                                    </Card>
-                                </Col>
-
-                                {/* Right Column (Preview) */}
-                                <Col lg={6} className="h-100 d-flex flex-column">
-                                    <Card className="h-100 slide-in-right delay-3 fixed-height-card">
-                                        <CardHeader className="bg-light p-3 position-relative"
-                                            style={{ borderTop: '3px solid #405189' }}>
-                                            <h5 className="mb-0">Document Preview</h5>
-                                        </CardHeader>
-                                        <CardBody className="p-0 preview-container">
-                                            <div className="preview-scrollable">
-                                                {previewLoading ? (
-                                                    <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
-                                                        <div className="spinner-border text-primary" role="status">
-                                                            <span className="visually-hidden">Loading...</span>
-                                                        </div>
-                                                        <p className="mt-2">Loading preview...</p>
-                                                    </div>
-                                                ) : previewError ? (
-                                                    <Alert color="danger" className="m-3 fade-in">
-                                                        <i className="ri-error-warning-line me-2"></i>
-                                                        {previewError}
-                                                    </Alert>
-                                                ) : selectedPendingFile && previewContent ? (
-                                                    <div className="d-flex flex-column h-100">
-                                                        <div className="flex-grow-1 preview-content">
-                                                            {previewContent.type === 'pdf' ? (
-                                                                <div className="pdf-viewer-container fade-in h-100">
-                                                                    <embed
-                                                                        src={`${previewContent.url}#toolbar=0&navpanes=0&scrollbar=0`}
-                                                                        type="application/pdf"
-                                                                        className="w-100 h-100"
-                                                                        style={{ border: 'none' }}
-                                                                    />
-                                                                </div>
-                                                            ) : ['jpeg', 'jpg', 'png', 'gif'].includes(previewContent.type) ? (
-                                                                <div className="text-center fade-in p-3 h-100 d-flex alignItems-center justify-content-center">
-                                                                    <img
-                                                                        src={previewContent.url}
-                                                                        alt="Document Preview"
-                                                                        className="img-fluid"
-                                                                        style={{ maxHeight: '100%', maxWidth: '100%' }}
-                                                                    />
-                                                                </div>
-                                                            ) : (
-                                                                <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
-                                                                    <i className="ri-file-line display-4 text-muted"></i>
-                                                                    <h5 className="mt-3">Preview not available</h5>
-                                                                    <p>This file type cannot be previewed in the browser.</p>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-center text-muted py-5 h-100 d-flex flex-column justify-content-center fade-in">
-                                                        <i className="ri-file-line display-4"></i>
-                                                        <h5 className="mt-3">No document selected</h5>
-                                                        <p>Select a pending file from the list to preview it here</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </CardBody>
-                                    </Card>
-                                </Col>
-                            </Row>
-                        </Container>
-                    </ModalBody>
-                    <ModalFooter>
-                        <Button color="secondary" onClick={() => {
-                            setPendingModalOpen(false);
-                            setSelectedPendingFile(null);
-                            setPreviewContent(null);
-                            setPreviewError(null);
-                        }}>
-                            Close
-                        </Button>
-                    </ModalFooter>
-                </Modal>
-                {/* --- END: NEW PENDING MODAL --- */}
-
 
                 {/* Re-upload Document Modal */}
                 <Modal
@@ -2743,13 +2799,14 @@ const DocumentManagement = () => {
                                                 </div>
                                             ) : reuploadOldDocPreview ? (
                                                 <div className="h-100">
-                                                    {reuploadOldDocPreview.type === 'pdf' ? (
-                                                        <embed
+                                                    {reuploadOldDocPreview.type.includes('pdf') ? (
+                                                        <iframe
                                                             src={`${reuploadOldDocPreview.url}#toolbar=0&navpanes=0&scrollbar=0`}
-                                                            type="application/pdf"
+                                                            title="PDF Viewer"
                                                             className="w-100 h-100"
+                                                            style={{ border: 'none' }}
                                                         />
-                                                    ) : ['jpeg', 'jpg', 'png', 'gif'].includes(reuploadOldDocPreview.type) ? (
+                                                    ) : reuploadOldDocPreview.type.includes('image') ? (
                                                         <div className="text-center p-3 h-100 d-flex alignItems-center justify-content-center">
                                                             <img
                                                                 src={reuploadOldDocPreview.url}
@@ -2822,10 +2879,11 @@ const DocumentManagement = () => {
                                             <Card style={{ height: '400px' }}>
                                                 <CardBody className="p-0 preview-container">
                                                     {newDocumentPreview.type === 'pdf' ? (
-                                                        <embed
+                                                        <iframe
                                                             src={`${newDocumentPreview.url}#toolbar=0&navpanes=0&scrollbar=0`}
-                                                            type="application/pdf"
+                                                            title="PDF Viewer"
                                                             className="w-100 h-100"
+                                                            style={{ border: 'none' }}
                                                         />
                                                     ) : ['jpeg', 'jpg', 'png', 'gif'].includes(newDocumentPreview.type) ? (
                                                         <div className="text-center p-3 h-100 d-flex alignItems-center justify-content-center">

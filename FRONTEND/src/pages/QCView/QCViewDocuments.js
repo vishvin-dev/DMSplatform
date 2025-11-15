@@ -5,16 +5,14 @@ import {
     Spinner, Input, Table, Label, FormGroup, Alert, Badge
 } from 'reactstrap';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
-// We are REMOVING 'view' because it is the source of the problem
 import { qcView, qcApproveReject, getDocumentDropdowns } from '../../helpers/fakebackend_helper'; 
-import axios from 'axios'; // <-- ***** YOU MUST ADD THIS IMPORT *****
+import axios from 'axios';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
 
-const SORT_ARROW_SIZE = 13; // px
+const SORT_ARROW_SIZE = 13;
 
-// --- ADD THIS URL (from your previous component) ---
-// This needs to be the actual URL your 'view' helper was calling
+
 const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
 
 function SortArrows({ direction, active }) {
@@ -99,7 +97,7 @@ const QCViewDocuments = () => {
     const [hasSearched, setHasSearched] = useState(false);
     const [searchLoading, setSearchLoading] = useState(false);
     const [showTable, setShowTable] = useState(false);
-    
+
     // Store original sections for proper filtering
     const [originalSectionOptions, setOriginalSectionOptions] = useState([]);
 
@@ -167,7 +165,7 @@ const QCViewDocuments = () => {
     const loadDropdownDataFromSession = useCallback(async () => {
         const authUser = JSON.parse(sessionStorage.getItem("authUser"));
         const zones = authUser?.user?.zones || [];
-        
+
         if (zones.length === 0) {
             setDropdownsInitialized(true);
             setDropdownsLoading(false);
@@ -181,7 +179,7 @@ const QCViewDocuments = () => {
         try {
             if (level === 'section') {
                 const divisionData = [{ div_code: userZone.div_code, division: userZone.division }];
-                
+
                 // Get unique subdivisions
                 const uniqueSubDivisions = [];
                 const seenSubDivisions = new Set();
@@ -199,10 +197,10 @@ const QCViewDocuments = () => {
                 setSubDivisions(uniqueSubDivisions);
                 setSectionOptions(allSections);
                 setOriginalSectionOptions(allSections); // Store original sections
-                
+
                 setDivision(userZone.div_code);
                 setIsFieldsDisabled({ division: true, subDivision: false, section: false });
-                
+
                 // Show dropdowns if there are multiple subdivisions
                 if (uniqueSubDivisions.length > 1) {
                     setShouldShowDropdowns(true);
@@ -219,7 +217,7 @@ const QCViewDocuments = () => {
                 }
             } else if (level === 'subdivision') {
                 const divisionData = [{ div_code: userZone.div_code, division: userZone.division }];
-                
+
                 const uniqueSubDivisions = [];
                 const seenSubDivisions = new Set();
                 zones.forEach(zone => {
@@ -231,18 +229,18 @@ const QCViewDocuments = () => {
 
                 setDivisionName(divisionData);
                 setSubDivisions(uniqueSubDivisions);
-                
+
                 setDivision(userZone.div_code);
                 setIsFieldsDisabled({ division: true, subDivision: uniqueSubDivisions.length === 1, section: false });
-                
+
                 if (uniqueSubDivisions.length === 1) {
                     const selectedSdCode = uniqueSubDivisions[0].sd_code;
                     setSubDivision(selectedSdCode);
-                    
+
                     const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: selectedSdCode });
                     setSectionOptions(sections);
                     setOriginalSectionOptions(sections); // Store original sections
-                    
+
                     if (sections.length === 1) {
                         setSection(sections[0].so_code);
                         setIsFieldsDisabled(prev => ({ ...prev, section: true }));
@@ -265,22 +263,22 @@ const QCViewDocuments = () => {
 
                 setDivisionName(uniqueDivisions);
                 setIsFieldsDisabled({ division: uniqueDivisions.length === 1, subDivision: false, section: false });
-                
+
                 if (uniqueDivisions.length === 1) {
                     const selectedDivCode = uniqueDivisions[0].div_code;
                     setDivision(selectedDivCode);
-                    
+
                     const subdivisions = await flagIdFunction({ flagId: 2, requestUserName: userName, div_code: selectedDivCode });
                     setSubDivisions(subdivisions);
-                    
+
                     if (subdivisions.length === 1) {
                         setSubDivision(subdivisions[0].sd_code);
                         setIsFieldsDisabled(prev => ({ ...prev, subDivision: true }));
-                        
+
                         const sections = await flagIdFunction({ flagId: 3, requestUserName: userName, sd_code: subdivisions[0].sd_code });
                         setSectionOptions(sections);
                         setOriginalSectionOptions(sections); // Store original sections
-                        
+
                         if (sections.length === 1) {
                             setSection(sections[0].so_code);
                             setIsFieldsDisabled(prev => ({ ...prev, section: true }));
@@ -370,7 +368,7 @@ const QCViewDocuments = () => {
         setPage(0);
         setActiveTab('');
         setStatusCounts({ pending: 0, approved: 0, rejected: 0 });
-        
+
         // Reload dropdown data from session
         loadDropdownDataFromSession();
     };
@@ -409,10 +407,10 @@ const QCViewDocuments = () => {
             setErrorModal(true);
             return;
         }
-        
+
         setSearchLoading(true);
         setHasSearched(false);
-        
+
         try {
             await fetchDocumentCounts();
             setHasSearched(true);
@@ -438,7 +436,7 @@ const QCViewDocuments = () => {
             };
 
             const response = await qcApproveReject(payload);
-            
+
             if (response.status === "success" && response.results && response.results.length > 0) {
                 const counts = response.results[0];
                 setStatusCounts({
@@ -576,7 +574,7 @@ const QCViewDocuments = () => {
             setLoading(false);
         }
     };
-    
+
     // Refresh handler to reload current tab data and all counts
     const handleRefresh = async () => {
         if (activeTab) {
@@ -678,7 +676,7 @@ const QCViewDocuments = () => {
                 requestUserName: userInfo.email,
                 preview: false // This param seems to be from your old code, keeping it
             };
-            
+
             console.log('🚀 API Request Payload:', requestPayload);
 
             // --- FIX: Use direct axios call ---
@@ -788,7 +786,7 @@ const QCViewDocuments = () => {
         setRejectionModal(false);
         setRejectionReason(''); // Also clear reason on close
     };
-    
+
     const handleDownload = () => {
         if (!previewContent?.blob) return;
 
@@ -820,13 +818,13 @@ const QCViewDocuments = () => {
             console.log('API Payload (Approve):', payload); // For debugging
 
             const response = await qcApproveReject(payload);
-            
+
             if (response.status === "success") {
                 setPreviewModal(false);
                 closeRejectionModal(); // Use the new handler to close and clear
 
-                setResponse(response.message || (status === 'Approved' 
-                    ? 'Document approved successfully' 
+                setResponse(response.message || (status === 'Approved'
+                    ? 'Document approved successfully'
                     : 'Document rejected successfully'));
                 setSuccessModal(true);
 
@@ -866,7 +864,7 @@ const QCViewDocuments = () => {
             console.log('Reject API Payload:', payload); // For debugging
 
             const response = await qcApproveReject(payload);
-            
+
             if (response.status === "success") {
                 setPreviewModal(false);
                 closeRejectionModal(); // Close and clear rejection modal
@@ -894,7 +892,7 @@ const QCViewDocuments = () => {
         if (!sortConfig.key || !sortConfig.direction) return filteredDocuments;
         return sortData(filteredDocuments, sortConfig.key, sortConfig.direction);
     }, [filteredDocuments, sortConfig]);
-    
+
     const pageCount = pageSize === -1 ? 1 : Math.ceil(sortedData.length / pageSize);
     const paginatedData = useMemo(() => {
         if (pageSize === -1) return sortedData;
@@ -976,7 +974,7 @@ const QCViewDocuments = () => {
             })}
         </tr>
     );
-    
+
     const renderTableRows = () => {
         if (loading || dropdownsLoading) {
             return (
@@ -1166,7 +1164,7 @@ const QCViewDocuments = () => {
 
             return () => clearTimeout(previewTimer);
         }, []);
-        
+
         useEffect(() => {
             if (previewLoaded) {
                 const detailsTimer = setTimeout(() => {
@@ -1176,7 +1174,7 @@ const QCViewDocuments = () => {
                 return () => clearTimeout(detailsTimer);
             }
         }, [previewLoaded]);
-        
+
         // Enhanced PDF/Image viewer
         const renderPreviewContent = () => {
             if (!previewLoaded) {
@@ -1215,7 +1213,7 @@ const QCViewDocuments = () => {
             if (previewContent) {
                 const isPDF = previewContent.type.includes('pdf');
                 const isImage = previewContent.type.includes('image');
-                
+
                 return (
                     // MODIFIED: Removed h-100
                     <div className="d-flex flex-column"> 
@@ -1233,7 +1231,7 @@ const QCViewDocuments = () => {
                                 <i className="ri-download-line me-1"></i> Download
                             </Button>
                         </div>
-                        
+
                         {/* Preview Content */}
                         <div className="flex-grow-1 preview-content">
                             {isPDF ? (
@@ -1289,7 +1287,7 @@ const QCViewDocuments = () => {
                 </div>
             );
         };
-        
+
         return (
             <Row>
                 {/* --- START: Document Details (SMALLER: lg={4}) --- */}
@@ -1450,9 +1448,9 @@ const QCViewDocuments = () => {
                                                 <Col md={3}>
                                                     <FormGroup>
                                                         <Label>Division<span className="text-danger">*</span></Label>
-                                                        <Input 
-                                                            type="select" 
-                                                            value={division} 
+                                                        <Input
+                                                            type="select"
+                                                            value={division}
                                                             onChange={handleDivisionChange}
                                                         >
                                                             <option value="">Select Division</option>
@@ -1465,14 +1463,14 @@ const QCViewDocuments = () => {
                                                     </FormGroup>
                                                 </Col>
                                             )}
-                                            
+
                                             {!isFieldsDisabled.subDivision && subDivisions.length > 1 && (
                                                 <Col md={3}>
                                                     <FormGroup>
                                                         <Label>Sub Division<span className="text-danger">*</span></Label>
-                                                        <Input 
-                                                            type="select" 
-                                                            value={subDivision} 
+                                                        <Input
+                                                            type="select"
+                                                            value={subDivision}
                                                             onChange={handleSubDivisionChange}
                                                         >
                                                             <option value="">Select Sub Division</option>
@@ -1485,15 +1483,15 @@ const QCViewDocuments = () => {
                                                     </FormGroup>
                                                 </Col>
                                             )}
-                                            
+
                                             {/* Section dropdown - Fixed filtering logic */}
                                             {sectionOptions.length > 1 && (
                                                 <Col md={3}>
                                                     <FormGroup>
                                                         <Label>Section<span className="text-danger">*</span></Label>
-                                                        <Input 
-                                                            type="select" 
-                                                            value={section} 
+                                                        <Input
+                                                            type="select"
+                                                            value={section}
                                                             onChange={handleSectionChange}
                                                         >
                                                             <option value="">Select Section</option>
@@ -1506,12 +1504,12 @@ const QCViewDocuments = () => {
                                                     </FormGroup>
                                                 </Col>
                                             )}
-                                            
+
                                             <Col md={3} className="d-flex align-items-end">
                                                 <div className="d-flex gap-2 w-100">
                                                     <FormGroup className="mb-0 flex-grow-1">
-                                                        <Button 
-                                                            color="primary" 
+                                                        <Button
+                                                            color="primary"
                                                             size="sm"
                                                             className="w-100"
                                                             onClick={handleSearchClick}
@@ -1532,8 +1530,8 @@ const QCViewDocuments = () => {
                                                         </Button>
                                                     </FormGroup>
                                                     <FormGroup className="mb-0">
-                                                        <Button 
-                                                            color="warning" 
+                                                        <Button
+                                                            color="warning"
                                                             size="sm"
                                                             onClick={handleReset}
                                                             disabled={searchLoading || dropdownsLoading}
@@ -1563,7 +1561,7 @@ const QCViewDocuments = () => {
                                                     className="position-relative px-4 py-3"
                                                     style={{ minWidth: '150px' }}
                                                 >
-                                                    <i className="ri-time-line me-2"></i> 
+                                                    <i className="ri-time-line me-2"></i>
                                                     Pending Documents
                                                     <Badge
                                                         color="danger" pill
@@ -1573,14 +1571,14 @@ const QCViewDocuments = () => {
                                                         {statusCounts.pending}
                                                     </Badge>
                                                 </Button>
-                                                
+
                                                 <Button
                                                     color={activeTab === 'approved' ? 'success' : 'outline-success'}
                                                     onClick={() => handleTabChange('approved')}
                                                     className="position-relative px-4 py-3"
                                                     style={{ minWidth: '150px' }}
                                                 >
-                                                    <i className="ri-checkbox-circle-line me-2"></i> 
+                                                    <i className="ri-checkbox-circle-line me-2"></i>
                                                     Approved Documents
                                                     <Badge
                                                         color="success" pill
@@ -1590,14 +1588,14 @@ const QCViewDocuments = () => {
                                                         {statusCounts.approved}
                                                     </Badge>
                                                 </Button>
-                                                
+
                                                 <Button
                                                     color={activeTab === 'rejected' ? 'danger' : 'outline-danger'}
                                                     onClick={() => handleTabChange('rejected')}
                                                     className="position-relative px-4 py-3"
                                                     style={{ minWidth: '150px' }}
                                                 >
-                                                    <i className="ri-close-circle-line me-2"></i> 
+                                                    <i className="ri-close-circle-line me-2"></i>
                                                     Rejected Documents
                                                     <Badge
                                                         color="warning" pill
@@ -1681,8 +1679,8 @@ const QCViewDocuments = () => {
                                         <i className="ri-search-line display-4 text-primary mb-3"></i>
                                         <h5>Ready to Search Documents</h5>
                                         <p className="text-muted mb-3">Click the button below to load your quality control documents</p>
-                                        <Button 
-                                            color="primary" 
+                                        <Button
+                                            color="primary"
                                             size="lg"
                                             onClick={handleSearchClick}
                                             disabled={searchLoading}
