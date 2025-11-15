@@ -508,6 +508,8 @@ export const getBackAllRejectedDocuments = async (User_Id, so_code) => {
                 -- Rejected By User Name
                 ur.email AS RejectedByUserName,
 
+                dsm1.StatusName AS VersionStatusName,
+
                 -- Consumer Info
                 cd.consumer_name,
                 cd.phone,
@@ -538,6 +540,8 @@ export const getBackAllRejectedDocuments = async (User_Id, so_code) => {
                     AND zc.div_code = du.div_code
             LEFT JOIN 
                 user ur ON drq.RejectedByUser_Id = ur.User_Id   
+            LEFT JOIN 
+                documentstatusmaster dsm1 ON dv.Status_Id = dsm1.Status_Id
 
             WHERE 
                 drq.UploaderUser_Id = ?    
