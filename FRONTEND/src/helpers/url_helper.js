@@ -270,7 +270,7 @@ export const SINGLE_ZONE_UPLOAD= "/backend-service/zoneupload/singleZoneUpload";
 export const SINGLE_CONSUMER_UPLOAD= "/backend-service/consumerUpload/singleConsumerUpload";
 export const SCAN_IMPLEMENT="/scan-service/scan";
 export const Document_Audit= "/backend-service/document_audit_logs";
-
+export const BULK_SCAN= "/scan-service/bulk-scan";
 
 //DOCUMENT CATEGORY
 export const DOCUMENT_CATEGORY_GET_URL = "/es-admin-svc/es/admin/documentCategory";
