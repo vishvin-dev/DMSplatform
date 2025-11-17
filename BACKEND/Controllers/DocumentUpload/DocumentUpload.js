@@ -9,7 +9,7 @@ import {
 } from "../../models/DocumentUpload.js"
 
 import { insertDocumentUpload, getLatestVersion, insertDocumentVersion, getNextVersionLabel, getDocsMetaInfo, getDocsVieww } from "../../models/MannualUpload.js"
-import { count } from "console";
+
 
 //this is the doucment uploading things
 export const DocumentUpload = async (req, res) => {
@@ -59,6 +59,9 @@ export const DocumentUpload = async (req, res) => {
         }
         else if (flagId === 7) {
             results = await getDocumentCategory();
+        }
+        else if (flagId === 9) {
+            results = await getDocumentLists();
         }
         // else if (parseInt(flagId) === 8) {
         //     const {
@@ -159,10 +162,6 @@ export const DocumentUpload = async (req, res) => {
         //         data: uploadResults
         //     });
         // }
-
-        else if (flagId === 9) {
-            results = await getDocumentLists();
-        }
         // else if (parseInt(flagId) === 10) {
         //     const {
         //         DocumentName,
@@ -639,6 +638,7 @@ export const DocumentUpload = async (req, res) => {
 
 
 //==============================THIS IS THE MANNUAL CONTROLLERS=========================================================
+
 export const MannualUpload = async (req, res) => {
   try {
     const {

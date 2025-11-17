@@ -19,4 +19,3 @@ router.post("/scanUpload", authenticateToken, ScanUpload);
 
 export default router;
  
-
