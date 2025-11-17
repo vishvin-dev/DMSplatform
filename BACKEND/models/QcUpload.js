@@ -421,6 +421,8 @@ export const getBackAllApprovedDocuments = async (so_code,User_Id,) => {
                     cd.rr_no,
                     cd.tariff,
 
+                     dsm.StatusName AS VersionStatusName,
+
                     -- Zone / Division / Subdivision / Section
                     zc.zone,
                     zc.division AS division_name,
@@ -450,6 +452,9 @@ export const getBackAllApprovedDocuments = async (so_code,User_Id,) => {
                     AND zc.so_code = du.so_code
                 LEFT JOIN 
                 user ur ON wfh.ActionByUser_Id = ur.User_Id
+                LEFT JOIN 
+                documentstatusmaster dsm
+                ON dv.Status_Id = dsm.Status_Id
                 WHERE 
                     du.so_code = ?       
                     AND du.CreatedByUser_Id = ?     
