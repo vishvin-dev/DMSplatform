@@ -8,7 +8,8 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
-import { getDocumentDropdowns, postDocumentUpload, view } from '../../helpers/fakebackend_helper';
+// The 'bulkscan' import here is for the main API, not the scanner. We will use axios for the scanner.
+import { getDocumentDropdowns, postDocumentUpload, view, bulkscan } from '../../helpers/fakebackend_helper';
 import { io } from "socket.io-client";
 import axios from 'axios';
 import { jsPDF } from "jspdf";
@@ -617,13 +618,13 @@ const DocumentReview = () => {
     const [isRescanning, setIsRescanning] = useState(false);
     const [pageToRescanId, setPageToRescanId] = useState(null);
     const [isSubmittingDraft, setIsSubmittingDraft] = useState(false);
-    
+    const [isBulkScanning, setIsBulkScanning] = useState(false); // NEW STATE FOR BULK SCAN
+
     // NEW STATE: To hold verification data from session storage
     const [verificationDetails, setVerificationDetails] = useState(null);
 
 
     const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
-
     
     // --- MODIFICATION START ---
     // Load verification details from location state (consumerData)
@@ -827,8 +828,12 @@ const DocumentReview = () => {
                 setPreviewLoading(false);
             }
         } else {
+            // This handles bulk-scanned files (which have a previewUrl but no draftId)
+            // or files that already have their URL.
             setPreviewLoading(false);
-            console.log("No draftId or previewUrl found, skipping API call.");
+            if (!newSelectedFile.previewUrl) {
+                 console.log("No draftId or previewUrl found, skipping API call.");
+            }
         }
     }, [selectedFile, documentsForReview, responseText, metaTags]);
 
@@ -998,6 +1003,113 @@ const DocumentReview = () => {
         setIsRescanning(false);
         const docTypeLabel = 'Scanned_Document'; // Use a generic label
         handleApiScan(docTypeLabel);
+    };
+
+    // --- NEW FUNCTION: handleBulkScan ---
+    const handleBulkScan = async () => {
+        if (!socket || !socket.connected) {
+            setResponse("Scanner is not connected. Please try again.");
+            setErrorModal(true);
+            return;
+        }
+
+        console.log("🚀 Initiating Bulk Scan...");
+        setIsBulkScanning(true);
+        setIsScanningModalOpen(true); // Reuse the scanning modal
+        setScanProgress(0);
+        const progressInterval = setInterval(() => setScanProgress(prev => Math.min(prev + 10, 90)), 250);
+
+        const payload = {
+            deviceName: "Canon MF460 ser_6CF2D8AE9F40", // Hardcoded from user's screenshot
+            fileName: "ProjectDocsBatch.pdf", // Hardcoded from user's screenshot
+            format: "pdf" // Hardcoded from user's screenshot
+        };
+
+        try {
+            // --- MODIFICATION START ---
+            // 1. Call the /scan-service/bulk-scan endpoint on port 5000
+            const apiResponse = await axios.post(`${SCANNER_ENDPOINT}/scan-service/bulk-scan`, payload, { timeout: 60000 }); // 60s timeout for bulk scan
+            // --- MODIFICATION END ---
+            
+            clearInterval(progressInterval);
+            setScanProgress(100);
+
+            // 2. Check the response
+            if (apiResponse.data && apiResponse.data.file) {
+                const filePath = apiResponse.data.file; // "E:\\Dms\\SCANDOCS\\ProjectDocsBatch.pdf"
+                console.log("Bulk scan API success, file path:", filePath);
+
+                // 3. Convert the Windows path to a relative URL
+                // We split by the escaped backslash "\\"
+                const pathParts = filePath.split('\\\\');
+                
+                // Find the "SCANDOCS" directory, assuming it's the static root
+                const staticDirIndex = pathParts.indexOf("SCANDOCS");
+                
+                if (staticDirIndex === -1) {
+                    throw new Error("Could not parse the file path from the server. Unknown format.");
+                }
+
+                // Re-join from "SCANDOCS" onwards, using /
+                const relativeUrl = pathParts.slice(staticDirIndex).join('/');
+
+                // --- MODIFICATION START ---
+                const fullFileUrl = `${SCANNER_ENDPOINT}/${relativeUrl}`; // e.g., http://192.168.23.229:5000/SCANDOCS/ProjectDocsBatch.pdf
+                // --- MODIFICATION END ---
+
+                console.log("Attempting to fetch file from:", fullFileUrl);
+
+                // 4. Fetch the file blob
+                const fileResponse = await fetch(fullFileUrl);
+                if (!fileResponse.ok) {
+                    throw new Error(`Failed to fetch the scanned PDF file from ${fullFileUrl}. Status: ${fileResponse.status}`);
+                }
+                const blob = await fileResponse.blob();
+                const previewUrl = URL.createObjectURL(blob);
+
+                // 5. Create a new document object for the main review list
+                const finalFileObject = new File([blob], payload.fileName, { type: 'application/pdf' });
+                
+                const finalDoc = {
+                     id: Date.now(),
+                     name: payload.fileName,
+                     type: 'application/pdf',
+                     category: 'all', // User will have to categorize it in the main UI
+                     createdAt: new Date().toISOString().split('T')[0],
+                     createdBy: 'scanner',
+                     description: 'Bulk scanned document',
+                     rr_no: consumerData.rr_no,
+                     consumer_name: consumerData.consumer_name,
+                     account_id: consumerData.account_id,
+                     comment: '',
+                     tags: ['scanned', 'new', 'bulk'],
+                     fileObject: finalFileObject,
+                     previewUrl: previewUrl, // The blob URL
+                     draftId: null, // This is not a draft from the DB
+                     documentId: null,
+                };
+                
+                // 6. Add the new document to the list and select it
+                setDocumentsForReview(prevDocs => [finalDoc, ...prevDocs]);
+                setIsScanningModalOpen(false);
+                setIsBulkScanning(false);
+                setResponse(apiResponse.data.message || "Bulk scan completed.");
+                setSuccessModal(true); // Use success modal to notify
+                
+                // Select the new file after a short delay
+                setTimeout(() => handleFileSelect(finalDoc), 100);
+
+            } else {
+                throw new Error(apiResponse.data.message || "Bulk scan API call failed to return a file path.");
+            }
+        } catch (error) {
+            console.error("Bulk Scan Error:", error);
+            clearInterval(progressInterval);
+            setIsScanningModalOpen(false);
+            setIsBulkScanning(false);
+            setResponse(error.message || 'Error during bulk scan. Check network and scanner connection.');
+            setErrorModal(true);
+        }
     };
 
     const handleAddPageScan = () => {
@@ -1277,23 +1389,37 @@ const DocumentReview = () => {
                                 <Col md={6} lg={5} className="text-center">
                                     <i className="ri-upload-cloud-line display-2 text-primary mb-3"></i>
                                     <h4>Please Upload Documents</h4>
-                                    <p className="text-muted">To begin, click 'Scan'.</p>
+                                    <p className="text-muted">To begin, click 'Scan' or 'Bulk Scan'.</p>
                                     <div className="mt-4">
                                         {loadingDocumentTypes ? (<div className="text-center"><Spinner size="sm" /> Loading...</div>) : (
-                                            <Button
-                                                color="primary"
-                                                size="lg"
-                                                onClick={handleScanClick}
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg"
-                                                    width="18" height="18"
-                                                    fill="currentColor"
-                                                    viewBox="0 0 24 24"
-                                                    className="me-1">
-                                                    <path d="M3 3h6v2H5v4H3V3zm12 0h6v6h-2V5h-4V3zm6 12v6h-6v-2h4v-4h2zM3 15h2v4h4v2H3v-6zM7 7h10v10H7V7zm2 2v6h6V9H9z" />
-                                                </svg>
-                                                Scan
-                                            </Button>
+                                            // --- ADDED BUTTON AND CONTAINER ---
+                                            <div className="d-flex justify-content-center gap-2">
+                                                <Button
+                                                    color="primary"
+                                                    size="lg"
+                                                    onClick={handleScanClick}
+                                                    disabled={scanningInProgress || isBulkScanning}
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg"
+                                                        width="18" height="18"
+                                                        fill="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                        className="me-1">
+                                                        <path d="M3 3h6v2H5v4H3V3zm12 0h6v6h-2V5h-4V3zm6 12v6h-6v-2h4v-4h2zM3 15h2v4h4v2H3v-6zM7 7h10v10H7V7zm2 2v6h6V9H9z" />
+                                                    </svg>
+                                                    Scan
+                                                </Button>
+                                                <Button
+                                                    color="secondary"
+                                                    size="lg"
+                                                    onClick={handleBulkScan}
+                                                    disabled={scanningInProgress || isBulkScanning}
+                                                >
+                                                    <i className="ri-file-pdf-line me-1"></i>
+                                                    Bulk Scan
+                                                </Button>
+                                            </div>
+                                            // --- END ADDED BUTTON ---
                                         )}
                                     </div>
                                 </Col>
@@ -1305,22 +1431,35 @@ const DocumentReview = () => {
                                 <Row className="g-3 align-items-center mb-4">
                                     <Col md={5}>
                                         {loadingDocumentTypes ? (<div className="text-center"><Spinner size="sm" /> Loading...</div>) : (
-                                            <Button
-                                                color="primary"
-                                                onClick={handleScanClick}
-                                            >
-                                                <svg
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    width="20"
-                                                    height="20"
-                                                    fill="currentColor"
-                                                    viewBox="0 0 24 24"
-                                                    className="me-1"
+                                            // --- ADDED BUTTON AND CONTAINER ---
+                                            <div className="d-flex gap-2">
+                                                <Button
+                                                    color="primary"
+                                                    onClick={handleScanClick}
+                                                    disabled={scanningInProgress || isBulkScanning}
                                                 >
-                                                    <path d="M3 3h6v2H5v4H3V3zm12 0h6v6h-2V5h-4V3zm6 12v6h-6v-2h4v-4h2zM3 15h2v4h4v2H3v-6zM7 7h10v10H7V7zm2 2v6h6V9H9z" />
-                                                </svg>
-                                                Scan New
-                                            </Button>
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        width="20"
+                                                        height="20"
+                                                        fill="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                        className="me-1"
+                                                    >
+                                                        <path d="M3 3h6v2H5v4H3V3zm12 0h6v6h-2V5h-4V3zm6 12v6h-6v-2h4v-4h2zM3 15h2v4h4v2H3v-6zM7 7h10v10H7V7zm2 2v6h6V9H9z" />
+                                                    </svg>
+                                                    Scan New
+                                                </Button>
+                                                <Button
+                                                    color="secondary"
+                                                    onClick={handleBulkScan}
+                                                    disabled={scanningInProgress || isBulkScanning}
+                                                >
+                                                    <i className="ri-file-pdf-line me-1"></i>
+                                                    Bulk Scan
+                                                </Button>
+                                            </div>
+                                            // --- END ADDED BUTTON ---
                                         )}
                                     </Col>
                                 </Row>
