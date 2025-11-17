@@ -4,7 +4,7 @@ import {
     Button, Badge, Input, Label, FormGroup, ListGroup, ListGroupItem,
     Alert, Spinner
 } from 'reactstrap';
-import { getDocumentDropdowns, viewDocument, getAllUserDropDownss } from '../../helpers/fakebackend_helper'; 
+import { getDocumentDropdowns, viewDocument, getAllUserDropDownss } from '../../helpers/fakebackend_helper';
 import axios from 'axios'; // <-- ***** YOU MUST ADD THIS IMPORT *****
 import { ToastContainer } from 'react-toastify';
 import SuccessModal from '../../Components/Common/SuccessModal';
@@ -435,7 +435,11 @@ const ViewDocuments = () => {
                         createdBy: doc.CreatedByUserName,
                         createdAt: formatDate(doc.CreatedAt),
                         category: doc.CategoryName,
-                        status: doc.StatusName,
+                        // --- START: MODIFIED ---
+                        status: doc.VersionStatusName, // Use VersionStatusName as per your API response
+                        approvalComment: doc.ChangeReason, // Add approval comment
+                        approvedOn: formatDate(doc.UploadedAt), // Add approval/version upload date
+                        // --- END: MODIFIED ---
                         url: doc.FilePath,
                         type: doc.FilePath.split('.').pop().toLowerCase(),
                         documentId: doc.DocumentId,
@@ -610,14 +614,14 @@ const ViewDocuments = () => {
                 console.error('Error content:', errorText);
                 throw new Error(errorMessage);
             }
-            
+
             // If the blob type is not PDF, force it.
             // This handles 'application/octet-stream' or empty type.
             if (receivedBlob.type !== 'application/pdf') {
-                 console.warn(`⚠️ Blob type is '${receivedBlob.type}'. Forcing 'application/pdf'.`);
-                 blobToView = new Blob([receivedBlob], { type: 'application/pdf' });
+                console.warn(`⚠️ Blob type is '${receivedBlob.type}'. Forcing 'application/pdf'.`);
+                blobToView = new Blob([receivedBlob], { type: 'application/pdf' });
             } else {
-                 blobToView = receivedBlob;
+                blobToView = receivedBlob;
             }
 
             // Create object URL for the valid blob
@@ -645,11 +649,11 @@ const ViewDocuments = () => {
                         const errorJson = JSON.parse(errorText);
                         errorMessage = errorJson.message || errorJson.error || "Server error";
                     } catch (e) {
-                         errorMessage = "Failed to load document (unreadable error response).";
+                        errorMessage = "Failed to load document (unreadable error response).";
                     }
                 }
             }
-            
+
             setPreviewError(errorMessage);
             setResponse(errorMessage);
             setErrorModal(true);
@@ -714,7 +718,7 @@ const ViewDocuments = () => {
             }
 
             let blobToDownload;
-            
+
             if (receivedBlob.type !== 'application/pdf') {
                 console.warn(`⚠️ Download: Blob type is '${receivedBlob.type}'. Forcing 'application/pdf'.`);
                 blobToDownload = new Blob([receivedBlob], { type: 'application/pdf' });
@@ -735,7 +739,7 @@ const ViewDocuments = () => {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            
+
             // Clean up URL after download
             setTimeout(() => {
                 URL.revokeObjectURL(url);
@@ -748,7 +752,7 @@ const ViewDocuments = () => {
             let errorMessage = err.message;
             // Try to read error from blob if it exists
             if (err.response && err.response && err.response instanceof Blob) {
-                 try {
+                try {
                     const errorText = await err.response.text();
                     const errorJson = JSON.parse(errorText);
                     errorMessage = errorJson.message || errorJson.error || "Server error";
@@ -1127,16 +1131,31 @@ const ViewDocuments = () => {
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    
+                                                    {/* --- START: MODIFIED --- */}
+                                                    {/* Replaced "Uploaded On" with "Approval Comment" and "Approved On" */}
+                                                    {selectedFile.approvalComment && (
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex align-items-center">
+                                                                <i className="ri-chat-1-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex align-items-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Approval Comment:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedFile.approvalComment}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
 
                                                     <div className="col-12 mb-3">
                                                         <div className="d-flex align-items-center">
-                                                            <i className="ri-calendar-line me-1 text-primary fs-6"></i>
+                                                            <i className="ri-calendar-check-line me-1 text-primary fs-6"></i>
                                                             <div className="d-flex align-items-center gap-3">
-                                                                <Label className="fw-medium text-muted x-small mb-0">Uploaded On:</Label>
-                                                                <span className="fw-semibold x-small">{selectedFile.createdAt}</span>
+                                                                <Label className="fw-medium text-muted x-small mb-0">Approved On:</Label>
+                                                                <span className="fw-semibold x-small">{selectedFile.approvedOn}</span>
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    {/* --- END: MODIFIED --- */}
 
                                                     <div className="col-12 mb-3">
                                                         <div className="d-flex align-items-center">
@@ -1156,7 +1175,7 @@ const ViewDocuments = () => {
                                                             <div className="d-flex align-items-center gap-3">
                                                                 <Label className="fw-medium text-muted x-small mb-0">Version:</Label>
                                                                 <Badge color="info" className="badge-soft-info x-small">
-                                                                    {selectedFile.versionLabel} {selectedFile.isLatest && '(Latest)'}
+                                                                    {selectedFile.versionLabel} {selectedFile.isLatest ? '(Latest)' : ''}
                                                                 </Badge>
                                                             </div>
                                                         </div>
@@ -1215,7 +1234,7 @@ const ViewDocuments = () => {
                                                                     </small>
                                                                     <br />
                                                                     <small className="text-info">
-                                                                        Version: {doc.versionLabel} {doc.isLatest && '(Latest)'}
+                                                                        Version: {doc.versionLabel} {doc.isLatest ? '(Latest)' : ''}
                                                                     </small>
                                                                 </div>
                                                                 <Button

@@ -93,92 +93,92 @@ const DocumentManagement = () => {
     document.title = `Document Upload | DMS`;
 
     const handleReuploadSubmit = async () => {
-    if (!newDocumentFile || !reuploadDocument || !changeReason) {
-        setResponse('Please provide all required fields');
-        setErrorModal(true);
-        return;
-    }
-
-    try {
-        setUploadLoading(true);
-        const authUser = JSON.parse(sessionStorage.getItem("authUser"));
-        const userId = authUser?.user?.User_Id;
-        const userName = authUser?.user?.Email || 'Admin';
-
-        // Debug: Check what data we have
-        console.log("Reupload Document Data:", reuploadDocument);
-        console.log("Account_Id from document:", reuploadDocument.Account_Id);
-
-        const formData = new FormData();
-
-        // Use Account_Id from document, fallback to account search values
-        const accountId = reuploadDocument.Account_Id || account_id || accountSearchInput;
-        if (!accountId) {
-            setResponse('Account ID is required for re-upload');
+        if (!newDocumentFile || !reuploadDocument || !changeReason) {
+            setResponse('Please provide all required fields');
             setErrorModal(true);
             return;
         }
 
-        // Match the exact structure from your image
-        formData.append('Account_Id', accountId);
-        formData.append('mannualFile', newDocumentFile);
-        formData.append('DocumentName', reuploadDocument.DocumentName || reuploadDocument.name || 'Reuploaded Document');
-        formData.append('DocumentDescription', reuploadDocument.DocumentDescription || reuploadDocument.description || 'Reuploaded after rejection');
-        formData.append('MetaTags', reuploadDocument.MetaTags || reuploadDocument.metaTags || 'reupload,document');
-        formData.append('CreatedByUser_Id', userId);
-        formData.append('CreatedByUserName', userName);
-        formData.append('Category_Id', reuploadDocument.Category_Id || reuploadDocument.category || '1');
-        formData.append('Status_Id', '1'); 
-        formData.append('div_code', reuploadDocument.div_code || authUser?.user?.zones?.[0]?.div_code || '43005');
-        formData.append('sd_code', reuploadDocument.sd_code || authUser?.user?.zones?.[0]?.sd_code || 'AURAD');
-        formData.append('so_code', reuploadDocument.so_code || authUser?.user?.zones?.[0]?.so_code || 'CHINTAKI');
-        formData.append('Role_Id', '1');
-        formData.append('ChangeReason', changeReason);
+        try {
+            setUploadLoading(true);
+            const authUser = JSON.parse(sessionStorage.getItem("authUser"));
+            const userId = authUser?.user?.User_Id;
+            const userName = authUser?.user?.Email || 'Admin';
 
-        console.log("Reupload FormData:", {
-            Account_id: accountId,
-            DocumentName: reuploadDocument.DocumentName || reuploadDocument.name || 'Reuploaded Document',
-            DocumentDescription: reuploadDocument.DocumentDescription || reuploadDocument.description || 'Reuploaded after rejection',
-            MetaTags: reuploadDocument.MetaTags || reuploadDocument.metaTags || 'reupload,document',
-            CreatedByUser_Id: userId,
-            CreatedByUserName: userName,
-            Category_Id: reuploadDocument.Category_Id || reuploadDocument.category || '1',
-            Status_Id: '1',
-            div_code: reuploadDocument.div_code || authUser?.user?.zones?.[0]?.div_code || '43005',
-            sd_code: reuploadDocument.sd_code || authUser?.user?.zones?.[0]?.sd_code || 'AURAD',
-            so_code: reuploadDocument.so_code || authUser?.user?.zones?.[0]?.so_code || 'CHINTAKI',
-            Role_Id: '1',
-            ChangeReason: changeReason,
-            hasFile: !!newDocumentFile
-        });
+            // Debug: Check what data we have
+            console.log("Reupload Document Data:", reuploadDocument);
+            console.log("Account_Id from document:", reuploadDocument.Account_Id);
 
-        const response = await postDocumentManualUpload(formData);
+            const formData = new FormData();
 
-        if (response?.status === 'success') {
-            setResponse(response.message || 'Document re-uploaded successfully!');
-            setSuccessModal(true);
-            await fetchRejectedDocuments();
-            await fetchDocumentCounts();
-        } else {
-            setResponse(response?.message || 'Failed to re-upload document');
+            // Use Account_Id from document, fallback to account search values
+            const accountId = reuploadDocument.Account_Id || account_id || accountSearchInput;
+            if (!accountId) {
+                setResponse('Account ID is required for re-upload');
+                setErrorModal(true);
+                return;
+            }
+
+            // Match the exact structure from your image
+            formData.append('Account_Id', accountId);
+            formData.append('mannualFile', newDocumentFile);
+            formData.append('DocumentName', reuploadDocument.DocumentName || reuploadDocument.name || 'Reuploaded Document');
+            formData.append('DocumentDescription', reuploadDocument.DocumentDescription || reuploadDocument.description || 'Reuploaded after rejection');
+            formData.append('MetaTags', reuploadDocument.MetaTags || reuploadDocument.metaTags || 'reupload,document');
+            formData.append('CreatedByUser_Id', userId);
+            formData.append('CreatedByUserName', userName);
+            formData.append('Category_Id', reuploadDocument.Category_Id || reuploadDocument.category || '1');
+            formData.append('Status_Id', '1');
+            formData.append('div_code', reuploadDocument.div_code || authUser?.user?.zones?.[0]?.div_code || '43005');
+            formData.append('sd_code', reuploadDocument.sd_code || authUser?.user?.zones?.[0]?.sd_code || 'AURAD');
+            formData.append('so_code', reuploadDocument.so_code || authUser?.user?.zones?.[0]?.so_code || 'CHINTAKI');
+            formData.append('Role_Id', '1');
+            formData.append('ChangeReason', changeReason);
+
+            console.log("Reupload FormData:", {
+                Account_id: accountId,
+                DocumentName: reuploadDocument.DocumentName || reuploadDocument.name || 'Reuploaded Document',
+                DocumentDescription: reuploadDocument.DocumentDescription || reuploadDocument.description || 'Reuploaded after rejection',
+                MetaTags: reuploadDocument.MetaTags || reuploadDocument.metaTags || 'reupload,document',
+                CreatedByUser_Id: userId,
+                CreatedByUserName: userName,
+                Category_Id: reuploadDocument.Category_Id || reuploadDocument.category || '1',
+                Status_Id: '1',
+                div_code: reuploadDocument.div_code || authUser?.user?.zones?.[0]?.div_code || '43005',
+                sd_code: reuploadDocument.sd_code || authUser?.user?.zones?.[0]?.sd_code || 'AURAD',
+                so_code: reuploadDocument.so_code || authUser?.user?.zones?.[0]?.so_code || 'CHINTAKI',
+                Role_Id: '1',
+                ChangeReason: changeReason,
+                hasFile: !!newDocumentFile
+            });
+
+            const response = await postDocumentManualUpload(formData);
+
+            if (response?.status === 'success') {
+                setResponse(response.message || 'Document re-uploaded successfully!');
+                setSuccessModal(true);
+                await fetchRejectedDocuments();
+                await fetchDocumentCounts();
+            } else {
+                setResponse(response?.message || 'Failed to re-upload document');
+                setErrorModal(true);
+            }
+        } catch (error) {
+            console.error('Re-upload failed:', error);
+            setResponse(error.response?.data?.message ||
+                error.message ||
+                'Error re-uploading document. Please try again.');
             setErrorModal(true);
+        } finally {
+            setUploadLoading(false);
+            setShowReuploadModal(false);
+            setReuploadDocument(null);
+            setNewDocumentFile(null);
+            setNewDocumentPreview(null);
+            setReuploadOldDocPreview(null);
+            setChangeReason('');
         }
-    } catch (error) {
-        console.error('Re-upload failed:', error);
-        setResponse(error.response?.data?.message ||
-            error.message ||
-            'Error re-uploading document. Please try again.');
-        setErrorModal(true);
-    } finally {
-        setUploadLoading(false);
-        setShowReuploadModal(false);
-        setReuploadDocument(null);
-        setNewDocumentFile(null);
-        setNewDocumentPreview(null);
-        setReuploadOldDocPreview(null);
-        setChangeReason('');
     }
-}
 
     // Get user level and access data from session storage
     useEffect(() => {
@@ -543,6 +543,9 @@ const DocumentManagement = () => {
     };
     // *** END OF MODIFIED FUNCTION ***
 
+    // *****************************************************************
+    // ******************* MODIFIED FUNCTION ***************************
+    // *****************************************************************
     const fetchApprovedDocuments = async () => {
         try {
             setLoading(true);
@@ -563,21 +566,21 @@ const DocumentManagement = () => {
                     id: doc.DocumentId + '_' + doc.Version_Id, // Unique ID combining DocumentId and Version_Id
                     DocumentId: doc.DocumentId,
                     Version_Id: doc.Version_Id, // <-- ADD THIS CRITICAL FIELD
-                    name: doc.documentName,
+                    name: doc.DocumentName, // <-- UPDATED
                     type: getFileTypeFromPath(doc.FilePath),
-                    category: doc.DocumentType || getDocumentTypeFromPath(doc.FilePath),
-                    createdAt: new Date(doc.ApprovedOn).toLocaleDateString(),
-                    createdBy: doc.ApprovedBy,
-                    description: doc.ApprovalComment,
-                    status: doc.StatusName,
+                    category: doc.CategoryName, // <-- UPDATED
+                    createdAt: new Date(doc.ApprovedOn).toLocaleDateString(), // <-- MAPPED to ApprovedOn
+                    createdBy: doc.ApprovedbyUserName, // <-- UPDATED
+                    description: doc.ApprovalComment, // <-- MAPPED to ApprovalComment
+                    status: doc.VersionStatusName, // <-- UPDATED
                     FilePath: doc.FilePath,
-                    division: doc.division,
-                    sub_division: doc.sub_division,
-                    section: doc.section,
+                    division: doc.division_name, // <-- UPDATED
+                    sub_division: doc.subdivision_name, // <-- UPDATED
+                    section: doc.section_name, // <-- UPDATED
                     rr_no: doc.rr_no,
                     consumer_name: doc.consumer_name,
                     consumer_address: doc.consumer_address,
-                    versionLabel: doc.VersionLabel || '1.0', // <-- ADD version info
+                    versionLabel: doc.VersionLabel || '1.0',
                     isLatest: doc.IsLatest || true
                 }));
 
@@ -595,44 +598,47 @@ const DocumentManagement = () => {
             setLoading(false);
         }
     };
+    // *****************************************************************
+    // ***************** END OF MODIFIED FUNCTION **********************
+    // *****************************************************************
 
     const fetchRejectedDocuments = async () => {
         try {
             setLoading(true);
             const authUser = JSON.parse(sessionStorage.getItem("authUser"));
             const userId = authUser?.user?.User_Id;
-            const so_code = authUser?.user?.zones?.[0]?.so_code || ''; 
+            const so_code = authUser?.user?.zones?.[0]?.so_code || '';
 
             const params = {
-                flagId: 4, 
+                flagId: 4,
                 User_Id: userId,
-                so_code: so_code 
+                so_code: so_code
             };
 
             const response = await qcReviewed(params);
 
             if (response?.status === 'success' && response?.results) {
                 const transformedDocuments = response.results.map(doc => ({
-                    id: doc.DocumentId + '_' + doc.Version_Id, 
+                    id: doc.DocumentId + '_' + doc.Version_Id,
                     DocumentId: doc.DocumentId,
-                    Version_Id: doc.Version_Id, 
+                    Version_Id: doc.Version_Id,
                     name: doc.DocumentName || `Document_${doc.DocumentId}`,
                     type: getFileTypeFromPath(doc.FilePath),
-                    category: doc.DocumentType || getDocumentTypeFromPath(doc.FilePath),
+                    category: doc.CategoryName || getDocumentTypeFromPath(doc.FilePath), // <-- Use CategoryName
                     createdAt: new Date(doc.RejectedOn).toLocaleDateString(),
                     createdBy: doc.RejectedBy,
                     description: doc.RejectionComment,
-                    status: doc.StatusName,
+                    status: doc.VersionStatusName, // <-- Use VersionStatusName
                     FilePath: doc.FilePath,
-                    division: doc.division,
-                    sub_division: doc.sub_division,
-                    section: doc.section,
+                    division: doc.division_name, // <-- Use division_name
+                    sub_division: doc.subdivision_name, // <-- Use subdivision_name
+                    section: doc.section_name, // <-- Use section_name
                     rr_no: doc.rr_no,
                     consumer_name: doc.consumer_name,
                     consumer_address: doc.consumer_address,
                     Rejection_Id: doc.Rejection_Id,
                     RejectionComment: doc.RejectionComment,
-                    versionLabel: doc.VersionLabel || '1.0', // <-- ADD version info
+                    versionLabel: doc.VersionLabel || '1.0',
                     isLatest: doc.IsLatest || true,
                     // ADD THESE FIELDS FOR REUPLOAD
                     Account_Id: doc.Account_Id, // <-- ADD THIS
@@ -2187,7 +2193,7 @@ const DocumentManagement = () => {
                                                                 <div className="d-flex alignItems-center gap-3">
                                                                     <Label className="fw-medium text-muted x-small mb-0">Version:</Label>
                                                                     <Badge color="info" className="badge-soft-info x-small">
-                                                                        {selectedFile.versionLabel} {selectedFile.isLatest && '(Latest)'}
+                                                                        {selectedFile.versionLabel} {selectedFile.isLatest ? '(Latest)' : ''}
                                                                     </Badge>
                                                                 </div>
                                                             </div>
@@ -2251,7 +2257,7 @@ const DocumentManagement = () => {
                                                                             {doc.name}
                                                                         </h6>
                                                                         <small className="text-muted d-block text-truncate">
-                                                                            Version: {doc.versionLabel} {doc.isLatest && '(Latest)'}
+                                                                            Version: {doc.versionLabel} {doc.isLatest ? '(Latest)' : ''}
                                                                         </small>
                                                                     </div>
                                                                     <Button
@@ -2554,7 +2560,7 @@ const DocumentManagement = () => {
                                                                 <div className="d-flex alignItems-center gap-3">
                                                                     <Label className="fw-medium text-muted x-small mb-0">Version:</Label>
                                                                     <Badge color="info" className="badge-soft-info x-small">
-                                                                        {selectedRejectedFile.versionLabel} {selectedRejectedFile.isLatest && '(Latest)'}
+                                                                        {selectedRejectedFile.versionLabel} {selectedRejectedFile.isLatest ? '(Latest)' : ''}
                                                                     </Badge>
                                                                 </div>
                                                             </div>
@@ -2603,7 +2609,7 @@ const DocumentManagement = () => {
                                                                     <div className="flex-grow-1 overflow-hidden">
                                                                         <h6 className="mb-0 text-truncate" title={doc.name}>{doc.name}</h6>
                                                                         <small className="text-muted d-block text-truncate">
-                                                                            Version: {doc.versionLabel} {doc.isLatest && '(Latest)'}
+                                                                            Version: {doc.versionLabel} {doc.isLatest ? '(Latest)' : ''}
                                                                         </small>
                                                                     </div>
                                                                     <div className="flex-shrink-0 ms-2">
@@ -2926,7 +2932,7 @@ const DocumentManagement = () => {
                         <Button
                             color="primary"
                             onClick={handleReuploadSubmit}
-                            disabled={!newDocumentFile || uploadLoading}
+                            disabled={!newDocumentFile || uploadLoading || !changeReason}
                         >
                             {uploadLoading ? (
                                 <>
