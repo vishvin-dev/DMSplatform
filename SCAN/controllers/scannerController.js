@@ -149,12 +149,14 @@ export const scanDocument = async (req, res) => {
 };
 
 
-// =====================
+// ===========================================================================================================
 // Bulk Scan (ADF – multi-page feed)
-// =====================
+// This part is completley for giving command to the scanner machine to scan and place the file in the local ok 
+// ============================================================================================================
 export const bulkScan = async (req, res) => {
   try {
     const { deviceName, fileName, format } = req.body;
+    console.log(req.body,"requesttsss")
     const scanner = deviceName || config.defaultScanner;
     const extension = format ? format.toLowerCase() : config.defaultFormat;
 
@@ -177,7 +179,7 @@ export const bulkScan = async (req, res) => {
     const args = [
       "--driver", "twain",
       "--device", scanner,
-      "--source", "feeder",         //  tells scanner to use ADF
+      "--source", "feeder",         // it tells scanner to use ADF
       "--output", outputPath,
       "--force",
     ];
@@ -186,7 +188,7 @@ export const bulkScan = async (req, res) => {
 
     execFile(config.naps2Path, args, async (error, stdout, stderr) => {
       if (error) {
-        console.error("Bulk scan error:", stderr);
+        console.error("Bulk scan error:", stderr,error);
         return res.status(500).json({ error: stderr });
       }
 

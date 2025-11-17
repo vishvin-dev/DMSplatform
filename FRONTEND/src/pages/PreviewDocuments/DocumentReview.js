@@ -14,6 +14,8 @@ import { io } from "socket.io-client";
 import axios from 'axios';
 import { jsPDF } from "jspdf";
 
+import {socket} from "../../pages/PreviewDocuments/SocketConnection.js"
+
 // --- HELPERS & SUB-COMPONENTS ---
 
 const getHighlightBadgeStyle = (itemType) => {
@@ -629,7 +631,7 @@ const DocumentReview = () => {
 
     // Socket connection
     useEffect(() => {
-        const socketConnection = io(SCANNER_ENDPOINT, { transports: ["websocket", "polling"] });
+        const socketConnection = io(SCANNER_ENDPOINT,  { transports: ["websocket", "polling"], reconnection: false,  });
         setSocket(socketConnection);
         socketConnection.on("connect", () => console.log("✅ Socket connected!"));
         socketConnection.on("disconnect", () => console.log("🔌 Socket Disconnected."));
@@ -646,7 +648,9 @@ const DocumentReview = () => {
         };
     }, []);
 
+
     // --- NEW UNIFIED SOCKET LISTENER ---
+
     useEffect(() => {
         if (!socket) return;
 
