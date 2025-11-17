@@ -235,15 +235,6 @@ const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comme
                             <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
                                 <strong>File Number:</strong><span className="text-muted ms-1">{verificationDetails.fileNumber || 'N/A'}</span>
                             </ListGroupItem>
-                            {/* <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
-                                <strong>Contractor:</strong><span className="text-muted ms-1">{verificationDetails.contractorName || 'N/A'}</span>
-                            </ListGroupItem>
-                            <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
-                                <strong>Approved By:</strong><span className="text-muted ms-1">{verificationDetails.approvedBy || 'N/A'}</span>
-                            </ListGroupItem>
-                            <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
-                                <strong>Category:</strong><span className="text-muted ms-1">{verificationDetails.category || 'N/A'}</span>
-                            </ListGroupItem> */}
                             <hr className="my-1"/>
                         </>
                     ) : (
@@ -542,13 +533,6 @@ const ScanPreviewModal = ({
                                 <TagEditor key={scannedData.tags.join(',')} tags={scannedData.tags} onAddTag={(tag) => onDataChange('tags', [...scannedData.tags, tag])} onRemoveTag={(tag) => onDataChange('tags', scannedData.tags.filter(t => t !== tag))} />
                             </CardBody>
                         </Card>
-                        {/* {scannedData.isOther && (
-                            <Card className="mb-3"><CardHeader className="bg-light p-3"><h6 className="mb-0">Document Details</h6></CardHeader><CardBody className="p-3">
-                                <p className="text-muted small mb-2">This document type requires a name.</p>
-                                <div className="mb-2"><label htmlFor="docName" className="form-label small">Document Name <span className="text-danger">*</span></label><Input id="docName" type="text" placeholder="e.g., NOC Certificate" value={scannedData.docName} onChange={(e) => onDataChange('docName', e.target.value)} /></div>
-                                <div><label htmlFor="docRef" className="form-label small">Reference (Optional)</label><Input id="docRef" type="text" placeholder="e.g., NOC-12345" value={scannedData.docRef} onChange={(e) => onDataChange('docRef', e.target.value)} /></div>
-                            </CardBody></Card>
-                        )} */}
                         <Card className="flex-grow-1"><CardHeader className="bg-light p-3"><h6 className="mb-0">Response / Comments</h6></CardHeader><CardBody className="p-2"><Input type="textarea" rows={3} placeholder="Enter comments..." value={scannedData.responseText} onChange={(e) => onDataChange('responseText', e.target.value)} /></CardBody></Card>
                     </Col>
                 </Row>
@@ -607,7 +591,11 @@ const DocumentReview = () => {
     const [socket, setSocket] = useState(null);
     const [scanningInProgress, setScanningInProgress] = useState(false);
     const [currentScanFileName, setCurrentScanFileName] = useState('');
-    const [scanTimeoutId, setScanTimeoutId] = useState(null);
+    
+    // --- TIMEOUT/INTERVAL REFS (FIX FOR STUCK MODAL) ---
+    const scanTimeoutIdRef = useRef(null);
+    const progressIntervalRef = useRef(null);
+
     const [isScanningModalOpen, setIsScanningModalOpen] = useState(false);
     const [scanProgress, setScanProgress] = useState(0);
     const [isScanPreviewModalOpen, setIsScanPreviewModalOpen] = useState(false);
@@ -626,41 +614,132 @@ const DocumentReview = () => {
 
     const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
     
-    // --- MODIFICATION START ---
     // Load verification details from location state (consumerData)
     useEffect(() => {
         if (consumerData) {
             setVerificationDetails({
-                noOfPages: consumerData.noOfPages, // This is passed from navigate state
-                fileNumber: consumerData.fileNumber, // This is passed from navigate state
-                // The following were removed from the modal, so they will be undefined.
-                // The DocumentInfoPanel will show 'N/A' which is correct.
+                noOfPages: consumerData.noOfPages,
+                fileNumber: consumerData.fileNumber,
                 contractorName: consumerData.contractorName,
                 approvedBy: consumerData.approvedBy,
                 category: consumerData.category
             });
         }
-    }, [consumerData]); // Run when consumerData is available
-    // --- MODIFICATION END ---
+    }, [consumerData]);
 
+    // Socket connection
     useEffect(() => {
         const socketConnection = io(SCANNER_ENDPOINT, { transports: ["websocket", "polling"] });
         setSocket(socketConnection);
         socketConnection.on("connect", () => console.log("✅ Socket connected!"));
         socketConnection.on("disconnect", () => console.log("🔌 Socket Disconnected."));
+        
         return () => {
             socketConnection.disconnect();
+            // Cleanup timers on component unmount
+            if (scanTimeoutIdRef.current) {
+                clearTimeout(scanTimeoutIdRef.current);
+            }
+            if (progressIntervalRef.current) {
+                clearInterval(progressIntervalRef.current);
+            }
         };
     }, []);
 
+    // --- NEW UNIFIED SOCKET LISTENER ---
     useEffect(() => {
         if (!socket) return;
 
-        const handleNewScan = async (scan) => {
-            if (scanningInProgress && currentScanFileName && scan.fileName.includes(currentScanFileName)) {
-                if (scanTimeoutId) { clearTimeout(scanTimeoutId); setScanTimeoutId(null); }
+        // This single listener handles BOTH single and bulk scans
+        const handleScanResponse = async (data) => {
+            console.log("Incoming scan data:", data);
+
+            // --- A. BULK SCAN (PDF) LOGIC (from LiveScanViewer sample) ---
+            // We check for 'isBulkScanning' state to ensure we're expecting this.
+            if (isBulkScanning && data.type === "pdf" && data.images) {
+                if (progressIntervalRef.current) {
+                    clearInterval(progressIntervalRef.current);
+                    progressIntervalRef.current = null;
+                }
+                if (scanTimeoutIdRef.current) { 
+                    clearTimeout(scanTimeoutIdRef.current); 
+                    scanTimeoutIdRef.current = null; 
+                }
+                
                 try {
-                    const fullImageUrl = `${SCANNER_ENDPOINT}${scan.imageUrl}`;
+                    // 1. Fetch all images as blobs
+                    const pagePromises = data.images.map(async (imageUrl, index) => {
+                        const fullImageUrl = `${SCANNER_ENDPOINT}${imageUrl}`;
+                        const fileResponse = await fetch(fullImageUrl);
+                        if (!fileResponse.ok) throw new Error(`Failed to fetch scanned page ${index + 1}`);
+                        const blob = await fileResponse.blob();
+                        const previewUrl = URL.createObjectURL(blob);
+                        const dimensions = await getImageDimensions(blob);
+
+                        return {
+                            blob, previewUrl, type: blob.type, name: `page_${index + 1}.jpg`,
+                            id: `page_${Date.now()}_${index}`, zoom: 1, rotation: 0,
+                            dimensions: dimensions, isFitCalculated: false, isFitted: true,
+                        };
+                    });
+
+                    const newPages = await Promise.all(pagePromises);
+
+                    if (newPages.length === 0) {
+                        throw new Error("Bulk scan completed but returned no pages.");
+                    }
+
+                    // 2. Create the new document object for the modal
+                    const newDoc = {
+                        id: Date.now(), name: "BulkScannedDocument.pdf", type: 'application/pdf',
+                        category: 'all', // Set to 'all' for placeholder
+                        createdAt: new Date().toISOString().split('T')[0],
+                        createdBy: 'scanner', description: 'Newly scanned bulk document',
+                        rr_no: consumerData.rr_no, consumer_name: consumerData.consumer_name,
+                        account_id: consumerData.account_id,
+                        pages: newPages, // Add all fetched pages
+                        comment: '',
+                        tags: ['scanned', 'new', 'bulk'],
+                    };
+
+                    // 3. Set state to open the preview modal
+                    setScanModalActiveIndex(0);
+                    setScannedDocumentData({
+                        doc: newDoc,
+                        highlights: [{ type: 'Header', text: 'Bulk Scanned Document' }, { type: 'Footer', text: `Scanned on: ${newDoc.createdAt}` }, { type: 'Word', text: newDoc.consumer_name },],
+                        tags: newDoc.tags,
+                        responseText: '',
+                        isOther: false,
+                        docName: '',
+                        docRef: ''
+                    });
+                    setIsScanPreviewModalOpen(true); // Open the modal
+                    setIsScanningModalOpen(false); // Close the "in progress" modal
+                    setIsBulkScanning(false);
+                    setScanningInProgress(false);
+
+                } catch (error) {
+                    console.error("Error processing bulk scan pages:", error);
+                    setResponse(error.message || "Could not retrieve the scanned bulk pages.");
+                    setErrorModal(true);
+                    setIsScanningModalOpen(false);
+                    setIsBulkScanning(false);
+                    setScanningInProgress(false);
+                }
+            }
+            // --- B. SINGLE SCAN LOGIC (Existing code) ---
+            else if (scanningInProgress && currentScanFileName && data.fileName && data.fileName.includes(currentScanFileName)) {
+                if (scanTimeoutIdRef.current) { 
+                    clearTimeout(scanTimeoutIdRef.current); 
+                    scanTimeoutIdRef.current = null; 
+                }
+                if (progressIntervalRef.current) {
+                    clearInterval(progressIntervalRef.current);
+                    progressIntervalRef.current = null;
+                }
+
+                try {
+                    const fullImageUrl = `${SCANNER_ENDPOINT}${data.imageUrl}`;
                     const fileResponse = await fetch(fullImageUrl);
                     if (!fileResponse.ok) throw new Error('Failed to fetch scanned image file from server.');
                     const blob = await fileResponse.blob();
@@ -668,7 +747,7 @@ const DocumentReview = () => {
                     const dimensions = await getImageDimensions(blob);
 
                     const newPage = {
-                        blob, previewUrl, type: blob.type, name: scan.fileName,
+                        blob, previewUrl, type: blob.type, name: data.fileName,
                         id: `page_${Date.now()}`, zoom: 1, rotation: 0,
                         dimensions: dimensions,
                         isFitCalculated: false,
@@ -698,17 +777,16 @@ const DocumentReview = () => {
                         setIsAddingPage(false);
                         setIsAddingPageLoading(false);
                     } else {
-                        // UPDATED: Logic for new scan
                         const newDoc = {
-                            id: Date.now(), name: scan.fileName, type: blob.type,
-                            category: 'all', // Set to 'all' for placeholder
+                            id: Date.now(), name: data.fileName, type: blob.type,
+                            category: 'all', 
                             createdAt: new Date().toISOString().split('T')[0],
                             createdBy: 'scanner', description: 'Newly scanned document',
                             rr_no: consumerData.rr_no, consumer_name: consumerData.consumer_name,
                             account_id: consumerData.account_id,
                             pages: [newPage],
                             comment: '',
-                            tags: ['scanned', 'new'], // Generic tags
+                            tags: ['scanned', 'new'],
                         };
                         setScanModalActiveIndex(0);
                         setScannedDocumentData({
@@ -716,7 +794,7 @@ const DocumentReview = () => {
                             highlights: [{ type: 'Header', text: 'Scanned Document' }, { type: 'Footer', text: `Scanned on: ${newDoc.createdAt}` }, { type: 'Word', text: newDoc.consumer_name },],
                             tags: newDoc.tags,
                             responseText: '',
-                            isOther: false, // Set to false initially
+                            isOther: false, 
                             docName: '',
                             docRef: ''
                         });
@@ -724,6 +802,7 @@ const DocumentReview = () => {
                     }
                     setIsScanningModalOpen(false);
                     setScanningInProgress(false);
+
                 } catch (error) {
                     console.error("Error handling new scan:", error);
                     setResponse(error.message || "Could not retrieve the scanned file.");
@@ -738,9 +817,18 @@ const DocumentReview = () => {
             }
         };
 
-        socket.on("new-scan-processed", handleNewScan);
-        return () => { socket.off("new-scan-processed", handleNewScan); };
-    }, [socket, scanningInProgress, currentScanFileName, scanTimeoutId, consumerData, fileTypeFilter, documentTypes, isAddingPage, pageToRescanId]);
+        socket.on("new-scan-processed", handleScanResponse);
+        return () => { socket.off("new-scan-processed", handleScanResponse); };
+
+    }, [
+        socket, 
+        scanningInProgress, // for single scan
+        currentScanFileName, // for single scan
+        isBulkScanning, // for bulk scan
+        consumerData, 
+        isAddingPage, 
+        pageToRescanId
+    ]);
 
     useEffect(() => {
         const fetchDocumentTypes = async () => {
@@ -921,9 +1009,6 @@ const DocumentReview = () => {
         try {
             const apiResponse = await postDocumentUpload(formData);
             if (apiResponse?.status === 'success') {
-                // --- MODIFICATION START ---
-                // REMOVED: sessionStorage.removeItem('verificationData');
-                // --- MODIFICATION END ---
                 setResponse(apiResponse.message || `Successfully uploaded files.`);
                 setSuccessModal(true);
             } else {
@@ -931,7 +1016,7 @@ const DocumentReview = () => {
             }
         } catch (error) {
             console.error("API Submission Error:", error);
-            setResponse(error.message || "An unknown error occurred.");
+            setResponse(error?.message || "An unknown error occurred.");
             setErrorModal(true);
         } finally {
             setLoading(false);
@@ -943,6 +1028,7 @@ const DocumentReview = () => {
         navigate('/Preview', { state: { refresh: true } });
     };
 
+    // --- UPDATED SINGLE SCAN TRIGGER ---
     const handleApiScan = async (docTypeLabel) => {
         if (!socket || !socket.connected) {
             setResponse("Scanner is not connected. Please try again.");
@@ -959,19 +1045,33 @@ const DocumentReview = () => {
 
         console.log(`🚀 Initiating scan for: ${fileNameForApi}`);
         setScanningInProgress(true);
-        setCurrentScanFileName(baseFileName);
+        setCurrentScanFileName(baseFileName); // <-- IMPORTANT for socket listener
 
         if (!isAddingPage && !isRescanning) {
             setIsScanningModalOpen(true);
         }
 
         setScanProgress(0);
-        const progressInterval = setInterval(() => setScanProgress(prev => Math.min(prev + 10, 90)), 250);
+        // Clear any previous interval
+        if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+        }
+        progressIntervalRef.current = setInterval(() => setScanProgress(prev => Math.min(prev + 10, 90)), 250);
 
         try {
+            // Just trigger the scan, response will come via socket
             await axios.post(`${SCANNER_ENDPOINT}/scan-service/scan`, { fileName: fileNameForApi, format: "jpg", colorMode: "color" }, { timeout: 30000 });
-            const timeout = setTimeout(() => {
-                clearInterval(progressInterval);
+            
+            // Clear previous timeout just in case
+            if (scanTimeoutIdRef.current) {
+                clearTimeout(scanTimeoutIdRef.current);
+            }
+            // Set a new timeout in case socket doesn't respond
+            scanTimeoutIdRef.current = setTimeout(() => {
+                if (progressIntervalRef.current) {
+                    clearInterval(progressIntervalRef.current);
+                    progressIntervalRef.current = null;
+                }
                 setScanningInProgress(false);
                 setCurrentScanFileName('');
                 setIsAddingPage(false);
@@ -981,10 +1081,19 @@ const DocumentReview = () => {
                 setPageToRescanId(null);
                 setResponse('Scan timed out. The scanner did not respond.');
                 setErrorModal(true);
-            }, 30000);
-            setScanTimeoutId(timeout);
+                scanTimeoutIdRef.current = null;
+            }, 30000); // 30 second timeout
+
         } catch (error) {
-            clearInterval(progressInterval);
+            // This catch block handles axios errors (e.g., network error, 500 status, or axios timeout)
+            if (progressIntervalRef.current) {
+                clearInterval(progressIntervalRef.current);
+                progressIntervalRef.current = null;
+            }
+            if (scanTimeoutIdRef.current) { // Clear the success timeout if axios fails
+                clearTimeout(scanTimeoutIdRef.current);
+                scanTimeoutIdRef.current = null;
+            }
             setScanningInProgress(false);
             setCurrentScanFileName('');
             setIsAddingPage(false);
@@ -992,12 +1101,13 @@ const DocumentReview = () => {
             setIsScanningModalOpen(false);
             setIsRescanning(false);
             setPageToRescanId(null);
-            setResponse('Error initiating scan. Check network and scanner connection.');
+            
+            console.error("Scan Error:", error || "An undefined error was caught");
+            setResponse(error?.message || 'Error initiating scan. Check network and scanner connection.');
             setErrorModal(true);
         }
     };
 
-    // UPDATED: handleScanClick to remove dependency on fileTypeFilter
     const handleScanClick = () => {
         setIsAddingPage(false);
         setIsRescanning(false);
@@ -1005,7 +1115,7 @@ const DocumentReview = () => {
         handleApiScan(docTypeLabel);
     };
 
-    // --- NEW FUNCTION: handleBulkScan ---
+    // --- UPDATED BULK SCAN TRIGGER ---
     const handleBulkScan = async () => {
         if (!socket || !socket.connected) {
             setResponse("Scanner is not connected. Please try again.");
@@ -1014,100 +1124,58 @@ const DocumentReview = () => {
         }
 
         console.log("🚀 Initiating Bulk Scan...");
-        setIsBulkScanning(true);
+        setIsBulkScanning(true); // <-- IMPORTANT
+        setScanningInProgress(true); // <-- IMPORTANT
         setIsScanningModalOpen(true); // Reuse the scanning modal
         setScanProgress(0);
-        const progressInterval = setInterval(() => setScanProgress(prev => Math.min(prev + 10, 90)), 250);
+        
+        if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+        }
+        progressIntervalRef.current = setInterval(() => setScanProgress(prev => Math.min(prev + 10, 90)), 250);
 
         const payload = {
-            deviceName: "Canon MF460 ser_6CF2D8AE9F40", // Hardcoded from user's screenshot
-            fileName: "ProjectDocsBatch.pdf", // Hardcoded from user's screenshot
-            format: "pdf" // Hardcoded from user's screenshot
+            deviceName: "Canon MF460 ser_6CF2D8AE9F40", 
+            fileName: "ProjectDocsBatch.pdf", 
+            format: "pdf" 
         };
 
         try {
-            // --- MODIFICATION START ---
-            // 1. Call the /scan-service/bulk-scan endpoint on port 5000
-            const apiResponse = await axios.post(`${SCANNER_ENDPOINT}/scan-service/bulk-scan`, payload, { timeout: 60000 }); // 60s timeout for bulk scan
-            // --- MODIFICATION END ---
+            // 1. Call the /scan-service/bulk-scan endpoint to *trigger* the scan.
+            // The response will come over the socket via the `useEffect[socket]` listener.
+            await axios.post(`${SCANNER_ENDPOINT}/scan-service/bulk-scan`, payload, { timeout: 60000 }); 
             
-            clearInterval(progressInterval);
-            setScanProgress(100);
-
-            // 2. Check the response
-            if (apiResponse.data && apiResponse.data.file) {
-                const filePath = apiResponse.data.file; // "E:\\Dms\\SCANDOCS\\ProjectDocsBatch.pdf"
-                console.log("Bulk scan API success, file path:", filePath);
-
-                // 3. Convert the Windows path to a relative URL
-                // We split by the escaped backslash "\\"
-                const pathParts = filePath.split('\\\\');
-                
-                // Find the "SCANDOCS" directory, assuming it's the static root
-                const staticDirIndex = pathParts.indexOf("SCANDOCS");
-                
-                if (staticDirIndex === -1) {
-                    throw new Error("Could not parse the file path from the server. Unknown format.");
-                }
-
-                // Re-join from "SCANDOCS" onwards, using /
-                const relativeUrl = pathParts.slice(staticDirIndex).join('/');
-
-                // --- MODIFICATION START ---
-                const fullFileUrl = `${SCANNER_ENDPOINT}/${relativeUrl}`; // e.g., http://192.168.23.229:5000/SCANDOCS/ProjectDocsBatch.pdf
-                // --- MODIFICATION END ---
-
-                console.log("Attempting to fetch file from:", fullFileUrl);
-
-                // 4. Fetch the file blob
-                const fileResponse = await fetch(fullFileUrl);
-                if (!fileResponse.ok) {
-                    throw new Error(`Failed to fetch the scanned PDF file from ${fullFileUrl}. Status: ${fileResponse.status}`);
-                }
-                const blob = await fileResponse.blob();
-                const previewUrl = URL.createObjectURL(blob);
-
-                // 5. Create a new document object for the main review list
-                const finalFileObject = new File([blob], payload.fileName, { type: 'application/pdf' });
-                
-                const finalDoc = {
-                     id: Date.now(),
-                     name: payload.fileName,
-                     type: 'application/pdf',
-                     category: 'all', // User will have to categorize it in the main UI
-                     createdAt: new Date().toISOString().split('T')[0],
-                     createdBy: 'scanner',
-                     description: 'Bulk scanned document',
-                     rr_no: consumerData.rr_no,
-                     consumer_name: consumerData.consumer_name,
-                     account_id: consumerData.account_id,
-                     comment: '',
-                     tags: ['scanned', 'new', 'bulk'],
-                     fileObject: finalFileObject,
-                     previewUrl: previewUrl, // The blob URL
-                     draftId: null, // This is not a draft from the DB
-                     documentId: null,
-                };
-                
-                // 6. Add the new document to the list and select it
-                setDocumentsForReview(prevDocs => [finalDoc, ...prevDocs]);
-                setIsScanningModalOpen(false);
-                setIsBulkScanning(false);
-                setResponse(apiResponse.data.message || "Bulk scan completed.");
-                setSuccessModal(true); // Use success modal to notify
-                
-                // Select the new file after a short delay
-                setTimeout(() => handleFileSelect(finalDoc), 100);
-
-            } else {
-                throw new Error(apiResponse.data.message || "Bulk scan API call failed to return a file path.");
+            // Set a timeout in case the socket never responds
+            if (scanTimeoutIdRef.current) {
+                clearTimeout(scanTimeoutIdRef.current);
             }
-        } catch (error) {
-            console.error("Bulk Scan Error:", error);
-            clearInterval(progressInterval);
+            scanTimeoutIdRef.current = setTimeout(() => {
+                if (progressIntervalRef.current) {
+                    clearInterval(progressIntervalRef.current);
+                    progressIntervalRef.current = null;
+                }
+                setScanningInProgress(false);
+                setIsBulkScanning(false);
+                setIsScanningModalOpen(false);
+                setResponse('Bulk Scan timed out. The scanner did not respond over the socket.');
+                setErrorModal(true);
+                scanTimeoutIdRef.current = null;
+            }, 60000); // 60 second timeout for bulk scan
+
+        } catch (error) { // This catches errors in *triggering* the scan
+            console.error("Bulk Scan Trigger Error:", error);
+            if (progressIntervalRef.current) {
+                clearInterval(progressIntervalRef.current);
+                progressIntervalRef.current = null;
+            }
+            if (scanTimeoutIdRef.current) {
+                clearTimeout(scanTimeoutIdRef.current);
+                scanTimeoutIdRef.current = null;
+            }
             setIsScanningModalOpen(false);
             setIsBulkScanning(false);
-            setResponse(error.message || 'Error during bulk scan. Check network and scanner connection.');
+            setScanningInProgress(false);
+            setResponse(error?.message || 'Error initiating bulk scan. Check scanner connection.');
             setErrorModal(true);
         }
     };
@@ -1357,7 +1425,6 @@ const DocumentReview = () => {
                 <SuccessModal show={successModal} onCloseClick={handleSuccessAndNavigate} successMsg={response} />
                 <ErrorModal show={errorModal} onCloseClick={() => setErrorModal(false)} errorMsg={response} />
                 <Card>
-                    {/* --- MODIFICATION START --- */}
                     <CardHeader className="bg-primary bg-gradient p-2 d-flex align-items-center flex-wrap gap-3">
                         <div className="d-flex align-items-center rounded-pill bg-white bg-opacity-25 text-white py-2 px-3 shadow-sm">
                             <i className="ri-user-line me-2 fs-4 text-warning"></i>
@@ -1374,25 +1441,21 @@ const DocumentReview = () => {
                             <span className="me-2 opacity-75 fs-5">RR No:</span>
                             <h5 className="mb-0 fw-bold text-white">{consumerData.rr_no}</h5>
                         </div>
-                        {/* ADDED TARIFF FIELD */}
                         <div className="d-flex align-items-center rounded-pill bg-white bg-opacity-25 text-white py-2 px-3 shadow-sm">
                             <i className="ri-price-tag-3-line me-2 fs-4 text-success"></i>
                             <span className="me-2 opacity-75 fs-5">Tariff:</span>
                             <h5 className="mb-0 fw-bold text-white">{consumerData.tariff || 'N/A'}</h5>
                         </div>
                     </CardHeader>
-                    {/* --- MODIFICATION END --- */}
                     <CardBody>
                         {documentsForReview.length === 0 ? (
                             <Row className="justify-content-center align-items-center" style={{ minHeight: '40vh' }}>
-                                {/* --- MODIFICATION START: Initial Scan UI --- */}
                                 <Col md={6} lg={5} className="text-center">
                                     <i className="ri-upload-cloud-line display-2 text-primary mb-3"></i>
                                     <h4>Please Upload Documents</h4>
                                     <p className="text-muted">To begin, click 'Scan' or 'Bulk Scan'.</p>
                                     <div className="mt-4">
                                         {loadingDocumentTypes ? (<div className="text-center"><Spinner size="sm" /> Loading...</div>) : (
-                                            // --- ADDED BUTTON AND CONTAINER ---
                                             <div className="d-flex justify-content-center gap-2">
                                                 <Button
                                                     color="primary"
@@ -1419,19 +1482,15 @@ const DocumentReview = () => {
                                                     Bulk Scan
                                                 </Button>
                                             </div>
-                                            // --- END ADDED BUTTON ---
                                         )}
                                     </div>
                                 </Col>
-                                {/* --- MODIFICATION END --- */}
                             </Row>
                         ) : (
                             <>
-                                {/* --- MODIFICATION START: Secondary Scan UI --- */}
                                 <Row className="g-3 align-items-center mb-4">
                                     <Col md={5}>
                                         {loadingDocumentTypes ? (<div className="text-center"><Spinner size="sm" /> Loading...</div>) : (
-                                            // --- ADDED BUTTON AND CONTAINER ---
                                             <div className="d-flex gap-2">
                                                 <Button
                                                     color="primary"
@@ -1459,11 +1518,9 @@ const DocumentReview = () => {
                                                     Bulk Scan
                                                 </Button>
                                             </div>
-                                            // --- END ADDED BUTTON ---
                                         )}
                                     </Col>
                                 </Row>
-                                {/* --- MODIFICATION END --- */}
                                 
                                 <Row className="main-review-layout g-3 d-flex">
                                     <Col xl={3} lg={4} className="d-flex flex-column">
@@ -1478,7 +1535,6 @@ const DocumentReview = () => {
                                             onTagsChange={setMetaTags} comment={responseText} onCommentChange={(e) => setResponseText(e.target.value)}
                                             isVerified={isVerified} onVerifiedChange={setIsVerified} onSubmit={handleSubmitReview}
                                             loading={loading} canSubmit={documentsForReview.length > 0} readOnly={!selectedFile}
-                                            // Pass the new verification details
                                             verificationDetails={verificationDetails}
                                         />
                                     </Col>
@@ -1487,7 +1543,6 @@ const DocumentReview = () => {
                         )}
                     </CardBody>
                 </Card>
-                {/* UPDATED: Pass documentTypes and DocumentTypeDropdown component */}
                 <ScanPreviewModal
                     isOpen={isScanPreviewModalOpen}
                     onClose={handleCloseScanPreview}

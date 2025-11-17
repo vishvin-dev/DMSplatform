@@ -744,81 +744,137 @@
 //   );
 // }
 
-import React, { useState } from "react";
-import axios from "axios";
+// import React, { useState } from "react";
+// import axios from "axios";
 
-const DocumentViewer = () => {
-  const [pdfUrl, setPdfUrl] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+// const DocumentViewer = () => {
+//   const [pdfUrl, setPdfUrl] = useState(null);
+//   const [loading, setLoading] = useState(false);
+//   const [error, setError] = useState("");
 
-  const handleViewPdf = async (Version_Id) => {
-    try {
-      setLoading(true);
-      setError("");
-      setPdfUrl(null);
-      const data = {
-        Version_Id: Version_Id, flagId: 2
+//   const handleViewPdf = async (Version_Id) => {
+//     try {
+//       setLoading(true);
+//       setError("");
+//       setPdfUrl(null);
+//       const data = {
+//         Version_Id: Version_Id, flagId: 2
+//       }
+//       const response = await axios.post(
+
+//         "http://192.168.23.229:9000/backend-service/documentUpload/documentView",
+//         { Version_Id: Version_Id, flagId: 2 },
+
+//         {
+//           responseType: "blob", // Important
+//         }
+//       );
+
+//       // Convert blob to object URL
+//       const file = new Blob([response], { type: "application/pdf" });
+//       const fileUrl = URL.createObjectURL(file);
+//       setPdfUrl(fileUrl);
+//     } catch (err) {
+//       console.error("Error viewing PDF:", err);
+//       setError("Unable to load document.");
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   return (
+//     <div style={{ padding: "20px" }}>
+//       <h3>📄 Document Viewer</h3>
+
+//       <button
+//         onClick={() => handleViewPdf(72)}
+//         disabled={loading}
+//         style={{
+//           padding: "8px 16px",
+//           backgroundColor: "#007bff",
+//           color: "white",
+//           border: "none",
+//           borderRadius: "6px",
+//           cursor: "pointer",
+//         }}
+//       >
+//         {loading ? "Loading..." : "View PDF"}
+//       </button>
+
+//       {error && <p style={{ color: "red" }}>{error}</p>}
+
+//       {pdfUrl && (
+//         <div style={{ marginTop: "20px" }}>
+//           <iframe
+//             src={pdfUrl}
+//             title="PDF Viewer"
+//             width="100%"
+//             height="600px"
+//             style={{
+//               border: "1px solid #ccc",
+//               borderRadius: "8px",
+//             }}
+//           />
+//         </div>
+//       )}
+//     </div>
+//   );
+// };
+
+// export default DocumentViewer;
+
+import React, { useEffect, useState } from "react";
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:5000");
+
+export default function LiveScanViewer() {
+  const [images, setImages] = useState([]);
+
+  useEffect(() => {
+    socket.on("new-scan-processed", (data) => {
+      console.log("Incoming scan data:", data);
+
+      // PDF images (ARRAY)
+      if (data.type === "pdf") {
+        const fullPaths = data.images.map(
+          (img) => `http://localhost:5000${img}`
+        );
+        setImages((prev) => [...prev, ...fullPaths]);
       }
-      const response = await axios.post(
-
-        "http://192.168.23.229:9000/backend-service/documentUpload/documentView",
-        { Version_Id: Version_Id, flagId: 2 },
-
-        {
-          responseType: "blob", // Important
-        }
-      );
-
-      // Convert blob to object URL
-      const file = new Blob([response], { type: "application/pdf" });
-      const fileUrl = URL.createObjectURL(file);
-      setPdfUrl(fileUrl);
-    } catch (err) {
-      console.error("Error viewing PDF:", err);
-      setError("Unable to load document.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    });
+  }, []);
 
   return (
     <div style={{ padding: "20px" }}>
-      <h3>📄 Document Viewer</h3>
+      <h2> Live Scanned Images Preview</h2>
 
-      <button
-        onClick={() => handleViewPdf(72)}
-        disabled={loading}
+      <div
         style={{
-          padding: "8px 16px",
-          backgroundColor: "#007bff",
-          color: "white",
-          border: "none",
-          borderRadius: "6px",
-          cursor: "pointer",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "20px",
+          marginTop: "20px",
         }}
       >
-        {loading ? "Loading..." : "View PDF"}
-      </button>
-
-      {error && <p style={{ color: "red" }}>{error}</p>}
-
-      {pdfUrl && (
-        <div style={{ marginTop: "20px" }}>
-          <iframe
-            src={pdfUrl}
-            title="PDF Viewer"
-            width="100%"
-            height="600px"
+        {images.map((img, index) => (
+          <div
+            key={index}
             style={{
               border: "1px solid #ccc",
+              padding: "10px",
               borderRadius: "8px",
+              width: "350px",
             }}
-          />
-        </div>
-      )}
+          >
+            <img
+              src={img}
+              alt="scan"
+              style={{ width: "100%", borderRadius: "5px" }}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
-};
-
-export default DocumentViewer;
+}
