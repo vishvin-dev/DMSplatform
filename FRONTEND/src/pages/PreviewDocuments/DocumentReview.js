@@ -1177,13 +1177,14 @@ const DocumentReview = () => {
             fileName: "ProjectDocsBatch.pdf", 
             format: "pdf" 
         };
-
+//yes
         try {
-            // 1. Call the /scan-service/bulk-scan endpoint to *trigger* the scan.
+           
             // The response will come over the socket via the `useEffect[socket]` listener.
             await axios.post(`${SCANNER_ENDPOINT}/scan-service/bulk-scan`, payload, { timeout: 60000 }); 
             
             // Set a timeout in case the socket never responds
+            ////updated
             if (scanTimeoutIdRef.current) {
                 clearTimeout(scanTimeoutIdRef.current);
             }
