@@ -7,7 +7,6 @@ import {
     getAccountId, getConsumerDetails, postFileUpload, getDocumentCategory, getDocumentsView, getSingleDocumentById, getSingleDocumentByIdByDraft, postFileMetaOnly,
     markOldVersionNotLatest, updateDocumentStatus, resolveRejection, saveDraft, fetchDraftDocumentByAccountId, finalizeDrafts
 } from "../../models/DocumentUpload.js"
-
 import { insertDocumentUpload, getLatestVersion, insertDocumentVersion, getNextVersionLabel, getDocsMetaInfo, getDocsVieww } from "../../models/MannualUpload.js"
 
 
@@ -654,8 +653,12 @@ export const MannualUpload = async (req, res) => {
       ChangeReason,
       div_code,
       sd_code,
-      so_code,
+      so_code
+    //   isScanned,
     } = req.body;
+
+
+    
 
     const changeReasonValue = ChangeReason ?? null;
 
