@@ -745,61 +745,61 @@
 // }
 
 
-import React, { useEffect, useState } from "react";
-import { io } from "socket.io-client";
+// import React, { useEffect, useState } from "react";
+// import { io } from "socket.io-client";
 
-const socket = io("http://localhost:5000");
+// const socket = io("http://localhost:5000");
 
-export default function LiveScanViewer() {
-  const [images, setImages] = useState([]);
+// export default function LiveScanViewer() {
+//   const [images, setImages] = useState([]);
 
-  useEffect(() => {
-    socket.on("new-scan-processed", (data) => {
-      console.log("Incoming scan data:", data);
+//   useEffect(() => {
+//     socket.on("new-scan-processed", (data) => {
+//       console.log("Incoming scan data:", data);
 
-      // PDF images (ARRAY)
-      if (data.type === "pdf") {
-        const fullPaths = data.images.map(
-          (img) => `http://localhost:5000${img}`
-        );
-        setImages((prev) => [...prev, ...fullPaths]);
-      }
-    });
-  }, []);
+//       // PDF images (ARRAY)
+//       if (data.type === "pdf") {
+//         const fullPaths = data.images.map(
+//           (img) => `http://localhost:5000${img}`
+//         );
+//         setImages((prev) => [...prev, ...fullPaths]);
+//       }
+//     });
+//   }, []);
 
-  return (
-    <div style={{ padding: "20px" }}>
-      <h2> Live Scanned Images Preview</h2>
+//   return (
+//     <div style={{ padding: "20px" }}>
+//       <h2> Live Scanned Images Preview</h2>
 
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "20px",
-          marginTop: "20px",
-        }}
-      >
-        {images.map((img, index) => (
-          <div
-            key={index}
-            style={{
-              border: "1px solid #ccc",
-              padding: "10px",
-              borderRadius: "8px",
-              width: "350px",
-            }}
-          >
-            <img
-              src={img}
-              alt="scan"
-              style={{ width: "100%", borderRadius: "5px" }}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+//       <div
+//         style={{
+//           display: "flex",
+//           flexWrap: "wrap",
+//           gap: "20px",
+//           marginTop: "20px",
+//         }}
+//       >
+//         {images.map((img, index) => (
+//           <div
+//             key={index}
+//             style={{
+//               border: "1px solid #ccc",
+//               padding: "10px",
+//               borderRadius: "8px",
+//               width: "350px",
+//             }}
+//           >
+//             <img
+//               src={img}
+//               alt="scan"
+//               style={{ width: "100%", borderRadius: "5px" }}
+//             />
+//           </div>
+//         ))}
+//       </div>
+//     </div>
+//   );
+// }
 
 
 
