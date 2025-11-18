@@ -598,6 +598,14 @@ const DocumentReview = () => {
     const scanTimeoutIdRef = useRef(null);
     const progressIntervalRef = useRef(null);
 
+    // --- FIX: Add ref to hold documents for safe cleanup ---
+    const documentsForReviewRef = useRef(documentsForReview);
+    // Keep the ref in sync with the state
+    useEffect(() => {
+        documentsForReviewRef.current = documentsForReview;
+    }, [documentsForReview]);
+
+
     const [isScanningModalOpen, setIsScanningModalOpen] = useState(false);
     const [scanProgress, setScanProgress] = useState(0);
     const [isScanPreviewModalOpen, setIsScanPreviewModalOpen] = useState(false);
@@ -850,13 +858,29 @@ const DocumentReview = () => {
         fetchDocumentTypes();
     }, []);
 
-    const handleFileSelect = useCallback(async (file) => {
-        // 1. Save state of the currently selected file before changing.
+    // --- FIX 2: Create new handlers to update list state immediately ---
+    const handleCommentChange = (newComment) => {
+        setResponseText(newComment);
         if (selectedFile) {
             setDocumentsForReview(prevDocs => prevDocs.map(doc =>
-                doc.id === selectedFile.id ? { ...doc, comment: responseText, tags: metaTags } : doc
+                doc.id === selectedFile.id ? { ...doc, comment: newComment } : doc
             ));
         }
+    };
+
+    const handleTagsChange = (newTags) => {
+        setMetaTags(newTags);
+        if (selectedFile) {
+            setDocumentsForReview(prevDocs => prevDocs.map(doc =>
+                doc.id === selectedFile.id ? { ...doc, tags: newTags } : doc
+            ));
+        }
+    };
+
+
+    const handleFileSelect = useCallback(async (file) => {
+        // --- FIX 2: REMOVED state-saving logic from here ---
+        // if (selectedFile) { ... }
         
         // 2. Find the new file to select and update the basic state immediately.
         const newSelectedFile = documentsForReview.find(doc => doc.id === file.id);
@@ -927,7 +951,8 @@ const DocumentReview = () => {
                  console.log("No draftId or previewUrl found, skipping API call.");
             }
         }
-    }, [selectedFile, documentsForReview, responseText, metaTags]);
+    // --- FIX 2: Removed responseText and metaTags from dependencies ---
+    }, [documentsForReview]);
 
 
     useEffect(() => {
@@ -936,21 +961,29 @@ const DocumentReview = () => {
         }
     }, [documentsForReview, selectedFile, handleFileSelect]);
 
+    // --- FIX 1: MODIFIED BLOB URL CLEANUP ---
     useEffect(() => {
+        // This return function is the cleanup, which runs on unmount
         return () => {
-            documentsForReview.forEach(doc => {
+            console.log("DocumentReview unmounting. Revoking blob URLs.");
+            // Access the list via the ref
+            const docs = documentsForReviewRef.current;
+            docs.forEach(doc => {
                 if (doc.previewUrl && doc.previewUrl.startsWith('blob:')) {
                     URL.revokeObjectURL(doc.previewUrl);
+                    console.log(`Revoked: ${doc.previewUrl}`);
                 }
             });
         };
-    }, [documentsForReview]);
+    }, []); // Empty dependency array. This cleanup ONLY runs on unmount.
 
     const handleSubmitReview = async () => {
         setLoading(true);
-        const finalDocuments = documentsForReview.map(doc =>
-            (selectedFile && doc.id === selectedFile.id) ? { ...doc, comment: responseText, tags: metaTags } : doc
-        );
+        // --- FIX 2: No longer need to map state, documentsForReview is already up-to-date ---
+        const finalDocuments = documentsForReview;
+        // const finalDocuments = documentsForReview.map(doc =>
+        //     (selectedFile && doc.id === selectedFile.id) ? { ...doc, comment: responseText, tags: metaTags } : doc
+        // );
         if (finalDocuments.length === 0) {
             setResponse(`Please scan at least one document.`);
             setErrorModal(true); setLoading(false); return;
@@ -983,6 +1016,7 @@ const DocumentReview = () => {
 
         formData.append('flagId', '10');
         formData.append('DocumentName', `Docs for ${consumerData.rr_no}`);
+        // --- FIX 2: Use the local responseText, which is for the *selected* file ---
         formData.append('DocumentDescription', responseText);
         formData.append('MetaTags', metaTags.join(','));
         formData.append('CreatedByUser_Id', user.User_Id);
@@ -1274,122 +1308,199 @@ const DocumentReview = () => {
             return;
         }
 
-        const { doc } = scannedDocumentData;
-        let finalFileObject, finalPreviewUrl;
-        let finalDocName = doc.name;
+        const { doc, isOther, docName, docRef, responseText, tags } = scannedDocumentData;
 
         try {
             if (doc.pages.length > 1) {
-                const pdf = new jsPDF();
+                // --- BULK SCAN: PROCESS EACH PAGE AS A SEPARATE DOCUMENT ---
+                const newlyAddedDocuments = [];
+                let uploadFailed = false;
+
                 for (let i = 0; i < doc.pages.length; i++) {
-                    if (i > 0) pdf.addPage();
                     const page = doc.pages[i];
+                    
+                    try {
+                        // 1. Process the image (apply rotation)
+                        const blobToProcess = page.rotation % 360 !== 0
+                            ? await getRotatedImageBlob(page.blob, page.rotation)
+                            : page.blob;
 
-                    const blobToProcess = page.rotation % 360 !== 0
-                        ? await getRotatedImageBlob(page.blob, page.rotation)
-                        : page.blob;
+                        // 2. Determine file name and category
+                        const finalCategory = isOther ? docName.trim() : doc.category;
+                        const baseName = finalCategory.replace(/[^a-zA-Z0-9]/g, '_');
+                        const finalDocName = `Scanned_${baseName}_Page_${i + 1}.jpg`;
 
-                    const imgDataUrl = await new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(blobToProcess);
-                    });
+                        // 3. Create File and Preview URL
+                        const finalFileObject = new File([blobToProcess], finalDocName, { type: 'image/jpeg' });
+                        const finalPreviewUrl = URL.createObjectURL(blobToProcess);
 
-                    const pdfWidth = pdf.internal.pageSize.getWidth();
-                    const pdfHeight = pdf.internal.pageSize.getHeight();
-                    pdf.addImage(imgDataUrl, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-                }
-                const pdfBlob = pdf.output('blob');
-                finalDocName = (doc.name.split('.')[0] || `Scanned_Document_${Date.now()}`) + '.pdf';
-                finalFileObject = new File([pdfBlob], finalDocName, { type: 'application/pdf' });
-                finalPreviewUrl = URL.createObjectURL(pdfBlob);
-            } else if (doc.pages.length === 1) {
-                const singlePage = doc.pages[0];
-                finalDocName = singlePage.name.endsWith('.jpg') ? singlePage.name : `${singlePage.name}.jpg`;
-                if (singlePage.rotation % 360 !== 0) {
-                    const rotatedBlob = await getRotatedImageBlob(singlePage.blob, singlePage.rotation);
-                    finalFileObject = new File([rotatedBlob], finalDocName, { type: 'image/jpeg' });
-                    finalPreviewUrl = URL.createObjectURL(rotatedBlob);
-                } else {
-                    finalFileObject = new File([singlePage.blob], finalDocName, { type: singlePage.type });
-                    finalPreviewUrl = singlePage.previewUrl;
-                }
-            } else {
-                setResponse("No pages were scanned for this document.");
-                setErrorModal(true);
-                setIsSubmittingDraft(false);
-                return;
-            }
-        } catch (error) {
-            console.error("Error processing file:", error);
-            setResponse("Failed to process the scanned pages. Please try again.");
-            setErrorModal(true);
-            setIsSubmittingDraft(false);
-            return;
-        }
+                        // 4. Create the document object for this page
+                        let finalDoc = {
+                            ...doc, // Spreads consumer_name, rr_no, account_id, etc.
+                            id: Date.now() + i,
+                            comment: responseText,
+                            tags: tags,
+                            fileObject: finalFileObject,
+                            previewUrl: finalPreviewUrl,
+                            name: finalDocName,
+                            type: finalFileObject.type,
+                            category: finalCategory,
+                            description: doc.description || 'Newly scanned document.',
+                        };
 
-        let finalDoc = {
-            ...scannedDocumentData.doc,
-            comment: scannedDocumentData.responseText,
-            tags: scannedDocumentData.tags,
-            fileObject: finalFileObject,
-            previewUrl: finalPreviewUrl,
-            name: finalDocName,
-            type: finalFileObject.type,
-        };
+                        if (isOther && docRef.trim()) {
+                            finalDoc.description += ` (Ref: ${docRef.trim()}, Page ${i + 1})`;
+                        }
 
-        if (scannedDocumentData.isOther) {
-            const finalName = scannedDocumentData.docName.trim();
-            finalDoc.category = finalName;
-            const extension = finalDoc.name.split('.').pop();
-            const newName = `Scanned_${finalName.replace(/\s+/g, '_')}.${extension}`;
-            finalDoc.name = newName;
-            finalDoc.fileObject = new File([finalFileObject], newName, { type: finalFileObject.type });
-            if (scannedDocumentData.docRef.trim()) {
-                finalDoc.description += ` (Ref: ${scannedDocumentData.docRef.trim()})`;
-            }
-        }
-        delete finalDoc.pages;
+                        // 5. Create FormData for this single page
+                        const formData = new FormData();
+                        formData.append('flagId', '12'); // Save as draft
+                        formData.append('DraftName', finalDoc.name);
+                        formData.append('DraftDescription', finalDoc.comment || 'Newly scanned document.');
+                        formData.append('MetaTags', finalDoc.tags.join(','));
+                        formData.append('CreatedByUser_Id', user.User_Id);
+                        formData.append('Account_Id', consumerData.account_id);
+                        formData.append('CreatedByUserName', user.Email);
+                        formData.append('div_code', consumerData.div_code || '');
+                        formData.append('sd_code', consumerData.sd_code || '');
+                        formData.append('so_code', consumerData.so_code || '');
+                        formData.append('Category_Id', '1'); // Assuming default category ID
+                        formData.append('Role_Id', '');
+                        formData.append('DraftFile', finalDoc.fileObject);
 
-        const formData = new FormData();
-        formData.append('flagId', '12');
-        formData.append('DraftName', finalDoc.name);
-        formData.append('DraftDescription', finalDoc.comment || 'Newly scanned document.');
-        formData.append('MetaTags', finalDoc.tags.join(','));
-        formData.append('CreatedByUser_Id', user.User_Id);
-        formData.append('Account_Id', consumerData.account_id);
-        formData.append('CreatedByUserName', user.Email);
-        formData.append('div_code', consumerData.div_code || '');
-        formData.append('sd_code', consumerData.sd_code || '');
-        formData.append('so_code', consumerData.so_code || '');
-        formData.append('Category_Id', '1');
-        formData.append('Role_Id', '');
-        formData.append('DraftFile', finalDoc.fileObject);
+                        // 6. Upload this page as a new draft
+                        const apiResponse = await postDocumentUpload(formData);
 
-        try {
-            const apiResponse = await postDocumentUpload(formData);
+                        if (apiResponse?.status === 'success') {
+                            finalDoc.draftId = apiResponse.draftId;
+                            finalDoc.documentId = apiResponse.documentId;
+                            console.log(`✅ Draft saved successfully for Page ${i + 1} (ID: ${apiResponse.draftId})`);
+                            delete finalDoc.pages; // Remove the pages array from this single-page doc
+                            newlyAddedDocuments.push(finalDoc);
+                        } else {
+                            throw new Error(apiResponse?.message || `Failed to save draft for page ${i + 1}.`);
+                        }
 
-            if (apiResponse?.status === 'success') {
-                const draftId = apiResponse.draftId;
-                const documentId = apiResponse.documentId;
-                console.log(`✅ Draft saved successfully with ID: ${draftId}, Document ID: ${documentId}`);
-                finalDoc.draftId = draftId;
-                finalDoc.documentId = documentId;
+                    } catch (error) {
+                        console.error(`API Draft Upload Error for Page ${i + 1}:`, error);
+                        const errorMessage = error.response?.data?.message || error.message || "An unknown error occurred.";
+                        setResponse(`Failed to upload page ${i + 1}: ${errorMessage}. Aborting remaining uploads.`);
+                        setErrorModal(true);
+                        uploadFailed = true;
+                        break; // Stop on first failure
+                    }
+                } // --- End of for loop ---
 
-                setDocumentsForReview(prevDocs => [finalDoc, ...prevDocs]);
+                // 7. Update main component state after all uploads (or on failure)
+                setDocumentsForReview(prevDocs => [...newlyAddedDocuments, ...prevDocs]);
                 setIsScanPreviewModalOpen(false);
                 setScannedDocumentData(null);
                 setFileTypeFilter('all');
-                setTimeout(() => handleFileSelect(finalDoc), 100);
+                
+                if (newlyAddedDocuments.length > 0 && !uploadFailed) {
+                    // Select the first new document
+                    setTimeout(() => handleFileSelect(newlyAddedDocuments[0]), 100);
+                }
+
+            } else if (doc.pages.length === 1) {
+                // --- SINGLE PAGE: PROCESS AS ONE DOCUMENT (Existing Logic) ---
+                
+                let finalFileObject, finalPreviewUrl;
+                let finalDocName = doc.name;
+
+                try {
+                    const singlePage = doc.pages[0];
+                    finalDocName = singlePage.name.endsWith('.jpg') ? singlePage.name : `${singlePage.name}.jpg`;
+                    if (singlePage.rotation % 360 !== 0) {
+                        const rotatedBlob = await getRotatedImageBlob(singlePage.blob, singlePage.rotation);
+                        finalFileObject = new File([rotatedBlob], finalDocName, { type: 'image/jpeg' });
+                        finalPreviewUrl = URL.createObjectURL(rotatedBlob);
+                    } else {
+                        finalFileObject = new File([singlePage.blob], finalDocName, { type: singlePage.type });
+                        finalPreviewUrl = singlePage.previewUrl;
+                    }
+                } catch (error) {
+                     console.error("Error processing file:", error);
+                     setResponse("Failed to process the scanned page. Please try again.");
+                     setErrorModal(true);
+                     setIsSubmittingDraft(false);
+                     return;
+                }
+
+                let finalDoc = {
+                    ...scannedDocumentData.doc,
+                    comment: scannedDocumentData.responseText,
+                    tags: scannedDocumentData.tags,
+                    fileObject: finalFileObject,
+                    previewUrl: finalPreviewUrl,
+                    name: finalDocName,
+                    type: finalFileObject.type,
+                };
+
+                if (scannedDocumentData.isOther) {
+                    const finalName = scannedDocumentData.docName.trim();
+                    finalDoc.category = finalName;
+                    const extension = finalDoc.name.split('.').pop();
+                    const newName = `Scanned_${finalName.replace(/\s+/g, '_')}.${extension}`;
+                    finalDoc.name = newName;
+                    finalDoc.fileObject = new File([finalFileObject], newName, { type: finalFileObject.type });
+                    if (scannedDocumentData.docRef.trim()) {
+                        finalDoc.description += ` (Ref: ${scannedDocumentData.docRef.trim()})`;
+                    }
+                }
+                delete finalDoc.pages;
+
+                const formData = new FormData();
+                formData.append('flagId', '12');
+                formData.append('DraftName', finalDoc.name);
+                formData.append('DraftDescription', finalDoc.comment || 'Newly scanned document.');
+                formData.append('MetaTags', finalDoc.tags.join(','));
+                formData.append('CreatedByUser_Id', user.User_Id);
+                formData.append('Account_Id', consumerData.account_id);
+                formData.append('CreatedByUserName', user.Email);
+                formData.append('div_code', consumerData.div_code || '');
+                formData.append('sd_code', consumerData.sd_code || '');
+                formData.append('so_code', consumerData.so_code || '');
+                formData.append('Category_Id', '1');
+                formData.append('Role_Id', '');
+                formData.append('DraftFile', finalDoc.fileObject);
+
+                try {
+                    const apiResponse = await postDocumentUpload(formData);
+
+                    if (apiResponse?.status === 'success') {
+                        const draftId = apiResponse.draftId;
+                        const documentId = apiResponse.documentId;
+                        console.log(`✅ Draft saved successfully with ID: ${draftId}, Document ID: ${documentId}`);
+                        finalDoc.draftId = draftId;
+                        finalDoc.documentId = documentId;
+
+                        setDocumentsForReview(prevDocs => [finalDoc, ...prevDocs]);
+                        setIsScanPreviewModalOpen(false);
+                        setScannedDocumentData(null);
+                        setFileTypeFilter('all');
+                        setTimeout(() => handleFileSelect(finalDoc), 100);
+
+                    } else {
+                        throw new Error(apiResponse?.message || 'Failed to save document draft.');
+                    }
+                } catch (error) {
+                    console.error("API Draft Upload Error:", error);
+                    const errorMessage = error.response?.data?.message || error.message || "An unknown error occurred while uploading the draft.";
+                    setResponse(errorMessage);
+                    setErrorModal(true);
+                }
 
             } else {
-                throw new Error(apiResponse?.message || 'Failed to save document draft.');
+                // --- NO PAGES ---
+                setResponse("No pages were scanned for this document.");
+                setErrorModal(true);
+                return;
             }
         } catch (error) {
-            console.error("API Draft Upload Error:", error);
-            const errorMessage = error.response?.data?.message || error.message || "An unknown error occurred while uploading the draft.";
-            setResponse(errorMessage);
+            // This catch is for the new outer try block, mainly for page processing errors
+            console.error("General Error in handleSubmitScannedDocument:", error);
+            setResponse(error.message || "An unexpected error occurred while processing pages.");
             setErrorModal(true);
         } finally {
             setIsSubmittingDraft(false);
@@ -1536,7 +1647,10 @@ const DocumentReview = () => {
                                     <Col xl={3} lg={12} className="d-flex flex-column mt-3 mt-xl-0">
                                         <DocumentInfoPanel
                                             selectedFile={selectedFile} highlights={scannedHighlights} tags={metaTags}
-                                            onTagsChange={setMetaTags} comment={responseText} onCommentChange={(e) => setResponseText(e.target.value)}
+                                            // --- FIX 2: Pass the new handlers ---
+                                            onTagsChange={handleTagsChange} 
+                                            comment={responseText} 
+                                            onCommentChange={(e) => handleCommentChange(e.target.value)}
                                             isVerified={isVerified} onVerifiedChange={setIsVerified} onSubmit={handleSubmitReview}
                                             loading={loading} canSubmit={documentsForReview.length > 0} readOnly={!selectedFile}
                                             verificationDetails={verificationDetails}
