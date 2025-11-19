@@ -57,7 +57,7 @@ export const uploadMultiple = multer({ storage }).fields([
   { name: "SiteSketch", maxCount: 10 },
   { name: "OtherDocuments", maxCount: 10 },
 
-    { name: "DraftFile", maxCount: 100 },
+  { name: "DraftFile", maxCount: 100 },
 ]);
 
 

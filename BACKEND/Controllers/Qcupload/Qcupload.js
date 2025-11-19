@@ -133,13 +133,23 @@ export const Qcupload = async (req, res) => {
         }
 
         //======THIS WHEN WE CLCIK TO THE APPROVED BUTTON THEN IT TO BE APPROVED OK=============
-        else if (parseInt(flagId) === 5) {
-            results = await clickToApproved(User_Id, Version_Id, Role_Id)
-            return res.status(200).json({
-                status: "success",
-                message: "Document Approved Successfully",
-            })
-        }
+      else if (parseInt(flagId) === 5) {
+
+    // accept multiple VersionIds
+    const { VersionIds } = req.body;
+
+    if (!Array.isArray(VersionIds) || VersionIds.length === 0) {
+        return res.status(400).json({ message: "VersionIds must be an array" });
+    }
+
+    results = await clickToApproved(User_Id, VersionIds, Role_Id);
+
+    return res.status(200).json({
+        status: "success",
+        message: "All files approved successfully",
+    });
+}
+
         //======THIS WHEN WE CLCIK TO THE Rejected BUTTON THEN IT TO BE REJECTED OK=============
         else if (parseInt(flagId) === 6) {
             results = await clickToReject(User_Id, Version_Id, comment)

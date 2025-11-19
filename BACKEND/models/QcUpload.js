@@ -848,46 +848,103 @@ export const clickGetRejectedDocs = async (User_Id, so_code) => {
 
 
 //==========================THIS WHEN WE CLICK TO THE APPROVED BUTTONS THEN IT TO BE APPROVED OK============================
-export const clickToApproved = async (User_Id, Version_Id, Role_Id) => {
+export const clickToApproved = async (User_Id, VersionIds, Role_Id) => {
     try {
-        // 1️ Update the specific version status
+
+        // 1: Approve all versions together
+        const placeholders = VersionIds.map(() => "?").join(",");
+
         await pool.execute(
             `
             UPDATE Documentversion
-            SET Status_Id = 2,
-                UploadedAt = NOW()
-            WHERE Version_Id = ?
+            SET Status_Id = 2, UploadedAt = NOW()
+            WHERE Version_Id IN (${placeholders})
             `,
-            [Version_Id]
+            VersionIds
         );
 
-        // 2️ Mark old workflow entries for this version as not latest
+        // 2: Mark all workflow history entries for these versions as old
         await pool.execute(
             `
             UPDATE DocumentWorkflowHistory
             SET IsLatest = 0
-            WHERE Version_Id = ?
+            WHERE Version_Id IN (${placeholders})
             `,
-            [Version_Id]
+            VersionIds
         );
 
-        // 3️ Insert new workflow history row
-        const [result] = await pool.execute(
-            `
-            INSERT INTO DocumentWorkflowHistory
+        // 3: Insert new workflow entries for each version
+        for (const versionId of VersionIds) {
+            await pool.execute(
+                `
+                INSERT INTO DocumentWorkflowHistory
                 (DocumentId, Version_Id, Status_Id, Comment, ActionByUser_Id, ActionByRole_Id, ActionTime, IsLatest)
-            VALUES
-                ((SELECT DocumentId FROM Documentversion WHERE Version_Id = ?), ?, 2, 'Approved by QC', ?, ?, NOW(), 1)
-            `,
-            [Version_Id, Version_Id, User_Id, Role_Id]
-        );
+                VALUES (
+                    (SELECT DocumentId FROM Documentversion WHERE Version_Id = ?),
+                    ?, 
+                    2, 
+                    'Approved by QC',
+                    ?, 
+                    ?, 
+                    NOW(), 
+                    1
+                )
+                `,
+                [versionId, versionId, User_Id, Role_Id]
+            );
+        }
 
-        return { success: true, workflowId: result.insertId };
+        return {
+            success: true,
+            updated: VersionIds.length
+        };
+
     } catch (error) {
-        console.error("Error approving version:", error);
+        console.error("Error approving multiple versions:", error);
         throw error;
     }
 };
+// this is single click approved ok 
+// export const clickToApproved = async (User_Id, Version_Id, Role_Id) => {
+//     try {
+//         // 1️ Update the specific version status
+//         await pool.execute(
+//             `
+//             UPDATE Documentversion
+//             SET Status_Id = 2,
+//                 UploadedAt = NOW()
+//             WHERE Version_Id = ?
+//             `,
+//             [Version_Id]
+//         );
+
+//         // 2️ Mark old workflow entries for this version as not latest
+//         await pool.execute(
+//             `
+//             UPDATE DocumentWorkflowHistory
+//             SET IsLatest = 0
+//             WHERE Version_Id = ?
+//             `,
+//             [Version_Id]
+//         );
+
+//         // 3️ Insert new workflow history row
+//         const [result] = await pool.execute(
+//             `
+//             INSERT INTO DocumentWorkflowHistory
+//                 (DocumentId, Version_Id, Status_Id, Comment, ActionByUser_Id, ActionByRole_Id, ActionTime, IsLatest)
+//             VALUES
+//                 ((SELECT DocumentId FROM Documentversion WHERE Version_Id = ?), ?, 2, 'Approved by QC', ?, ?, NOW(), 1)
+//             `,
+//             [Version_Id, Version_Id, User_Id, Role_Id]
+//         );
+
+//         return { success: true, workflowId: result.insertId };
+//     } catch (error) {
+//         console.error("Error approving version:", error);
+//         throw error;
+//     }
+// };
 
 //==========================THIS WHEN WE CLICK TO THE REJECTED BUTTONS THEN IT TO BE REJECTED OK=============================
 export const clickToReject = async (User_Id, Version_Id, comment) => {

@@ -60,7 +60,7 @@ export const insertDocumentVersion = async (
   UploadedByUser_Id
 ) => {
   // Mark old versions as not latest
-  await pool.execute(`UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`, [documentId]);
+//   await pool.execute(`UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`, [documentId]);
 
   // Insert new version
   const [result] = await pool.execute(
