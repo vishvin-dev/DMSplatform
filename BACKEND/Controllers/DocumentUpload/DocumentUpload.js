@@ -7,9 +7,8 @@ import {
     getAccountId, getConsumerDetails, postFileUpload, getDocumentCategory, getDocumentsView, getSingleDocumentById, getSingleDocumentByIdByDraft, postFileMetaOnly,
     markOldVersionNotLatest, updateDocumentStatus, resolveRejection, saveDraft, fetchDraftDocumentByAccountId, finalizeDrafts
 } from "../../models/DocumentUpload.js"
-
 import { insertDocumentUpload, getLatestVersion, insertDocumentVersion, getNextVersionLabel, getDocsMetaInfo, getDocsVieww } from "../../models/MannualUpload.js"
-import { count } from "console";
+
 
 //this is the doucment uploading things
 export const DocumentUpload = async (req, res) => {
@@ -59,6 +58,9 @@ export const DocumentUpload = async (req, res) => {
         }
         else if (flagId === 7) {
             results = await getDocumentCategory();
+        }
+        else if (flagId === 9) {
+            results = await getDocumentLists();
         }
         // else if (parseInt(flagId) === 8) {
         //     const {
@@ -159,10 +161,6 @@ export const DocumentUpload = async (req, res) => {
         //         data: uploadResults
         //     });
         // }
-
-        else if (flagId === 9) {
-            results = await getDocumentLists();
-        }
         // else if (parseInt(flagId) === 10) {
         //     const {
         //         DocumentName,
@@ -639,102 +637,153 @@ export const DocumentUpload = async (req, res) => {
 
 
 //==============================THIS IS THE MANNUAL CONTROLLERS=========================================================
+
 export const MannualUpload = async (req, res) => {
-    try {
-        const {
-            DocumentName,
-            DocumentDescription,
-            MetaTags,
-            CreatedByUser_Id,
-            CreatedByUserName,
-            Account_Id,
-            Role_Id,
-            Category_Id,
-            Status_Id,
-            div_code,
-            sd_code,
-            so_code,
-        } = req.body;
-
-        if (!req.file) {
-            return res.status(400).json({ message: "File is required" });
-        }
-        if (!div_code || !so_code || !sd_code) {
-            return res.status(400).json({
-                error: "div_code, sd_code, and so_code are required."
-            });
-        }
-        //  Step 1: Check if document already exists for this Account_Id
-        const [existingDocs] = await pool.execute(
-            `SELECT DocumentId FROM documentupload WHERE Account_Id = ? LIMIT 1`,
-            [Account_Id]
-        );
-
-        let documentId;
-        if (existingDocs.length > 0) {
-            // Document already exists → use its ID for versioning
-            documentId = existingDocs[0].DocumentId;
-        } else {
-            // First time upload → create new document record
-            const resultId = await insertDocumentUpload(
-                DocumentName,
-                DocumentDescription,
-                MetaTags,
-                CreatedByUser_Id,
-                CreatedByUserName,
-                Account_Id,
-                Role_Id,
-                Category_Id,
-                // Status_Id,
-                div_code,
-                sd_code,
-                so_code
-            );
-            documentId = resultId;
-        }
-
-        //  Step 2: Determine version
-        const latestVersion = await getLatestVersion(documentId);
-        const nextVersion = getNextVersionLabel(latestVersion);
-
-        //  Step 3: Physical file path
-        const filePath = path.join("E:/Dms/CLOUDUPLOADFOLDER", Account_Id.toString(), req.file.filename);
-
-        // Ensure directory exists
-        const dirPath = path.dirname(filePath);
-        if (!fs.existsSync(dirPath)) {
-            fs.mkdirSync(dirPath, { recursive: true });
-        }
-
-        // Step 4: Insert version record (with meta info)
-        const versionId = await insertDocumentVersion(
-            documentId,
-            Status_Id,
-            nextVersion,
-            filePath,
-            DocumentName,
-            DocumentDescription,
-            MetaTags,
-            CreatedByUser_Id,
-            1
-        );
+  try {
+    const {
+      DocumentName,
+      DocumentDescription,
+      MetaTags,
+      CreatedByUser_Id,
+      CreatedByUserName,
+      Account_Id,
+      Role_Id,
+      Category_Id,
+      Status_Id,
+      ChangeReason,
+      div_code,
+      sd_code,
+      so_code
+    //   isScanned,
+    } = req.body;
 
 
-        return res.status(200).json({
-            status: "success",
-            message: existingDocs.length > 0
-                ? `New version uploaded (${nextVersion})`
-                : "New document created (v1)",
-            DocumentId: documentId,
-            VersionId: versionId,
-            Version: nextVersion,
-            FilePath: filePath,
-        });
+    
 
-    } catch (error) {
-        console.error("Error In Document Uploading", error);
-        return res.status(500).json({ error: error.message });
+    const changeReasonValue = ChangeReason ?? null;
+
+    //  Step 1: Validation
+    if (!req.file) {
+      return res.status(400).json({ message: "File is required" });
     }
+    if (!div_code || !sd_code || !so_code) {
+      return res.status(400).json({
+        error: "div_code, sd_code, and so_code are required.",
+      });
+    }
+
+    //  Step 2: Check if document already exists
+    const [existingDocs] = await pool.execute(
+      `SELECT DocumentId FROM documentupload WHERE Account_Id = ? LIMIT 1`,
+      [Account_Id]
+    );
+
+    let documentId;
+    if (existingDocs.length > 0) {
+      documentId = existingDocs[0].DocumentId;
+    } else {
+      const newDocId = await insertDocumentUpload(
+        DocumentName,
+        DocumentDescription,
+        MetaTags,
+        CreatedByUser_Id,
+        CreatedByUserName,
+        Account_Id,
+        Role_Id,
+        Category_Id,
+        div_code,
+        sd_code,
+        so_code
+      );
+      documentId = newDocId;
+    }
+
+    //  Step 3: Get next version
+    const latestVersion = await getLatestVersion(documentId);
+    const nextVersion = getNextVersionLabel(latestVersion);
+
+    //  Step 4: File path
+    const filePath = path.join(
+      "E:/Dms/CLOUDUPLOADFOLDER",
+      Account_Id.toString(),
+      req.file.filename
+    );
+
+    const dirPath = path.dirname(filePath);
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+
+    //  Step 5: Insert new version record
+    const newVersionId = await insertDocumentVersion(
+      documentId,
+      nextVersion,
+      filePath,
+      1,
+      changeReasonValue,
+      DocumentName,
+      DocumentDescription,
+      MetaTags,
+      Status_Id ?? 1,
+      CreatedByUser_Id
+    );
+
+    //  Step 6: If re-upload, toggle old rejected record based on Version_Id
+    if (changeReasonValue) {
+      // 1️ Find the previously rejected version (status 3)
+      const [rejectedVersion] = await pool.execute(
+        `
+        SELECT Version_Id 
+        FROM documentversion 
+        WHERE DocumentId = ? AND Status_Id = 3
+        ORDER BY Version_Id DESC LIMIT 1
+        `,
+        [documentId]
+      );
+
+      if (rejectedVersion.length > 0) {
+        const oldVersionId = rejectedVersion[0].Version_Id;
+
+        // 2️ Update rejection queue for that specific Version_Id
+        await pool.execute(
+          `
+          UPDATE documentrejectionqueue
+          SET Status_Id = 4, IsResolved = 0, RejectedOn = NOW()
+          WHERE Version_Id = ? AND Status_Id = 3
+          `,
+          [oldVersionId]
+        );
+
+        // 3️ Optionally, update old version’s status to 1 (Pending again)
+        await pool.execute(
+          `
+          UPDATE documentversion
+          SET Status_Id = 4
+          WHERE Version_Id = ?
+          `,
+          [oldVersionId]
+        );
+      }
+    }
+
+    //  Step 7: Response
+    return res.status(200).json({
+      status: "success",
+      message:
+        existingDocs.length > 0
+          ? changeReasonValue
+            ? `Re-upload successful (Version: ${nextVersion})`
+            : `New version uploaded (${nextVersion})`
+          : "New document created (v1)",
+      DocumentId: documentId,
+      VersionId: newVersionId,
+      Version: nextVersion,
+      FilePath: filePath,
+    });
+  } catch (error) {
+    console.error(" Error in Document Upload:", error);
+    return res.status(500).json({ error: error.message });
+  }
 };
 //==============================THIS IS THE SCANUPLAOD CONTROLLERS=========================================================
 export const ScanUpload = async (req, res) => {

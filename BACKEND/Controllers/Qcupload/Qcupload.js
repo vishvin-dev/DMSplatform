@@ -10,7 +10,8 @@ import {
     getBackAllRejectedDocuments
     ,getBackAllApprovedDocuments,
     getBackAllApprovedDocumentsCounts,
-    getBackAllRejectedDocumentsCounts
+    getBackAllRejectedDocumentsCounts,
+    getBackAllPendingDocumentsCounts
 } from "../../models/QcUpload.js"
 
 
@@ -58,6 +59,14 @@ export const verifiedQc = async (req, res) => {
             })
         } 
         //========================================================================================================
+         else if (parseInt(flagId) === 5) {
+            results = await getBackAllPendingDocumentsCounts(User_Id, so_code);
+            return res.status(200).json({
+                status: "success",
+                message: "All Pending Data Fetched Successfully",
+                results
+            })
+        } 
         else {
             return res.status(400).json({ status: "failed", message: "Invalid flagId provided" });
         }

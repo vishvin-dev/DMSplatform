@@ -30,6 +30,7 @@ execFile(
     } else {
       console.log("NAPS2 connected to TWAIN driver.");
       console.log("Available scanners:\n" + stdout);
+    
     }
   }
 );

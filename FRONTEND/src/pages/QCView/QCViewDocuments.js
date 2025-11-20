@@ -769,6 +769,44 @@ const QCViewDocuments = () => {
         }
     };
 
+    // *** MODIFIED ***
+    // Enhanced document mapper to handle different field names from different APIs
+    const mapDocumentFields = (doc, tab) => {
+        // For pending documents (flagId: 2)
+        if (tab === 'pending') {
+            return {
+                ...doc,
+                DocumentName: doc.VersionDocumentName || doc.MainDocumentName || doc.DocumentName,
+                division: doc.DivisionName || doc.division,
+                sub_division: doc.SubDivisionName || doc.sub_division,
+                section: doc.SectionOfficeName || doc.section,
+                CreatedAt: doc.UploadedAt || doc.CreatedAt
+            };
+        }
+        // For approved documents (flagId: 3)
+        else if (tab === 'approved') {
+            return {
+                ...doc,
+                division: doc.DivisionName || doc.division,
+                sub_division: doc.SubDivisionName || doc.sub_division,
+                section: doc.SectionOfficeName || doc.section,
+                CreatedAt: doc.ActionTime || doc.CreatedAt
+            };
+        }
+        // For rejected documents (flagId: 4)
+        else if (tab === 'rejected') {
+            return {
+                ...doc,
+                division: doc.DivisionName || doc.division,
+                sub_division: doc.SubDivisionName || doc.sub_division,
+                section: doc.SectionOfficeName || doc.section,
+                CreatedAt: doc.RejectedOn || doc.CreatedAt,
+                RejectionReason: doc.RejectionComment || doc.RejectionReason
+            };
+        }
+        return doc;
+    };
+
     // Fetch documents for a specific tab
     const fetchDocuments = async (tab, userData) => {
         let flagId;
@@ -811,10 +849,12 @@ const QCViewDocuments = () => {
 
             if (response.status === "success") {
                 const docs = response.results || [];
-                setDocuments(docs);
-                setFilteredDocuments(docs);
+                // *** MODIFIED: Map document fields to ensure consistent field names ***
+                const mappedDocs = docs.map(doc => mapDocumentFields(doc, tab));
+                setDocuments(mappedDocs);
+                setFilteredDocuments(mappedDocs);
                 if (tab === 'pending') {
-                    setDataBk(docs);
+                    setDataBk(mappedDocs); // Update the backup for pending docs
                 }
             } else {
                 setResponse(response.message || `Failed to fetch ${tab} documents`);
@@ -1402,6 +1442,263 @@ const QCViewDocuments = () => {
             </div>
         );
     };
+
+    // --- START: MODIFIED LazyPreviewContent ---
+    // This component now renders Details on the left (lg-4) and Preview on the right (lg-8)
+    const LazyPreviewContent = ({ doc }) => {
+        const [previewLoaded, setPreviewLoaded] = useState(false);
+        const [detailsLoaded, setDetailsLoaded] = useState(false);
+
+        useEffect(() => {
+            const previewTimer = setTimeout(() => {
+                setPreviewLoaded(true);
+            }, 1200);
+
+            return () => clearTimeout(previewTimer);
+        }, []);
+
+        useEffect(() => {
+            if (previewLoaded) {
+                const detailsTimer = setTimeout(() => {
+                    setDetailsLoaded(true);
+                }, 1000);
+
+                return () => clearTimeout(detailsTimer);
+            }
+        }, [previewLoaded]);
+
+        // Enhanced PDF/Image viewer
+        const renderPreviewContent = () => {
+            if (!previewLoaded) {
+                return (
+                    <div className="text-center h-100 d-flex flex-column justify-content-center align-items-center"
+                        style={{ minHeight: '400px' }}>
+                        <div className="spinner-border text-primary" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                        </div>
+                        <p className="mt-2">Loading preview...</p>
+                    </div>
+                );
+            }
+
+            if (previewLoading) {
+                return (
+                    <div className="text-center h-100 d-flex flex-column justify-content-center align-items-center"
+                        style={{ minHeight: '400px' }}>
+                        <div className="spinner-border text-primary" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                        </div>
+                        <p className="mt-2">Loading document content...</p>
+                    </div>
+                );
+            }
+
+            if (previewError) {
+                return (
+                    <Alert color="danger" className="m-3 fade-in">
+                        <i className="ri-error-warning-line me-2"></i>
+                        {previewError}
+                    </Alert>
+                );
+            }
+
+            if (previewContent) {
+                const isPDF = previewContent.type.includes('pdf');
+                const isImage = previewContent.type.includes('image');
+
+                return (
+                    // MODIFIED: Removed h-100
+                    <div className="d-flex flex-column"> 
+                        {/* Preview Header */}
+                        <div className="d-flex justify-content-between align-items-center p-3 border-bottom">
+                            <h6 className="mb-0">
+                                <i className="ri-file-text-line me-2"></i>
+                                {previewContent.name}
+                            </h6>
+                            <Button
+                                color="primary"
+                                size="sm"
+                                onClick={handleDownload}
+                            >
+                                <i className="ri-download-line me-1"></i> Download
+                            </Button>
+                        </div>
+
+                        {/* Preview Content */}
+                        <div className="flex-grow-1 preview-content">
+                            {isPDF ? (
+                                // MODIFIED: Removed h-100
+                                <div className="pdf-viewer-container fade-in">
+                                    <iframe
+                                        src={`${previewContent.url}#toolbar=0&navpanes=0&scrollbar=0`}
+                                        title="PDF Viewer"
+                                        // MODIFIED: Removed h-100
+                                        className="w-100" 
+                                        style={{ border: 'none' }}
+                                    />
+                                </div>
+                            ) : isImage ? (
+                                <div className="text-center fade-in p-3 h-100 d-flex align-items-center justify-content-center">
+                                    <img
+                                        src={previewContent.url}
+                                        alt="Document Preview"
+                                        className="img-fluid"
+                                        style={{
+                                            maxHeight: '100%',
+                                            maxWidth: '100%',
+                                            objectFit: 'contain'
+                                        }}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
+                                    <i className="ri-file-line display-4 text-muted"></i>
+                                    <h5 className="mt-3">Preview not available</h5>
+                                    <p className="text-muted">
+                                        This file type ({previewContent.type}) cannot be previewed in the browser.
+                                    </p>
+                                    <Button
+                                        color="primary"
+                                        onClick={handleDownload}
+                                        className="mt-2"
+                                    >
+                                        <i className="ri-download-line me-1"></i> Download File
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="text-center text-muted py-5 h-100 d-flex flex-column justify-content-center fade-in">
+                    <i className="ri-file-line display-4"></i>
+                    <h5 className="mt-3">No document selected</h5>
+                    <p>Select a file from the list to preview it here</p>
+                </div>
+            );
+        };
+
+        return (
+            <Row>
+                {/* --- START: Document Details (SMALLER: lg={4}) --- */}
+                {/* MODIFIED: Added md={12} and stacking margin */}
+                <Col lg={4} md={12} className="mb-3 mb-lg-0">
+                    {!detailsLoaded ? (
+                         // MODIFIED: Removed h-100
+                        <Card className="shadow-sm slide-in-left">
+                            <CardHeader className="bg-light p-3 position-relative card-header border-top-primary">
+                                <h6 className="mb-0 d-flex align-items-center">
+                                    <i className="ri-information-line me-2"></i> Document Details
+                                </h6>
+                            </CardHeader>
+                            <CardBody className="py-5 d-flex justify-content-center">
+                                <Spinner color="primary" />
+                            </CardBody>
+                        </Card>
+                    ) : (
+                         // MODIFIED: Removed h-100
+                        <Card className="shadow-sm slide-in-left">
+                            <CardHeader className="bg-light p-3 position-relative card-header border-top-primary">
+                                <h6 className="mb-0 d-flex align-items-center">
+                                    <i className="ri-information-line me-2"></i> Document Details
+                                </h6>
+                            </CardHeader>
+
+                            {/* Body is now scrollable to fit in the small column */}
+                            {/* MODIFIED: Set maxHeight to 70vh to match preview */}
+                            <CardBody className="py-3 px-4" style={{ overflowY: 'auto', maxHeight: '70vh' }}>
+                                <Row>
+                                    <Col md={12}>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Document Name:</Label>
+                                            <p className="mb-1 text-break">{doc.DocumentName}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Account ID:</Label>
+                                            <p className="mb-1">{doc.Account_Id || 'N/A'}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">RR No:</Label>
+                                            <p className="mb-1">{doc.rr_no || 'N/A'}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Consumer Name:</Label>
+                                            <p className="mb-1">{doc.consumer_name || 'N/A'}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Consumer Address:</Label>
+                                            <p className="mb-1 text-break">{doc.consumer_address || 'N/A'}</p>
+                                        </div>
+                                        
+                                        <hr className="my-3"/>
+
+                                        {/* *** MODIFIED: Using the mapped field names *** */}
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Division:</Label>
+                                            <p className="mb-1">{doc.division || doc.DivisionName || 'N/A'}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Sub Division:</Label>
+                                            <p className="mb-1">{doc.sub_division || doc.SubDivisionName || 'N/A'}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Section:</Label>
+                                            <p className="mb-1">{doc.section || doc.SectionOfficeName || 'N/A'}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Uploaded By:</Label>
+                                            <p className="mb-1">{doc.CreatedByUserName || 'N/A'}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Upload Date:</Label>
+                                            <p className="mb-1">{formatDate(doc.CreatedAt)}</p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <Label className="fw-semibold">Meta Tags:</Label>
+                                            <p className="mb-1">{doc.MetaTags || doc.VersionMetaTags || 'N/A'}</p>
+                                        </div>
+                                        {doc.Status === 'Rejected' && (doc.RejectionReason || doc.RejectionComment) && (
+                                            <div className="mb-2">
+                                                <Label className="fw-semibold">Rejection Reason:</Label>
+                                                <p className="mb-1 text-danger">{doc.RejectionReason || doc.RejectionComment}</p>
+                                            </div>
+                                        )}
+                                    </Col>
+                                </Row>
+                            </CardBody>
+                        </Card>
+                    )}
+                </Col>
+                {/* --- END: Document Details --- */}
+
+                {/* --- START: Document Preview (BIGGER: lg={8}) --- */}
+                {/* MODIFIED: Added md={12}, removed h-100, d-flex */}
+                <Col lg={8} md={12}>
+                    {/* MODIFIED: Removed h-100, fixed-height-card */}
+                    <Card className="slide-in-right delay-3">
+                        <CardHeader className="bg-light p-3 position-relative"
+                            style={{
+                                borderTop: '3px solid #405189'
+                            }}>
+                            <h5 className="mb-0">Document Preview</h5>
+                        </CardHeader>
+                        {/* MODIFIED: Removed p-0, preview-container */}
+                        <CardBody className="p-0">
+                            {/* MODIFIED: Removed preview-scrollable */}
+                            <div>
+                                {renderPreviewContent()}
+                            </div>
+                        </CardBody>
+                    </Card>
+                </Col>
+                {/* --- END: Document Preview --- */}
+            </Row>
+        );
+    };
+    // --- END: MODIFIED LazyPreviewContent ---
+
 
     return (
         <React.Fragment>

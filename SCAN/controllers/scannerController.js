@@ -19,7 +19,6 @@ export const listScanners = (req, res) => {
     res.json({ scanners: devices });
   });
 };
-
 // =====================
 // Helper: Scan one side
 // =====================
@@ -42,7 +41,6 @@ const scanSide = (scanner, outputPath, format, jpegQuality) => {
     });
   });
 };
-
 // =====================
 // Trigger scan
 // =====================
@@ -149,12 +147,35 @@ export const scanDocument = async (req, res) => {
 };
 
 
-// =====================
+// ===========================================================================================================
 // Bulk Scan (ADF – multi-page feed)
-// =====================
+// This part is completley for giving command to the scanner machine to scan and place the file in the local ok 
+// ============================================================================================================
+
+
+//THIS IS THE UNIQUE FILE GENRATION ======================================
+function getUniqueFileName(baseDir, originalName) {
+  const ext = path.extname(originalName);         // .pdf
+  const name = path.basename(originalName, ext);  // ProjectDocsBatch
+
+  let finalName = originalName;
+  let counter = 1;
+
+  while (fs.existsSync(path.join(baseDir, finalName))) {
+    finalName = `${name}${counter}${ext}`;
+    counter++;
+  }
+
+  return finalName;
+}
+
 export const bulkScan = async (req, res) => {
   try {
     const { deviceName, fileName, format } = req.body;
+
+
+
+    console.log(req.body, "requesttsss")
     const scanner = deviceName || config.defaultScanner;
     const extension = format ? format.toLowerCase() : config.defaultFormat;
 
@@ -163,8 +184,18 @@ export const bulkScan = async (req, res) => {
     }
 
     // Create timestamped file name
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const safeFileName = fileName || `ScannedBatch_${timestamp}.${extension}`;
+    // const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    // const safeFileName = fileName || `ScannedBatch_${timestamp}.${extension}`;
+    // const outputPath = path.join(config.outputDir, safeFileName);
+
+
+
+    // STEP 1: get filename without timestamp
+    let incomingName = fileName || `ScannedBatch.${extension}`;
+    // STEP 2: generate unique filename (docs, docs1, docs2…)
+    const safeFileName = getUniqueFileName(config.outputDir, incomingName);
+
+    // STEP 3: final output path
     const outputPath = path.join(config.outputDir, safeFileName);
 
     // Make sure output folder exists
@@ -177,7 +208,7 @@ export const bulkScan = async (req, res) => {
     const args = [
       "--driver", "twain",
       "--device", scanner,
-      "--source", "feeder",         //  tells scanner to use ADF
+      "--source", "feeder",         // it tells scanner to use ADF
       "--output", outputPath,
       "--force",
     ];
@@ -186,23 +217,36 @@ export const bulkScan = async (req, res) => {
 
     execFile(config.naps2Path, args, async (error, stdout, stderr) => {
       if (error) {
-        console.error("Bulk scan error:", stderr);
+        console.error("Bulk scan error:", stderr, error);
         return res.status(500).json({ error: stderr });
       }
 
       // Optional wait to ensure file is completely written
-      const waitForFile = (file) =>
+      const waitForScanFiles = (prefix) =>
         new Promise((resolve, reject) => {
-          const check = setInterval(() => {
-            if (fs.existsSync(file)) {
-              clearInterval(check);
-              resolve(true);
+          let attempts = 0;
+          const interval = setInterval(() => {
+            const files = fs.readdirSync(config.outputDir);
+            const matched = files.filter(f => f.startsWith(prefix));
+
+            if (matched.length > 0) {
+              clearInterval(interval);
+              resolve(matched);
+            }
+
+            attempts++;
+            if (attempts >= config.fileStabilityCheck.attempts) {
+              clearInterval(interval);
+              reject(new Error("Timeout waiting for scan files"));
             }
           }, config.fileStabilityCheck.pollMs);
-          setTimeout(() => reject(new Error("Timeout waiting for scan file")), config.fileStabilityCheck.pollMs * config.fileStabilityCheck.attempts);
         });
 
-      await waitForFile(outputPath);
+
+      const baseName = path.basename(safeFileName, path.extname(safeFileName));
+      const scannedFiles = await waitForScanFiles(baseName);
+      console.log("Scanned files:", scannedFiles);
+
 
       console.log("Bulk scan complete:", outputPath);
       return res.json({
