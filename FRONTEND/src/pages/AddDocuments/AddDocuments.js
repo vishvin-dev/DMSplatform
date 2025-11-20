@@ -12,7 +12,7 @@ import ErrorModal from '../../Components/Common/ErrorModal';
 import '../AddDocuments/AddDocuments.css';
 import axios from 'axios';
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB in bytes
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 2MB in bytes
 
 
 const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
@@ -485,7 +485,7 @@ const DocumentManagement = () => {
         metaTags: Yup.string().required('Meta tags are required'),
         mannualFile: Yup.mixed()
             .required('Document file is required')
-            .test('fileSize', 'File size must be less than 2MB', (value) => value && value.size <= MAX_FILE_SIZE)
+            .test('fileSize', 'File size must be less than 10 MB', (value) => value && value.size <= MAX_FILE_SIZE)
             .test('fileType', 'Unsupported file format', (value) => value && ['application/pdf', 'image/jpeg', 'image/png'].includes(value.type)),
     });
 
