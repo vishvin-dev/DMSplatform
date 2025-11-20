@@ -8,11 +8,9 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
-// The 'bulkscan' import here is for the main API, not the scanner. We will use axios for the scanner.
-import { getDocumentDropdowns, postDocumentUpload, view, bulkscan } from '../../helpers/fakebackend_helper';
+import { getDocumentDropdowns, postDocumentUpload, view } from '../../helpers/fakebackend_helper';
 import { io } from "socket.io-client";
 import axios from 'axios';
-import { jsPDF } from "jspdf";
 
 // --- HELPERS & SUB-COMPONENTS ---
 
@@ -63,12 +61,14 @@ const TagEditor = ({ tags, onAddTag, onRemoveTag, readOnly = false }) => {
     );
 };
 
+// --- UPDATED: DocumentThumbnails with Scroll Handling ---
 const DocumentThumbnails = ({ documents, selectedFile, onFileSelect }) => (
-    <Card className="flex-grow-1">
+    <Card className="h-100 d-flex flex-column">
         <CardHeader className="bg-light p-3 position-relative" style={{ borderTop: '3px solid #405189' }}>
             <h5 className="mb-0">Documents<Badge color="secondary" pill>{documents.length}</Badge></h5>
         </CardHeader>
-        <CardBody className="p-2 thumbnail-pane">
+        {/* Added flex-grow-1, overflowY: auto to force scroll within fixed height */}
+        <CardBody className="p-2 thumbnail-pane flex-grow-1" style={{ overflowY: 'auto', minHeight: 0 }}>
             <Row className="g-2">
                 {documents.map(doc => (
                     <Col key={doc.id} xs={6} md={4} lg={6}>
@@ -100,6 +100,7 @@ const DocumentPreview = ({ file, loading, error }) => {
         setRotation(0);
     }, [file]);
 
+    // --- Button Handlers ---
     const handleZoomIn = () => setZoom(prev => Math.min(prev * 1.2, 5));
     const handleZoomOut = () => setZoom(prev => Math.max(prev / 1.2, 0.2));
     const handleReset = () => {
@@ -107,6 +108,36 @@ const DocumentPreview = ({ file, loading, error }) => {
         setPosition({ x: 0, y: 0 });
         setRotation(0);
     };
+
+    // --- FIX FOR SCROLL BUG: Native Event Listener ---
+    useEffect(() => {
+        const element = previewRef.current;
+        if (!element) return;
+
+        const onWheel = (e) => {
+            // e.preventDefault() here with { passive: false } stops the window from scrolling
+            e.preventDefault();
+            
+            const delta = e.deltaY;
+            setZoom(prevZoom => {
+                if (delta < 0) {
+                    return Math.min(prevZoom * 1.2, 5); // Zoom In
+                } else {
+                    return Math.max(prevZoom / 1.2, 0.2); // Zoom Out
+                }
+            });
+        };
+
+        // attach the listener with passive: false
+        element.addEventListener('wheel', onWheel, { passive: false });
+
+        // cleanup
+        return () => {
+            if (element) {
+                element.removeEventListener('wheel', onWheel);
+            }
+        };
+    }, []); // Empty dependency array ensures listener is attached once
 
     const handleMouseDown = (e) => {
         e.preventDefault();
@@ -125,16 +156,6 @@ const DocumentPreview = ({ file, loading, error }) => {
 
     const handleMouseUpOrLeave = () => setIsDragging(false);
 
-    const handleWheel = (e) => {
-        e.preventDefault();
-        if (e.deltaY < 0) {
-            handleZoomIn();
-        } else {
-            handleZoomOut();
-        }
-    };
-    
-    // Defensive check for file and its properties
     const isImage = file?.previewUrl && file.type && !file.previewUrl.includes('pdf') && file.type.startsWith('image/');
     const isPdf = file?.previewUrl && file.type && (file.previewUrl.includes('pdf') || file.type === 'application/pdf');
     const cursorStyle = isDragging ? 'grabbing' : (zoom > 1 ? 'grab' : 'default');
@@ -152,7 +173,7 @@ const DocumentPreview = ({ file, loading, error }) => {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUpOrLeave}
                 onMouseLeave={handleMouseUpOrLeave}
-                onWheel={handleWheel}
+                // Removed React onWheel prop, using native listener in useEffect above instead
             >
                 {loading ? <Spinner>Loading...</Spinner> :
                     error ? <Alert color="danger" className="m-3">{error}</Alert> :
@@ -194,8 +215,12 @@ const DocumentPreview = ({ file, loading, error }) => {
                                 <p>Choose a document from the left to preview it here.</p>
                             </div>
                         )}
+                
+                {/* --- UPDATED ZOOM CONTROLS WITH BUTTONS --- */}
                 {file && (
                     <div className="zoom-controls">
+                         <Button size="sm" color="light" onClick={handleZoomOut} title="Zoom Out"><i className="ri-zoom-out-line"></i></Button>
+                         <Button size="sm" color="light" onClick={handleZoomIn} title="Zoom In"><i className="ri-zoom-in-line"></i></Button>
                         <Button size="sm" color="light" onClick={handleReset} title="Reset View"><i className="ri-fullscreen-exit-line"></i></Button>
                     </div>
                 )}
@@ -204,7 +229,6 @@ const DocumentPreview = ({ file, loading, error }) => {
     );
 };
 
-// UPDATED: Added verificationDetails prop
 const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comment, onCommentChange, isVerified, onVerifiedChange, onSubmit, loading, canSubmit, readOnly = false, verificationDetails }) => (
     <div className="info-pane">
         <Card className="mb-3">
@@ -226,7 +250,6 @@ const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comme
             <CardHeader className="bg-light p-3" style={{ borderTop: '3px solid #405189' }}><h6 className="mb-0">Document Details</h6></CardHeader>
             <CardBody className="p-2">
                 <ListGroup flush className="small">
-                    {/* Display session storage data if available */}
                     {verificationDetails ? (
                         <>
                             <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
@@ -235,13 +258,12 @@ const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comme
                             <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
                                 <strong>File Number:</strong><span className="text-muted ms-1">{verificationDetails.fileNumber || 'N/A'}</span>
                             </ListGroupItem>
-                            <hr className="my-1"/>
+                            <hr className="my-1" />
                         </>
                     ) : (
                         <ListGroupItem className="px-1 py-1 border-0 text-muted">Verification details are unavailable.</ListGroupItem>
                     )}
 
-                    {/* Display selected file's metadata */}
                     {selectedFile && (
                         <>
                             <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
@@ -255,7 +277,7 @@ const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comme
                             </ListGroupItem>
                         </>
                     )}
-                    
+
                 </ListGroup>
             </CardBody>
         </Card>
@@ -284,14 +306,13 @@ const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comme
     </div>
 );
 
-// UPDATED: Added documentTypes prop
 const ScanPreviewModal = ({
     isOpen, onClose, onRescan, onAddPage, onSubmit, scannedData, onDataChange,
     activeIndex, setActiveIndex,
     isAddingPageLoading, isRescanning, isSubmittingDraft,
     setScannedDocumentData,
-    documentTypes, // ADDED
-    DocumentTypeDropdown // ADDED
+    documentTypes,
+    DocumentTypeDropdown
 }) => {
     const iframeRef = useRef(null);
     const [isIframeReady, setIsIframeReady] = useState(false);
@@ -408,6 +429,12 @@ const ScanPreviewModal = ({
         return () => window.removeEventListener('message', handleMessageFromIframe);
     }, [scannedData, onDataChange]);
 
+    // --- VALIDATION LOGIC START ---
+    const isCategorySelected = scannedData?.doc?.category && scannedData.doc.category !== 'all';
+    const isOtherValid = !scannedData?.isOther || (scannedData?.isOther && scannedData?.docName?.trim().length > 0);
+    const canSubmit = isCategorySelected && isOtherValid;
+    // --- VALIDATION LOGIC END ---
+
     if (!scannedData) return null;
 
     const pages = scannedData.doc.pages;
@@ -476,8 +503,7 @@ const ScanPreviewModal = ({
                                             <strong>Account ID:</strong>
                                             <span className="text-muted">{scannedData.doc.account_id}</span>
                                         </ListGroupItem>
-                                        
-                                        {/* --- MODIFICATION START --- */}
+
                                         <ListGroupItem className="px-2 py-2 border-0 d-flex justify-content-between align-items-center">
                                             <strong className="me-2">Document Type:<span className="text-danger">*</span></strong>
                                             <DocumentTypeDropdown
@@ -485,7 +511,7 @@ const ScanPreviewModal = ({
                                                 onChange={(e) => {
                                                     const newCategory = e.target.value;
                                                     const isOther = newCategory === 'other';
-                                                    
+
                                                     setScannedDocumentData(prev => ({
                                                         ...prev,
                                                         doc: { ...prev.doc, category: newCategory },
@@ -497,7 +523,6 @@ const ScanPreviewModal = ({
                                                 placeholder="Select Type..."
                                             />
                                         </ListGroupItem>
-                                        {/* --- MODIFICATION END --- */}
 
                                     </ListGroup>
                                 ) : (
@@ -537,16 +562,30 @@ const ScanPreviewModal = ({
                     </Col>
                 </Row>
             </ModalBody>
-            <ModalFooter>
-                <Button color="light" onClick={onRescan} disabled={isActionInProgress}><i className="ri-scan-2-line me-1"></i> Rescan Page</Button>
-                <Button color="secondary" onClick={onAddPage} disabled={isActionInProgress}><i className="ri-add-line me-1"></i> Add Page</Button>
-                <Button color="primary" onClick={onSubmit} disabled={isActionInProgress}>
-                    {isSubmittingDraft ? (
-                        <><Spinner size="sm" className="me-1" /> Submitting...</>
-                    ) : (
-                        <><i className="ri-check-line me-1"></i> Submit Document</>
+            <ModalFooter className="d-flex justify-content-between align-items-center">
+                <div>
+                    <Button color="light" onClick={onRescan} disabled={isActionInProgress} className="me-2"><i className="ri-scan-2-line me-1"></i> Rescan Page</Button>
+                    <Button color="secondary" onClick={onAddPage} disabled={isActionInProgress}><i className="ri-add-line me-1"></i> Add Page</Button>
+                </div>
+                <div className="d-flex flex-column align-items-end">
+                    {!canSubmit && (
+                        <small className="text-danger mb-1 fw-bold">
+                            <i className="ri-error-warning-line me-1"></i>
+                            Please select a Document Type to submit.
+                        </small>
                     )}
-                </Button>
+                    <Button
+                        color="primary"
+                        onClick={onSubmit}
+                        disabled={isActionInProgress || !canSubmit}
+                    >
+                        {isSubmittingDraft ? (
+                            <><Spinner size="sm" className="me-1" /> Submitting...</>
+                        ) : (
+                            <><i className="ri-check-line me-1"></i> Submit Document</>
+                        )}
+                    </Button>
+                </div>
             </ModalFooter>
         </Modal>
     );
@@ -591,7 +630,7 @@ const DocumentReview = () => {
     const [socket, setSocket] = useState(null);
     const [scanningInProgress, setScanningInProgress] = useState(false);
     const [currentScanFileName, setCurrentScanFileName] = useState('');
-    
+
     // --- TIMEOUT/INTERVAL REFS (FIX FOR STUCK MODAL) ---
     const scanTimeoutIdRef = useRef(null);
     const progressIntervalRef = useRef(null);
@@ -621,7 +660,7 @@ const DocumentReview = () => {
 
 
     const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
-    
+
     // Load verification details from location state (consumerData)
     useEffect(() => {
         if (consumerData) {
@@ -641,7 +680,7 @@ const DocumentReview = () => {
         setSocket(socketConnection);
         socketConnection.on("connect", () => console.log("✅ Socket connected!"));
         socketConnection.on("disconnect", () => console.log("🔌 Socket Disconnected."));
-        
+
         return () => {
             socketConnection.disconnect();
             // Cleanup timers on component unmount
@@ -669,11 +708,11 @@ const DocumentReview = () => {
                     clearInterval(progressIntervalRef.current);
                     progressIntervalRef.current = null;
                 }
-                if (scanTimeoutIdRef.current) { 
-                    clearTimeout(scanTimeoutIdRef.current); 
-                    scanTimeoutIdRef.current = null; 
+                if (scanTimeoutIdRef.current) {
+                    clearTimeout(scanTimeoutIdRef.current);
+                    scanTimeoutIdRef.current = null;
                 }
-                
+
                 try {
                     // 1. Fetch all images as blobs
                     const pagePromises = data.images.map(async (imageUrl, index) => {
@@ -737,9 +776,9 @@ const DocumentReview = () => {
             }
             // --- B. SINGLE SCAN LOGIC (Existing code) ---
             else if (scanningInProgress && currentScanFileName && data.fileName && data.fileName.includes(currentScanFileName)) {
-                if (scanTimeoutIdRef.current) { 
-                    clearTimeout(scanTimeoutIdRef.current); 
-                    scanTimeoutIdRef.current = null; 
+                if (scanTimeoutIdRef.current) {
+                    clearTimeout(scanTimeoutIdRef.current);
+                    scanTimeoutIdRef.current = null;
                 }
                 if (progressIntervalRef.current) {
                     clearInterval(progressIntervalRef.current);
@@ -787,7 +826,7 @@ const DocumentReview = () => {
                     } else {
                         const newDoc = {
                             id: Date.now(), name: data.fileName, type: blob.type,
-                            category: 'all', 
+                            category: 'all',
                             createdAt: new Date().toISOString().split('T')[0],
                             createdBy: 'scanner', description: 'Newly scanned document',
                             rr_no: consumerData.rr_no, consumer_name: consumerData.consumer_name,
@@ -802,7 +841,7 @@ const DocumentReview = () => {
                             highlights: [{ type: 'Header', text: 'Scanned Document' }, { type: 'Footer', text: `Scanned on: ${newDoc.createdAt}` }, { type: 'Word', text: newDoc.consumer_name },],
                             tags: newDoc.tags,
                             responseText: '',
-                            isOther: false, 
+                            isOther: false,
                             docName: '',
                             docRef: ''
                         });
@@ -829,12 +868,12 @@ const DocumentReview = () => {
         return () => { socket.off("new-scan-processed", handleScanResponse); };
 
     }, [
-        socket, 
+        socket,
         scanningInProgress, // for single scan
         currentScanFileName, // for single scan
         isBulkScanning, // for bulk scan
-        consumerData, 
-        isAddingPage, 
+        consumerData,
+        isAddingPage,
         pageToRescanId
     ]);
 
@@ -877,7 +916,7 @@ const DocumentReview = () => {
     const handleFileSelect = useCallback(async (file) => {
         // --- FIX 2: REMOVED state-saving logic from here ---
         // if (selectedFile) { ... }
-        
+
         // 2. Find the new file to select and update the basic state immediately.
         const newSelectedFile = documentsForReview.find(doc => doc.id === file.id);
         if (!newSelectedFile) {
@@ -906,7 +945,7 @@ const DocumentReview = () => {
 
                 const blob = response.data;
                 const contentType = (response.headers && response.headers['content-type']) || '';
-                
+
                 if (blob instanceof Blob && (contentType.startsWith('image/') || contentType === 'application/pdf')) {
                     const fileUrl = URL.createObjectURL(blob);
                     const hydratedFile = { ...newSelectedFile, previewUrl: fileUrl, fileObject: new File([blob], newSelectedFile.name, { type: contentType }), type: contentType };
@@ -944,10 +983,10 @@ const DocumentReview = () => {
             // or files that already have their URL.
             setPreviewLoading(false);
             if (!newSelectedFile.previewUrl) {
-                 console.log("No draftId or previewUrl found, skipping API call.");
+                console.log("No draftId or previewUrl found, skipping API call.");
             }
         }
-    // --- FIX 2: Removed responseText and metaTags from dependencies ---
+        // --- FIX 2: Removed responseText and metaTags from dependencies ---
     }, [documentsForReview]);
 
 
@@ -978,7 +1017,7 @@ const DocumentReview = () => {
         // --- FIX 2: No longer need to map state, documentsForReview is already up-to-date ---
         const finalDocuments = documentsForReview;
         // const finalDocuments = documentsForReview.map(doc =>
-        //     (selectedFile && doc.id === selectedFile.id) ? { ...doc, comment: responseText, tags: metaTags } : doc
+        //      (selectedFile && doc.id === selectedFile.id) ? { ...doc, comment: responseText, tags: metaTags } : doc
         // );
         if (finalDocuments.length === 0) {
             setResponse(`Please scan at least one document.`);
@@ -1000,14 +1039,14 @@ const DocumentReview = () => {
             setResponse("Consumer data is missing. Please try again.");
             setErrorModal(true); setLoading(false); return;
         }
-        
+
         // Append verification details from state (which came from props)
         if (verificationDetails) {
-             formData.append('NoOfPages', verificationDetails.noOfPages || '');
-             formData.append('FileNumber', verificationDetails.fileNumber || '');
-             formData.append('ContractorName', verificationDetails.contractorName || '');
-             formData.append('ApprovedBy', verificationDetails.approvedBy || '');
-             formData.append('CategoryName', verificationDetails.category || '');
+            formData.append('NoOfPages', verificationDetails.noOfPages || '');
+            formData.append('FileNumber', verificationDetails.fileNumber || '');
+            formData.append('ContractorName', verificationDetails.contractorName || '');
+            formData.append('ApprovedBy', verificationDetails.approvedBy || '');
+            formData.append('CategoryName', verificationDetails.category || '');
         }
 
         formData.append('flagId', '10');
@@ -1095,7 +1134,7 @@ const DocumentReview = () => {
         try {
             // Just trigger the scan, response will come via socket
             await axios.post(`${SCANNER_ENDPOINT}/scan-service/scan`, { fileName: fileNameForApi, format: "jpg", colorMode: "color" }, { timeout: 30000 });
-            
+
             // Clear previous timeout just in case
             if (scanTimeoutIdRef.current) {
                 clearTimeout(scanTimeoutIdRef.current);
@@ -1135,7 +1174,7 @@ const DocumentReview = () => {
             setIsScanningModalOpen(false);
             setIsRescanning(false);
             setPageToRescanId(null);
-            
+
             console.error("Scan Error:", error || "An undefined error was caught");
             setResponse(error?.message || 'Error initiating scan. Check network and scanner connection.');
             setErrorModal(true);
@@ -1162,23 +1201,22 @@ const DocumentReview = () => {
         setScanningInProgress(true); // <-- IMPORTANT
         setIsScanningModalOpen(true); // Reuse the scanning modal
         setScanProgress(0);
-        
+
         if (progressIntervalRef.current) {
             clearInterval(progressIntervalRef.current);
         }
         progressIntervalRef.current = setInterval(() => setScanProgress(prev => Math.min(prev + 10, 90)), 250);
 
         const payload = {
-            deviceName: "Canon MF460 ser_6CF2D8AE9F40", 
-            fileName: "ProjectDocsBatch.pdf", 
-            format: "pdf" 
+            deviceName: "Canon MF460 ser_6CF2D8AE9F40",
+            fileName: "ProjectDocsBatch.pdf",
+            format: "pdf"
         };
-//yes
         try {
-           
+
             // The response will come over the socket via the `useEffect[socket]` listener.
-            await axios.post(`${SCANNER_ENDPOINT}/scan-service/bulk-scan`, payload, { timeout: 60000 }); 
-            
+            await axios.post(`${SCANNER_ENDPOINT}/scan-service/bulk-scan`, payload, { timeout: 60000 });
+
             // Set a timeout in case the socket never responds
             ////updated
             if (scanTimeoutIdRef.current) {
@@ -1274,14 +1312,8 @@ const DocumentReview = () => {
     const handleSubmitScannedDocument = async () => {
         if (!scannedDocumentData) return;
         
-        // ADDED VALIDATION
-        if (scannedDocumentData.doc.category === 'all' || !scannedDocumentData.doc.category) {
-            alert('Please select a Document Type.'); return;
-        }
-        if (scannedDocumentData.isOther && !scannedDocumentData.docName.trim()) {
-            alert('Document Name is required for "Other" type.'); return;
-        }
-
+        // --- REMOVED ALERTS: VALIDATION HANDLED IN MODAL UI ---
+        
         setIsSubmittingDraft(true);
 
         let user;
@@ -1315,7 +1347,7 @@ const DocumentReview = () => {
 
                 for (let i = 0; i < doc.pages.length; i++) {
                     const page = doc.pages[i];
-                    
+
                     try {
                         // 1. Process the image (apply rotation)
                         const blobToProcess = page.rotation % 360 !== 0
@@ -1393,7 +1425,7 @@ const DocumentReview = () => {
                 setIsScanPreviewModalOpen(false);
                 setScannedDocumentData(null);
                 setFileTypeFilter('all');
-                
+
                 if (newlyAddedDocuments.length > 0 && !uploadFailed) {
                     // Select the first new document
                     setTimeout(() => handleFileSelect(newlyAddedDocuments[0]), 100);
@@ -1401,7 +1433,7 @@ const DocumentReview = () => {
 
             } else if (doc.pages.length === 1) {
                 // --- SINGLE PAGE: PROCESS AS ONE DOCUMENT (Existing Logic) ---
-                
+
                 let finalFileObject, finalPreviewUrl;
                 let finalDocName = doc.name;
 
@@ -1417,11 +1449,11 @@ const DocumentReview = () => {
                         finalPreviewUrl = singlePage.previewUrl;
                     }
                 } catch (error) {
-                     console.error("Error processing file:", error);
-                     setResponse("Failed to process the scanned page. Please try again.");
-                     setErrorModal(true);
-                     setIsSubmittingDraft(false);
-                     return;
+                    console.error("Error processing file:", error);
+                    setResponse("Failed to process the scanned page. Please try again.");
+                    setErrorModal(true);
+                    setIsSubmittingDraft(false);
+                    return;
                 }
 
                 let finalDoc = {
@@ -1633,27 +1665,31 @@ const DocumentReview = () => {
                                         )}
                                     </Col>
                                 </Row>
-                                
+
                                 <Row className="main-review-layout g-3 d-flex">
-                                    <Col xl={3} lg={4} className="d-flex flex-column">
-                                        <DocumentThumbnails documents={documentsForReview} selectedFile={selectedFile} onFileSelect={handleFileSelect} />
-                                    </Col>
-                                    <Col xl={6} lg={8} className="d-flex" style={{ height: '65vh' }}>
-                                        <DocumentPreview file={selectedFile} loading={previewLoading} error={previewError} />
-                                    </Col>
-                                    <Col xl={3} lg={12} className="d-flex flex-column mt-3 mt-xl-0">
-                                        <DocumentInfoPanel
-                                            selectedFile={selectedFile} highlights={scannedHighlights} tags={metaTags}
-                                            // --- FIX 2: Pass the new handlers ---
-                                            onTagsChange={handleTagsChange} 
-                                            comment={responseText} 
-                                            onCommentChange={(e) => handleCommentChange(e.target.value)}
-                                            isVerified={isVerified} onVerifiedChange={setIsVerified} onSubmit={handleSubmitReview}
-                                            loading={loading} canSubmit={documentsForReview.length > 0} readOnly={!selectedFile}
-                                            verificationDetails={verificationDetails}
-                                        />
-                                    </Col>
-                                </Row>
+    {/* LEFT PANEL: DOCUMENT LIST - Fixed height to force scroll */}
+    <Col xl={3} lg={4} className="d-flex flex-column" style={{ height: '65vh' }}>
+        <DocumentThumbnails documents={documentsForReview} selectedFile={selectedFile} onFileSelect={handleFileSelect} />
+    </Col>
+    
+    {/* CENTER PANEL: PREVIEW */}
+    <Col xl={6} lg={8} className="d-flex" style={{ height: '65vh' }}>
+        <DocumentPreview file={selectedFile} loading={previewLoading} error={previewError} />
+    </Col>
+    
+    {/* RIGHT PANEL: INFO */}
+    <Col xl={3} lg={12} className="d-flex flex-column mt-3 mt-xl-0">
+        <DocumentInfoPanel
+            selectedFile={selectedFile} highlights={scannedHighlights} tags={metaTags}
+            onTagsChange={handleTagsChange}
+            comment={responseText}
+            onCommentChange={(e) => handleCommentChange(e.target.value)}
+            isVerified={isVerified} onVerifiedChange={setIsVerified} onSubmit={handleSubmitReview}
+            loading={loading} canSubmit={documentsForReview.length > 0} readOnly={!selectedFile}
+            verificationDetails={verificationDetails}
+        />
+    </Col>
+</Row>
                             </>
                         )}
                     </CardBody>
