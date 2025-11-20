@@ -7,7 +7,7 @@ import {
     getAccountId, getConsumerDetails, postFileUpload, getDocumentCategory, getDocumentsView, getSingleDocumentById, getSingleDocumentByIdByDraft, postFileMetaOnly,
     markOldVersionNotLatest, updateDocumentStatus, resolveRejection, saveDraft, fetchDraftDocumentByAccountId, finalizeDrafts
 } from "../../models/DocumentUpload.js"
-import { insertDocumentUpload, getLatestVersion, insertDocumentVersion, getNextVersionLabel, getDocsMetaInfo, getDocsVieww } from "../../models/MannualUpload.js"
+import { insertDocumentUpload, getLatestVersion, insertDocumentVersion, getNextVersionLabel, getDocsMetaInfo, getAllDocsMetaInfo, getDocsVieww } from "../../models/MannualUpload.js"
 
 
 //this is the doucment uploading things
@@ -799,7 +799,8 @@ export const ScanUpload = async (req, res) => {
 export const DocumentView = async (req, res) => {
     const { flagId, Version_Id, accountId } = req.body;
 
-
+    //==================================================================================
+            // THIS IS THE FECTHING APPROVED INFORMATION OK ============================
     try {
         if (parseInt(flagId) === 1) {
             if (!accountId) {
@@ -813,6 +814,7 @@ export const DocumentView = async (req, res) => {
                 data: results,
             });
         }
+         //==================================================================================
         else if (parseInt(flagId) === 2) {
 
             const result = await getDocsVieww(Version_Id);
@@ -844,6 +846,26 @@ export const DocumentView = async (req, res) => {
             // Send the file
             res.sendFile(path.resolve(filePath));
 
+        }
+
+// ===================================================================================
+//===============THIS IS THE FECTHING ALL VERIONS OF THE DOCUMENTS OK ==================
+
+        else if (parseInt(flagId) === 3) {
+            if (!accountId) {
+                return res.status(400).json({ status: "error", message: "accountId is required" });
+            }
+            const results = await getAllDocsMetaInfo(accountId);
+            return res.status(200).json({
+                status: "success",
+                message: "Document Data fetched successfully",
+                count: results.length,
+                data: results,
+            });
+        }
+        // ===================================================================================
+        else {
+            return res.status(400).json({ error: "Invalid flagId" });
         }
     } catch (error) {
         console.error("Error:", error);
@@ -1228,7 +1250,7 @@ export const DocumentView = async (req, res) => {
 
 
 //this is the multiple file upload ok 
-export const MannualUpload = async (req, res) => {
+export const                                                                                                                                MannualUpload = async (req, res) => {
   try {
     const {
       DocumentName,

@@ -947,55 +947,136 @@ export const clickToApproved = async (User_Id, VersionIds, Role_Id) => {
 // };
 
 //==========================THIS WHEN WE CLICK TO THE REJECTED BUTTONS THEN IT TO BE REJECTED OK=============================
-export const clickToReject = async (User_Id, Version_Id, comment) => {
+
+
+//==========================THIS WHEN WE CLICK TO THE REJECTED BUTTONS THEN IT TO BE REJECTED OK============================
+//this is the single rejected docs ok 
+// export const clickToReject = async (User_Id, Version_Id, comment) => {
+//     try {
+//         // 1️ Update the specific version status to Rejected
+//         await pool.execute(
+//             `
+//             UPDATE documentversion
+//             SET Status_Id = 3, UploadedAt = NOW()
+//             WHERE Version_Id = ?
+//             `,
+//             [Version_Id]
+//         );
+
+//         // 2️ Mark old rejection entries for this version as resolved (optional)
+//         await pool.execute(
+//             `
+//             UPDATE documentrejectionqueue
+//             SET IsResolved = 1
+//             WHERE Version_Id = ?
+//             `,
+//             [Version_Id]
+//         );
+
+//         // 3️ Insert new rejection record for this version
+//         const [result] = await pool.execute(
+//             `
+//             INSERT INTO documentrejectionqueue
+//                 (DocumentId, Version_Id, Status_Id, RejectedByUser_Id, UploaderUser_Id, RejectedOn, RejectionComment, IsResolved)
+//             VALUES
+//                 (
+//                     (SELECT DocumentId FROM documentversion WHERE Version_Id = ?),
+//                     ?, 
+//                     3, 
+//                     ?, 
+//                     (SELECT UploadedByUser_Id FROM documentversion WHERE Version_Id = ?),
+//                     NOW(),
+//                     ?,
+//                     0
+//                 )
+//             `,
+//             [Version_Id, Version_Id, User_Id, Version_Id, comment]
+//         );
+
+//         return { success: true, rejectionId: result.insertId };
+
+//     } catch (error) {
+//         console.error("Error rejecting version:", error);
+//         throw error;
+//     }
+// };
+
+export const clickToReject = async (User_Id, VersionIds, comment) => {
     try {
-        // 1️ Update the specific version status to Rejected
+
+        // -------------------------------------------------------
+        // CHANGED: process multiple version IDs using placeholders
+        // -------------------------------------------------------
+        const placeholders = VersionIds.map(() => "?").join(",");
+
+        // -------------------------------------------------------
+        // 1: Reject all versions together (bulk update)
+        // CHANGED: replaced single Version_Id with IN (...)
+        // -------------------------------------------------------
         await pool.execute(
             `
             UPDATE documentversion
             SET Status_Id = 3, UploadedAt = NOW()
-            WHERE Version_Id = ?
+            WHERE Version_Id IN (${placeholders})
             `,
-            [Version_Id]
+            VersionIds
         );
 
-        // 2️ Mark old rejection entries for this version as resolved (optional)
+        // -------------------------------------------------------
+        // 2: Mark all old rejection entries for these versions
+        // CHANGED: replaced single Version_Id with IN (...)
+        // -------------------------------------------------------
         await pool.execute(
             `
             UPDATE documentrejectionqueue
             SET IsResolved = 1
-            WHERE Version_Id = ?
+            WHERE Version_Id IN (${placeholders})
             `,
-            [Version_Id]
+            VersionIds
         );
 
-        // 3️ Insert new rejection record for this version
-        const [result] = await pool.execute(
-            `
-            INSERT INTO documentrejectionqueue
-                (DocumentId, Version_Id, Status_Id, RejectedByUser_Id, UploaderUser_Id, RejectedOn, RejectionComment, IsResolved)
-            VALUES
-                (
-                    (SELECT DocumentId FROM documentversion WHERE Version_Id = ?),
-                    ?, 
-                    3, 
-                    ?, 
-                    (SELECT UploadedByUser_Id FROM documentversion WHERE Version_Id = ?),
-                    NOW(),
-                    ?,
-                    0
-                )
-            `,
-            [Version_Id, Version_Id, User_Id, Version_Id, comment]
-        );
+        // -------------------------------------------------------
+        // 3: Insert new rejection entry for each version
+        // CHANGED: loop through all VersionIds
+        // -------------------------------------------------------
+        let insertedRejections = [];
 
-        return { success: true, rejectionId: result.insertId };
+        for (const versionId of VersionIds) {
+            const [result] = await pool.execute(
+                `
+                INSERT INTO documentrejectionqueue
+                    (DocumentId, Version_Id, Status_Id, RejectedByUser_Id, UploaderUser_Id, RejectedOn, RejectionComment, IsResolved)
+                VALUES
+                    (
+                        (SELECT DocumentId FROM documentversion WHERE Version_Id = ?),
+                        ?, 
+                        3, 
+                        ?, 
+                        (SELECT UploadedByUser_Id FROM documentversion WHERE Version_Id = ?),
+                        NOW(),
+                        ?,
+                        0
+                    )
+                `,
+                // CHANGED: replaced Version_Id variable with versionId loop variable
+                [versionId, versionId, User_Id, versionId, comment]
+            );
+
+            insertedRejections.push(result.insertId);
+        }
+
+        return {
+            success: true,
+            rejectedCount: VersionIds.length,
+            rejectionEntryIds: insertedRejections
+        };
 
     } catch (error) {
-        console.error("Error rejecting version:", error);
+        console.error("Error rejecting multiple versions:", error);
         throw error;
     }
 };
+
 // ===================================================================================================================================
 // ===================================================================================================================================
 
