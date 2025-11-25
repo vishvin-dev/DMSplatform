@@ -12,11 +12,10 @@ router.post("/", uploadMultiple , authenticateToken, DocumentUpload);
 router.post("/documentView", DocumentView);
 
 //====================THIS IS THE MANNUAL UPLOAD OK ============================================= 
-router.post("/mannualUpload", upload.single("mannualFile"),validateUploadFields, authenticateToken,MannualUpload);
+router.post("/mannualUpload",  upload.array("mannualFile", 10),validateUploadFields, authenticateToken,MannualUpload);
 
 //====================THIS IS THE SCANN UPLOAD OK ===============================================
 router.post("/scanUpload", authenticateToken, ScanUpload);
 
 export default router;
  
-

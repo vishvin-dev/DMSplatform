@@ -8,7 +8,7 @@ import {
     clickToApproved,
     clickToReject,
     getBackAllRejectedDocuments
-    ,getBackAllApprovedDocuments,
+    , getBackAllApprovedDocuments,
     getBackAllApprovedDocumentsCounts,
     getBackAllRejectedDocumentsCounts,
     getBackAllPendingDocumentsCounts
@@ -23,15 +23,15 @@ export const verifiedQc = async (req, res) => {
             return res.status(400).json({ status: "failed", message: "flagId is required" });
         }
         let results
-//==================THIS IS FECTHING BACK APPROVED DOCUMENTS TO THE UPLOADER============================
+        //==================THIS IS FECTHING BACK APPROVED DOCUMENTS TO THE UPLOADER============================
         if (parseInt(flagId) === 1) {
-            results = await  getBackAllApprovedDocumentsCounts( so_code, User_Id);
+            results = await getBackAllApprovedDocumentsCounts(so_code, User_Id);
             return res.status(200).json({
                 status: "success",
                 message: "All QC Approved Data Fetched Successfully",
                 results
             })
-        } 
+        }
         else if (parseInt(flagId) === 2) {
             results = await getBackAllApprovedDocuments(so_code, User_Id);
             return res.status(200).json({
@@ -48,8 +48,8 @@ export const verifiedQc = async (req, res) => {
                 message: "All QC Rejected Data Fetched Successfully",
                 results
             })
-        } 
-         else if (parseInt(flagId) === 4) {
+        }
+        else if (parseInt(flagId) === 4) {
             results = await getBackAllRejectedDocuments(User_Id, so_code);
             return res.status(200).json({
                 status: "success",
@@ -57,16 +57,16 @@ export const verifiedQc = async (req, res) => {
                 count: results.length,
                 results
             })
-        } 
+        }
         //========================================================================================================
-         else if (parseInt(flagId) === 5) {
+        else if (parseInt(flagId) === 5) {
             results = await getBackAllPendingDocumentsCounts(User_Id, so_code);
             return res.status(200).json({
                 status: "success",
                 message: "All Pending Data Fetched Successfully",
                 results
             })
-        } 
+        }
         else {
             return res.status(400).json({ status: "failed", message: "Invalid flagId provided" });
         }
@@ -134,15 +134,26 @@ export const Qcupload = async (req, res) => {
 
         //======THIS WHEN WE CLCIK TO THE APPROVED BUTTON THEN IT TO BE APPROVED OK=============
         else if (parseInt(flagId) === 5) {
-            results = await clickToApproved(User_Id, Version_Id, Role_Id)
+            // accept multiple VersionIds
+            const { VersionIds } = req.body;
+            if (!Array.isArray(VersionIds) || VersionIds.length === 0) {
+                return res.status(400).json({ message: "VersionIds must be an array" });
+            }
+            results = await clickToApproved(User_Id, VersionIds, Role_Id);
+
             return res.status(200).json({
                 status: "success",
-                message: "Document Approved Successfully",
-            })
+                message: "All files approved successfully",
+            });
         }
+
         //======THIS WHEN WE CLCIK TO THE Rejected BUTTON THEN IT TO BE REJECTED OK=============
         else if (parseInt(flagId) === 6) {
-            results = await clickToReject(User_Id, Version_Id, comment)
+            const { VersionIds } = req.body;
+            if (!Array.isArray(VersionIds) || VersionIds.length === 0) {
+                return res.status(400).json({ message: "VersionIds must be an array" });
+            }
+            results = await clickToReject(User_Id, VersionIds, comment)
             return res.status(200).json({
                 status: "success",
                 message: "Document Rejected Successfully",

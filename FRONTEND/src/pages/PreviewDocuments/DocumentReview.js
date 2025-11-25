@@ -12,9 +12,11 @@ import { getDocumentDropdowns, postDocumentUpload } from '../../helpers/fakeback
 import { io } from "socket.io-client";
 import axios from 'axios';
 
+
 // --- CONSTANTS ---
 const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
 const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
+
 
 // --- HELPERS ---
 const getHighlightBadgeStyle = (itemType) => {
@@ -674,7 +676,7 @@ const DocumentReview = () => {
     }, [consumerData]);
 
     useEffect(() => {
-        const socketConnection = io(SCANNER_ENDPOINT, { transports: ["websocket", "polling"] });
+        const socketConnection = io(SCANNER_ENDPOINT,  { transports: ["websocket", "polling"], reconnection: false,  });
         setSocket(socketConnection);
 
         return () => {
@@ -687,6 +689,8 @@ const DocumentReview = () => {
             }
         };
     }, []);
+
+
 
     useEffect(() => {
         if (!socket) return;

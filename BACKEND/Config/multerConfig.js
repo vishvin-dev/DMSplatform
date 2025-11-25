@@ -1,7 +1,7 @@
 import multer from "multer";
 import fs from "fs";
 
-const networkFolder = "E:\Dms\scanDocument";
+const networkFolder = "E:\\Dms\\Draftcloud";
 const indentNetworkFolder = "Z:\\192.168.23.15\\IndentFile";
 
 
@@ -19,6 +19,8 @@ const getUploadFolder = (req) => {
     return "uploads/other";
   }
 };
+
+
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -51,13 +53,13 @@ export const uploadMultiple = multer({ storage }).fields([
   { name: "Passport", maxCount: 10 },
   { name: "PANCard", maxCount: 10 },
   { name: "TANCard", maxCount: 10 },
-  { name: "OwnerShipProof", maxCount: 10 }, //  notice P is capitalized here
+  { name: "OwnerShipProof", maxCount: 10 },
   { name: "KhataCertificate", maxCount: 10},
   { name: "PowerAgreement", maxCount: 10 },
   { name: "SiteSketch", maxCount: 10 },
   { name: "OtherDocuments", maxCount: 10 },
 
-    { name: "DraftFile", maxCount: 100 },
+  { name: "DraftFile", maxCount: 100 },
 ]);
 
 
