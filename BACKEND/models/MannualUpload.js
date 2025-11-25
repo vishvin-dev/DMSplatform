@@ -48,42 +48,42 @@ export const getLatestVersion = async (documentId) => {
 
 // =======================================================Insert new version=========================================================
 export const insertDocumentVersion = async (
-  documentId,
-  versionLabel,
-  filePath,
-  isLatest = 1,
-  changeReason,
-  DocumentName,
-  DocumentDescription,
-  MetaTags,
-  Status_Id,
-  UploadedByUser_Id
+    documentId,
+    versionLabel,
+    filePath,
+    isLatest = 1,
+    changeReason,
+    DocumentName,
+    DocumentDescription,
+    MetaTags,
+    Status_Id,
+    UploadedByUser_Id
 ) => {
-  // Mark old versions as not latest
-//   await pool.execute(`UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`, [documentId]);
+    // Mark old versions as not latest
+    //   await pool.execute(`UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`, [documentId]);
 
-  // Insert new version
-  const [result] = await pool.execute(
-    `
+    // Insert new version
+    const [result] = await pool.execute(
+        `
     INSERT INTO documentversion 
     (DocumentId, VersionLabel, FilePath, IsLatest, ChangeReason, DocumentName, DocumentDescription, MetaTags, Status_Id, UploadedByUser_Id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-    [
-      documentId,
-      versionLabel,
-      filePath,
-      isLatest,
-      changeReason ?? null,
-      DocumentName ?? null,
-      DocumentDescription ?? null,
-      MetaTags ?? null,
-      Status_Id ?? 1,
-      UploadedByUser_Id ?? null,
-    ]
-  );
+        [
+            documentId,
+            versionLabel,
+            filePath,
+            isLatest,
+            changeReason ?? null,
+            DocumentName ?? null,
+            DocumentDescription ?? null,
+            MetaTags ?? null,
+            Status_Id ?? 1,
+            UploadedByUser_Id ?? null,
+        ]
+    );
 
-  return result.insertId;
+    return result.insertId;
 };
 
 
@@ -168,9 +168,9 @@ export const getDocsMetaInfo = async (accountId) => {
 
 // ===================================================================================
 //===============THIS IS THE FECTHING ALL VERIONS OF THE DOCUMENTS OK ==================
-export const  getAllDocsMetaInfo=async(accountId)=>{
+export const getAllDocsMetaInfo = async (accountId) => {
     try {
-        const [result]=await pool.execute(`
+        const [result] = await pool.execute(`
     
                 SELECT 
                 du.DocumentId,
@@ -263,8 +263,8 @@ export const  getAllDocsMetaInfo=async(accountId)=>{
                 dv.IsLatest DESC,
                 dv.UploadedAt DESC;
 
-            `,[accountId]);
-            return result
+            `, [accountId]);
+        return result
     } catch (error) {
         console.log("Error in the fetchig the Details of Document", error)
         throw error
@@ -289,5 +289,21 @@ export const getDocsVieww = async (Version_Id) => {
     }
 }
 
+
+export const getDocsViewForDocsId = async (Draft_Id) => {
+    if (!Draft_Id) throw new Error("Draft_Id is required");
+    try {
+        const [result] = await pool.execute(`
+                SELECT FilePath 
+                FROM documentdraft
+                WHERE Draft_Id = ?;
+            `, [Draft_Id]);
+        return result
+    } catch (error) {
+        console.log("Fetching Error In the View Model")
+        throw new error
+
+    }
+}
 
 
