@@ -48,42 +48,42 @@ export const getLatestVersion = async (documentId) => {
 
 // =======================================================Insert new version=========================================================
 export const insertDocumentVersion = async (
-  documentId,
-  versionLabel,
-  filePath,
-  isLatest = 1,
-  changeReason,
-  DocumentName,
-  DocumentDescription,
-  MetaTags,
-  Status_Id,
-  UploadedByUser_Id
+    documentId,
+    versionLabel,
+    filePath,
+    isLatest = 1,
+    changeReason,
+    DocumentName,
+    DocumentDescription,
+    MetaTags,
+    Status_Id,
+    UploadedByUser_Id
 ) => {
-  // Mark old versions as not latest
-  await pool.execute(`UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`, [documentId]);
+    // Mark old versions as not latest
+    //   await pool.execute(`UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`, [documentId]);
 
-  // Insert new version
-  const [result] = await pool.execute(
-    `
+    // Insert new version
+    const [result] = await pool.execute(
+        `
     INSERT INTO documentversion 
     (DocumentId, VersionLabel, FilePath, IsLatest, ChangeReason, DocumentName, DocumentDescription, MetaTags, Status_Id, UploadedByUser_Id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-    [
-      documentId,
-      versionLabel,
-      filePath,
-      isLatest,
-      changeReason ?? null,
-      DocumentName ?? null,
-      DocumentDescription ?? null,
-      MetaTags ?? null,
-      Status_Id ?? 1,
-      UploadedByUser_Id ?? null,
-    ]
-  );
+        [
+            documentId,
+            versionLabel,
+            filePath,
+            isLatest,
+            changeReason ?? null,
+            DocumentName ?? null,
+            DocumentDescription ?? null,
+            MetaTags ?? null,
+            Status_Id ?? 1,
+            UploadedByUser_Id ?? null,
+        ]
+    );
 
-  return result.insertId;
+    return result.insertId;
 };
 
 
@@ -166,6 +166,111 @@ export const getDocsMetaInfo = async (accountId) => {
     }
 }
 
+// ===================================================================================
+//===============THIS IS THE FECTHING ALL VERIONS OF THE DOCUMENTS OK ==================
+export const getAllDocsMetaInfo = async (accountId) => {
+    try {
+        const [result] = await pool.execute(`
+    
+                SELECT 
+                du.DocumentId,
+                du.DocumentName,
+                du.DocumentDescription,
+                du.MetaTags,
+
+                -- VERSION INFO (ALL STATUS)
+                dv.Version_Id,
+                dv.VersionLabel,
+                dv.IsLatest,
+                dv.UploadedAt,
+                dv.ChangeReason,
+                dv.Status_Id AS VersionStatus_Id,
+                dsm.StatusName AS VersionStatusName,
+
+                -- WORKFLOW HISTORY (Latest workflow entry)
+                wfh.Workflow_Id,
+                wfh.Status_Id AS WorkflowStatus_Id,
+                wfh.Comment AS WorkflowComment,
+                wfh.ActionByUser_Id,
+                wfh.ActionByRole_Id,
+                wfh.ActionTime AS WorkflowActionTime,
+
+                -- REJECTION QUEUE (Latest rejection entry)
+                drq.Rejection_Id,
+                drq.RejectionComment,
+                drq.RejectedByUser_Id,
+                drq.UploaderUser_Id,
+                drq.RejectedOn,
+                drq.IsResolved,
+                drq.Status_Id AS RejectionStatus_Id,
+
+                -- USER INFO
+                du.CreatedByUser_Id,
+                du.CreatedByUserName,
+                du.CreatedAt,
+                du.Account_Id,
+                du.Category_Id,
+                cat.CategoryName,
+
+                -- Consumer Info
+                cd.consumer_name,
+                cd.phone,
+                cd.consumer_address,
+                cd.rr_no,
+                cd.tariff,
+
+                -- Zone / Division / Subdivision / Section
+                zc.zone,
+                zc.division AS division_name,
+                zc.sub_division AS subdivision_name,
+                zc.section_office AS section_name
+
+            FROM 
+                documentupload du
+
+            JOIN documentcategorymaster cat 
+                ON du.Category_Id = cat.Category_Id
+
+            LEFT JOIN consumer_details cd 
+                ON du.Account_Id = cd.account_id
+
+            --  Fetch ALL VERSIONS (NO STATUS FILTER)
+            JOIN documentversion dv 
+                ON dv.DocumentId = du.DocumentId
+
+            --  Latest Workflow History per Version
+            LEFT JOIN documentworkflowhistory wfh 
+                ON wfh.Version_Id = dv.Version_Id 
+               -- AND wfh.IsLatest = 1
+
+            --  Latest Rejection Information per Version
+            LEFT JOIN documentrejectionqueue drq 
+                ON drq.Version_Id = dv.Version_Id
+               -- AND drq.IsResolved = 0   -- only unresolved or latest
+
+            LEFT JOIN documentstatusmaster dsm
+                ON dv.Status_Id = dsm.Status_Id
+
+            LEFT JOIN zone_codes zc 
+                ON zc.div_code = du.div_code
+               AND zc.sd_code = du.sd_code
+               AND zc.so_code = du.so_code
+
+            WHERE 
+                du.Account_Id = ?
+
+            ORDER BY
+                dv.IsLatest DESC,
+                dv.UploadedAt DESC;
+
+            `, [accountId]);
+        return result
+    } catch (error) {
+        console.log("Error in the fetchig the Details of Document", error)
+        throw error
+    }
+}
+
 //================================================THIS IS THE DOCUMENT VIEW OK ===========================================
 export const getDocsVieww = async (Version_Id) => {
     if (!Version_Id) throw new Error("Version_Id is required"); // safety check
@@ -184,5 +289,21 @@ export const getDocsVieww = async (Version_Id) => {
     }
 }
 
+
+export const getDocsViewForDocsId = async (Draft_Id) => {
+    if (!Draft_Id) throw new Error("Draft_Id is required");
+    try {
+        const [result] = await pool.execute(`
+                SELECT FilePath 
+                FROM documentdraft
+                WHERE Draft_Id = ?;
+            `, [Draft_Id]);
+        return result
+    } catch (error) {
+        console.log("Fetching Error In the View Model")
+        throw new error
+
+    }
+}
 
 
