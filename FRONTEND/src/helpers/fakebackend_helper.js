@@ -373,6 +373,7 @@ export const postDocumentUpload =(data) => api.createMultiPart(url.POST_DOCUMENT
 export const postDocumentManualUpload=(data) => api.createMultiPart(url.POST_DOCUMENT_MANUAL_UPLOAD,data);
 export const viewDocument = (data) => api.create(url.VIEW_DOCUMENT, data);
 export const postDocumentUploadview =(data) => api.create(url.POST_DOCUMENT_UPLOAD_VIEW,data);
+export const documentView =(data) => api.create(url.VIEW_DOCUMENT_URL,data);
 
 export const qcView = (data) => api.create(url.GET_QC_DOCUMENT, data);
 export const qcPreview = (data, config = {}) => api.create(url.GET_QC_DOCUMENT, data, config);

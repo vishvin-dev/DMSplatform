@@ -271,6 +271,7 @@ export const SINGLE_CONSUMER_UPLOAD= "/backend-service/consumerUpload/singleCons
 export const SCAN_IMPLEMENT="/scan-service/scan";
 export const Document_Audit= "/backend-service/document_audit_logs";
 export const BULK_SCAN= "/scan-service/bulk-scan";
+export const VIEW_DOCUMENT_URL= "/backend-service/documentUpload/documentView";
 
 //DOCUMENT CATEGORY
 export const DOCUMENT_CATEGORY_GET_URL = "/es-admin-svc/es/admin/documentCategory";
