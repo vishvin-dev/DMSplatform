@@ -8,7 +8,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
-import { getDocumentDropdowns, postDocumentUpload } from '../../helpers/fakebackend_helper';
+import { getDocumentDropdowns, postDocumentUpload ,documentView } from '../../helpers/fakebackend_helper';
 import { io } from "socket.io-client";
 import axios from 'axios';
 
