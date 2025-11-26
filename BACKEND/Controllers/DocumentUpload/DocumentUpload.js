@@ -7,7 +7,7 @@ import {
     getAccountId, getConsumerDetails, postFileUpload, getDocumentCategory, getDocumentsView, getSingleDocumentById, getSingleDocumentByIdByDraft, postFileMetaOnly,
     markOldVersionNotLatest, updateDocumentStatus, resolveRejection, saveDraft, fetchDraftDocumentByAccountId, finalizeDrafts
 } from "../../models/DocumentUpload.js"
-import { insertDocumentUpload, getLatestVersion, insertDocumentVersion, getNextVersionLabel, getDocsMetaInfo, getAllDocsMetaInfo, getDocsVieww , getDocsViewForDocsId} from "../../models/MannualUpload.js"
+import { insertDocumentUpload, getLatestVersion, insertDocumentVersion, getNextVersionLabel, getDocsMetaInfo, getAllDocsMetaInfo, getDocsVieww, getDocsViewForDocsId } from "../../models/MannualUpload.js"
 
 
 //this is the doucment uploading things
@@ -62,6 +62,7 @@ export const DocumentUpload = async (req, res) => {
         else if (flagId === 9) {
             results = await getDocumentLists();
         }
+        //THIS IS THE FINAL DOCS UPLOAD OK 
         else if (parseInt(flagId) === 10) {
             const {
                 account_id,
@@ -410,21 +411,129 @@ export const DocumentUpload = async (req, res) => {
 //   }
 // };
 //==============================THIS IS THE SCANUPLAOD CONTROLLERS=========================================================
+
+import { convertImagesToPdf } from "../../utils/pdfConverter/convertImagesToPdf.js"
+import { CLOUD_UPLOAD_PATH } from "../../Config/multerConfigg.js"
 export const ScanUpload = async (req, res) => {
     try {
+        const { account_id, CreatedByUser_Id, Status_Id } = req.body;
 
-    } catch (error) {
-        console.log("Error In Document Uploading", error)
-        return res.status(500).json({ error: error.message })
+        if (!account_id) {
+            return res.status(400).json({ error: "account_id is required" });
+        }
+
+        const drafts = await fetchDraftDocumentByAccountId(account_id);
+
+        if (drafts.length === 0) {
+            return res.status(400).json({ error: "No drafts found to finalize." });
+        }
+
+        //  Collect all draft image paths
+        let allImages = [];
+        for (const draft of drafts) {
+            if (draft.FilePath) {
+                const filePaths = draft.FilePath.split(",");
+                allImages.push(...filePaths);
+            }
+        }
+
+        if (allImages.length === 0) {
+            return res.status(400).json({ error: "No images found inside drafts" });
+        }
+
+        //  Generate ONE PDF
+        const outputFolder = path.join(CLOUD_UPLOAD_PATH, account_id.toString());
+
+        const { pdfFilePath, pdfFileName } = await convertImagesToPdf(
+            allImages,
+            outputFolder,
+            "Final_"
+        );
+
+        //  CHECK IF DocumentUpload already exists for this Account_Id
+        const [existingDocs] = await pool.execute(
+            `SELECT DocumentId FROM documentupload WHERE Account_Id = ? LIMIT 1`,
+            [account_id]
+        );
+
+        let documentId;
+
+        if (existingDocs.length > 0) {
+            //  Document exists → use existing
+            documentId = existingDocs[0].DocumentId;
+        } else {
+            //  First upload → create documentupload entry
+            const firstDraft = drafts[0];
+            documentId = await insertDocumentUpload(
+                firstDraft.DraftName,
+                firstDraft.DraftDescription,
+                firstDraft.MetaTags,
+                firstDraft.CreatedByUser_Id,
+                firstDraft.CreatedByUserName,
+                firstDraft.Account_Id,
+                firstDraft.Role_Id,
+                firstDraft.Category_Id,
+                firstDraft.div_code,
+                firstDraft.sd_code,
+                firstDraft.so_code
+            );
+        }
+
+        //  Get latest version
+        const latestVersion = await getLatestVersion(documentId);
+
+        //  Compute next version label
+        const nextVersion = getNextVersionLabel(latestVersion);
+
+        //  Mark previous versions as NOT latest
+        await pool.execute(
+            `UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`,
+            [documentId]
+        );
+
+        //  Insert version entry
+        const newVersionId = await insertDocumentVersion(
+            documentId,
+            nextVersion,
+            pdfFilePath,
+            1, // latest
+            null,
+            drafts[0].DraftName,
+            drafts[0].DraftDescription,
+            drafts[0].MetaTags,
+            Status_Id ?? 1,
+            CreatedByUser_Id
+        );
+
+        //  Finalize drafts
+        await finalizeDrafts(drafts.map(d => d.Draft_Id));
+
+        return res.json({
+            status: "success",
+            message: "PDF uploaded and version updated successfully",
+            DocumentId: documentId,
+            NewVersion: nextVersion,
+            VersionId: newVersionId,
+            pdfFileName,
+            pdfFilePath,
+            draftsFinalized: drafts.length,
+            imagesMerged: allImages.length
+        });
+
+    } catch (err) {
+        console.error("Scan Upload Error:", err);
+        return res.status(500).json({ error: err.message });
     }
-}
+};
+
+
 
 // =========================================================================================================================
 export const DocumentView = async (req, res) => {
     const { flagId, Version_Id, accountId, Draft_Id } = req.body;
 
     //==================================================================================
-            // THIS IS THE FECTHING APPROVED INFORMATION OK ============================
+    // THIS IS THE FECTHING APPROVED INFORMATION OK ============================
     try {
         if (parseInt(flagId) === 1) {
             if (!accountId) {
@@ -438,7 +547,7 @@ export const DocumentView = async (req, res) => {
                 data: results,
             });
         }
-         //==================================================================================
+        //==================================================================================
         else if (parseInt(flagId) === 2) {
 
             const result = await getDocsVieww(Version_Id);
@@ -505,8 +614,8 @@ export const DocumentView = async (req, res) => {
 
         }
 
-// ===================================================================================
-//===============THIS IS THE FECTHING ALL VERIONS OF THE DOCUMENTS OK ==================
+        // ===================================================================================
+        //===============THIS IS THE FECTHING ALL VERIONS OF THE DOCUMENTS OK ==================
 
         else if (parseInt(flagId) === 3) {
             if (!accountId) {
@@ -908,147 +1017,147 @@ export const DocumentView = async (req, res) => {
 
 //this is the multiple file upload ok 
 export const MannualUpload = async (req, res) => {
-  try {
-    const {
-      DocumentName,
-      DocumentDescription,
-      MetaTags,
-      CreatedByUser_Id,
-      CreatedByUserName,
-      Account_Id,
-      Role_Id,
-      Category_Id,
-      Status_Id,
-      ChangeReason,
-      div_code,
-      sd_code,
-      so_code
-    } = req.body;
+    try {
+        const {
+            DocumentName,
+            DocumentDescription,
+            MetaTags,
+            CreatedByUser_Id,
+            CreatedByUserName,
+            Account_Id,
+            Role_Id,
+            Category_Id,
+            Status_Id,
+            ChangeReason,
+            div_code,
+            sd_code,
+            so_code
+        } = req.body;
 
-    const changeReasonValue = ChangeReason ?? null;
+        const changeReasonValue = ChangeReason ?? null;
 
-    //  CHANGED: now we check req.files instead of req.file
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: "At least one file is required" });
-    }
+        //  CHANGED: now we check req.files instead of req.file
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ message: "At least one file is required" });
+        }
 
-    if (!div_code || !sd_code || !so_code) {
-      return res.status(400).json({
-        error: "div_code, sd_code, and so_code are required.",
-      });
-    }
+        if (!div_code || !sd_code || !so_code) {
+            return res.status(400).json({
+                error: "div_code, sd_code, and so_code are required.",
+            });
+        }
 
-    // Step 2: Check if document already exists
-    const [existingDocs] = await pool.execute(
-      `SELECT DocumentId FROM documentupload WHERE Account_Id = ? LIMIT 1`,
-      [Account_Id]
-    );
+        // Step 2: Check if document already exists
+        const [existingDocs] = await pool.execute(
+            `SELECT DocumentId FROM documentupload WHERE Account_Id = ? LIMIT 1`,
+            [Account_Id]
+        );
 
-    let documentId;
+        let documentId;
 
-    if (existingDocs.length > 0) {
-      documentId = existingDocs[0].DocumentId;
-    } else {
-      const newDocId = await insertDocumentUpload(
-        DocumentName,
-        DocumentDescription,
-        MetaTags,
-        CreatedByUser_Id,
-        CreatedByUserName,
-        Account_Id,
-        Role_Id,
-        Category_Id,
-        div_code,
-        sd_code,
-        so_code
-      );
-      documentId = newDocId;
-    }
+        if (existingDocs.length > 0) {
+            documentId = existingDocs[0].DocumentId;
+        } else {
+            const newDocId = await insertDocumentUpload(
+                DocumentName,
+                DocumentDescription,
+                MetaTags,
+                CreatedByUser_Id,
+                CreatedByUserName,
+                Account_Id,
+                Role_Id,
+                Category_Id,
+                div_code,
+                sd_code,
+                so_code
+            );
+            documentId = newDocId;
+        }
 
-    //  CHANGED: Get latest version once per batch
-    const latestVersion = await getLatestVersion(documentId);
-    const nextVersion = getNextVersionLabel(latestVersion);
+        //  CHANGED: Get latest version once per batch
+        const latestVersion = await getLatestVersion(documentId);
+        const nextVersion = getNextVersionLabel(latestVersion);
 
-    await pool.execute(
-      `UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`,
-      [documentId]
-    );
+        await pool.execute(
+            `UPDATE documentversion SET IsLatest = 0 WHERE DocumentId = ?`,
+            [documentId]
+        );
 
-    // Step 3: Loop through each uploaded file and insert version
-    const insertedVersions = [];
+        // Step 3: Loop through each uploaded file and insert version
+        const insertedVersions = [];
 
-    for (const file of req.files) {
-      const filePath = file.path;
+        for (const file of req.files) {
+            const filePath = file.path;
 
-      // Step 4: Insert new version record with IsLatest = 1
-      const newVersionId = await insertDocumentVersion(
-        documentId,
-        nextVersion,
-        filePath,
-        1, //  all files in this batch get IsLatest = 1
-        changeReasonValue,
-        DocumentName,
-        DocumentDescription,
-        MetaTags,
-        Status_Id ?? 1,
-        CreatedByUser_Id
-      );
+            // Step 4: Insert new version record with IsLatest = 1
+            const newVersionId = await insertDocumentVersion(
+                documentId,
+                nextVersion,
+                filePath,
+                1, //  all files in this batch get IsLatest = 1
+                changeReasonValue,
+                DocumentName,
+                DocumentDescription,
+                MetaTags,
+                Status_Id ?? 1,
+                CreatedByUser_Id
+            );
 
-      insertedVersions.push({
-        VersionId: newVersionId,
-        Version: nextVersion,
-        FileName: file.filename,
-        FilePath: filePath
-      });
-    }
+            insertedVersions.push({
+                VersionId: newVersionId,
+                Version: nextVersion,
+                FileName: file.filename,
+                FilePath: filePath
+            });
+        }
 
-    // Step 5: If re-upload, toggle old rejected record based on Version_Id
-    if (changeReasonValue) {
-      const [rejectedVersion] = await pool.execute(
-        `
+        // Step 5: If re-upload, toggle old rejected record based on Version_Id
+        if (changeReasonValue) {
+            const [rejectedVersion] = await pool.execute(
+                `
         SELECT Version_Id 
         FROM documentversion 
         WHERE DocumentId = ? AND Status_Id = 3
         ORDER BY Version_Id DESC LIMIT 1
         `,
-        [documentId]
-      );
+                [documentId]
+            );
 
-      if (rejectedVersion.length > 0) {
-        const oldVersionId = rejectedVersion[0].Version_Id;
+            if (rejectedVersion.length > 0) {
+                const oldVersionId = rejectedVersion[0].Version_Id;
 
-        await pool.execute(
-          `
+                await pool.execute(
+                    `
           UPDATE documentrejectionqueue
           SET Status_Id = 4, IsResolved = 0, RejectedOn = NOW()
           WHERE Version_Id = ? AND Status_Id = 3
           `,
-          [oldVersionId]
-        );
+                    [oldVersionId]
+                );
 
-        await pool.execute(
-          `
+                await pool.execute(
+                    `
           UPDATE documentversion
           SET Status_Id = 4
           WHERE Version_Id = ?
           `,
-          [oldVersionId]
-        );
-      }
+                    [oldVersionId]
+                );
+            }
+        }
+
+        // Step 6: Response
+        return res.status(200).json({
+            status: "success",
+            message: `Uploaded ${insertedVersions.length} file(s) successfully`,
+            DocumentId: documentId,
+            UploadedVersions: insertedVersions
+        });
+
+    } catch (error) {
+        console.error(" Error in Document Upload:", error);
+        return res.status(500).json({ error: error.message });
     }
-
-    // Step 6: Response
-    return res.status(200).json({
-      status: "success",
-      message: `Uploaded ${insertedVersions.length} file(s) successfully`,
-      DocumentId: documentId,
-      UploadedVersions: insertedVersions
-    });
-
-  } catch (error) {
-    console.error(" Error in Document Upload:", error);
-    return res.status(500).json({ error: error.message });
-  }
 };
 //=========================================
 
