@@ -98,7 +98,7 @@ export const validateUploadFields = (req, res, next) => {
   const { Account_Id, div_code, sd_code, so_code } = req.body || {};
 
   if (!Account_Id || !div_code || !sd_code || !so_code) {
-    // ⭐ CHANGED: delete all uploaded files if multiple uploaded
+    //  CHANGED: delete all uploaded files if multiple uploaded
     if (req.files && req.files.length > 0) {
       req.files.forEach((f) => {
         if (fs.existsSync(f.path)) fs.unlinkSync(f.path);
@@ -115,7 +115,7 @@ export const validateUploadFields = (req, res, next) => {
 };
 
 // ================== EXPORT MULTER ==================
-// ⭐ CHANGED FROM single TO array FOR MULTIPLE FILE SUPPORT
+//  CHANGED FROM single TO array FOR MULTIPLE FILE SUPPORT
 export const upload = multer({
   storage,
 });

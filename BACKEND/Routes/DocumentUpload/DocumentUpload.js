@@ -3,6 +3,7 @@ import { DocumentUpload, DocumentView, MannualUpload, ScanUpload } from "../../C
 import { uploadMultiple} from "../../Config/multerConfig.js"
 import { upload, validateUploadFields } from "../../Config/multerConfigg.js"
 import { authenticateToken } from "../../MiddleWare/authMiddleware.js";
+import { upload as imageUploader } from "../../Config/pdfMulter.js";
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ router.post("/documentView", DocumentView);
 router.post("/mannualUpload",  upload.array("mannualFile", 10),validateUploadFields, authenticateToken,MannualUpload);
 
 //====================THIS IS THE SCANN UPLOAD OK ===============================================
-router.post("/scanUpload", authenticateToken, ScanUpload);
-
+router.post("/scanUpload", authenticateToken,  ScanUpload);
+// fetchDraftDocumentByAccountId
 export default router;
  
