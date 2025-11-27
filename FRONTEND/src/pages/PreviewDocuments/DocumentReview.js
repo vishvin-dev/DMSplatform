@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-    Button, Card, CardBody, CardHeader, Col, Container, Row, Label,
+    Button, Card, CardBody, CardHeader, Col, Container, Row,
     Modal, ModalBody, ModalHeader, Input, Alert, Badge, ListGroup, ListGroupItem, Spinner, InputGroup, Progress,
     ModalFooter
 } from 'reactstrap';
@@ -8,16 +8,17 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
-// The 'bulkscan' import here is for the main API, not the scanner. We will use axios for the scanner.
-import { getDocumentDropdowns, postDocumentUpload, view, bulkscan } from '../../helpers/fakebackend_helper';
+import { getDocumentDropdowns, postDocumentUpload } from '../../helpers/fakebackend_helper';
 import { io } from "socket.io-client";
 import axios from 'axios';
-import { jsPDF } from "jspdf";
 
-import {socket} from "../../pages/PreviewDocuments/SocketConnection.js"
 
-// --- HELPERS & SUB-COMPONENTS ---
+// --- CONSTANTS ---
+const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
+const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
 
+
+// --- HELPERS ---
 const getHighlightBadgeStyle = (itemType) => {
     const styles = {
         Header: { backgroundColor: 'rgba(64, 81, 137, 0.15)', color: '#405189' },
@@ -35,6 +36,21 @@ const getFileIcon = (fileName) => {
     return <i className="ri-file-line fs-3 text-secondary"></i>;
 };
 
+const getImageDimensions = (blob) => new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        URL.revokeObjectURL(url);
+    };
+    img.onerror = (err) => {
+        reject(err);
+        URL.revokeObjectURL(url);
+    };
+    img.src = url;
+});
+
+// --- SUB-COMPONENTS ---
 const TagEditor = ({ tags, onAddTag, onRemoveTag, readOnly = false }) => {
     const [newTag, setNewTag] = useState('');
     const handleAdd = () => {
@@ -66,11 +82,11 @@ const TagEditor = ({ tags, onAddTag, onRemoveTag, readOnly = false }) => {
 };
 
 const DocumentThumbnails = ({ documents, selectedFile, onFileSelect }) => (
-    <Card className="flex-grow-1">
+    <Card className="h-100 d-flex flex-column">
         <CardHeader className="bg-light p-3 position-relative" style={{ borderTop: '3px solid #405189' }}>
             <h5 className="mb-0">Documents<Badge color="secondary" pill>{documents.length}</Badge></h5>
         </CardHeader>
-        <CardBody className="p-2 thumbnail-pane">
+        <CardBody className="p-2 thumbnail-pane flex-grow-1" style={{ overflowY: 'auto', minHeight: 0 }}>
             <Row className="g-2">
                 {documents.map(doc => (
                     <Col key={doc.id} xs={6} md={4} lg={6}>
@@ -78,8 +94,8 @@ const DocumentThumbnails = ({ documents, selectedFile, onFileSelect }) => (
                             className={`thumbnail-card p-2 border rounded text-center ${selectedFile?.id === doc.id ? 'active' : ''}`}
                             onClick={() => onFileSelect(doc)}
                         >
-                            {getFileIcon(doc.name)}
-                            <p className="thumbnail-name text-muted small mt-2 mb-0 text-truncate">{doc.name}</p>
+                            {getFileIcon(doc.name || doc.DraftName)}
+                            <p className="thumbnail-name text-muted small mt-2 mb-0 text-truncate">{doc.name || doc.DraftName}</p>
                         </div>
                     </Col>
                 ))}
@@ -110,6 +126,23 @@ const DocumentPreview = ({ file, loading, error }) => {
         setRotation(0);
     };
 
+    useEffect(() => {
+        const element = previewRef.current;
+        if (!element) return;
+        const onWheel = (e) => {
+            e.preventDefault();
+            const delta = e.deltaY;
+            setZoom(prevZoom => {
+                if (delta < 0) return Math.min(prevZoom * 1.2, 5);
+                else return Math.max(prevZoom / 1.2, 0.2);
+            });
+        };
+        element.addEventListener('wheel', onWheel, { passive: false });
+        return () => {
+            if (element) element.removeEventListener('wheel', onWheel);
+        };
+    }, []);
+
     const handleMouseDown = (e) => {
         e.preventDefault();
         setIsDragging(true);
@@ -119,26 +152,30 @@ const DocumentPreview = ({ file, loading, error }) => {
     const handleMouseMove = (e) => {
         if (!isDragging) return;
         e.preventDefault();
-        setPosition({
-            x: e.clientX - startDrag.x,
-            y: e.clientY - startDrag.y
-        });
+        setPosition({ x: e.clientX - startDrag.x, y: e.clientY - startDrag.y });
     };
 
     const handleMouseUpOrLeave = () => setIsDragging(false);
 
-    const handleWheel = (e) => {
-        e.preventDefault();
-        if (e.deltaY < 0) {
-            handleZoomIn();
-        } else {
-            handleZoomOut();
-        }
+    const checkIsImage = (file) => {
+        if (!file || !file.previewUrl) return false;
+        if (file.type && (file.type.startsWith('image/') || file.type === 'image/jpeg' || file.type === 'image/png')) return true;
+        const name = file.name || file.DraftName || '';
+        if (name.match(/\.(jpeg|jpg|png|gif)$/i)) return true;
+        return false;
     };
-    
-    // Defensive check for file and its properties
-    const isImage = file?.previewUrl && file.type && !file.previewUrl.includes('pdf') && file.type.startsWith('image/');
-    const isPdf = file?.previewUrl && file.type && (file.previewUrl.includes('pdf') || file.type === 'application/pdf');
+
+    const checkIsPdf = (file) => {
+        if (!file || !file.previewUrl) return false;
+        if (file.type === 'application/pdf') return true;
+        const name = file.name || file.DraftName || '';
+        if (name.match(/\.pdf$/i)) return true;
+        if (file.previewUrl.includes('.pdf')) return true;
+        return false;
+    };
+
+    const isImage = checkIsImage(file);
+    const isPdf = checkIsPdf(file);
     const cursorStyle = isDragging ? 'grabbing' : (zoom > 1 ? 'grab' : 'default');
 
     return (
@@ -154,7 +191,6 @@ const DocumentPreview = ({ file, loading, error }) => {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUpOrLeave}
                 onMouseLeave={handleMouseUpOrLeave}
-                onWheel={handleWheel}
             >
                 {loading ? <Spinner>Loading...</Spinner> :
                     error ? <Alert color="danger" className="m-3">{error}</Alert> :
@@ -175,7 +211,7 @@ const DocumentPreview = ({ file, loading, error }) => {
                                         style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', pointerEvents: 'none' }}
                                         onError={(e) => {
                                             e.target.onerror = null;
-                                            e.target.src = "https://via.placeholder.com/800x1100/f8d7da/d63343?text=Image+Load+Failed";
+                                            e.target.src = "https://via.placeholder.com/400?text=Image+Load+Error";
                                         }}
                                         draggable="false"
                                     />
@@ -186,7 +222,11 @@ const DocumentPreview = ({ file, loading, error }) => {
                                         style={{ width: '100%', height: '100%' }}
                                     />
                                 ) : (
-                                    <div className="text-center text-muted"><h4>Preview Not Supported</h4><p>Cannot display this file type.</p></div>
+                                    <div className="text-center text-muted">
+                                        <h4>Preview Not Supported</h4>
+                                        <p>File Type: {file.type || 'Unknown'}</p>
+                                        <p>Name: {file.name || file.DraftName}</p>
+                                    </div>
                                 )}
                             </div>
                         ) : (
@@ -198,6 +238,8 @@ const DocumentPreview = ({ file, loading, error }) => {
                         )}
                 {file && (
                     <div className="zoom-controls">
+                        <Button size="sm" color="light" onClick={handleZoomOut} title="Zoom Out"><i className="ri-zoom-out-line"></i></Button>
+                        <Button size="sm" color="light" onClick={handleZoomIn} title="Zoom In"><i className="ri-zoom-in-line"></i></Button>
                         <Button size="sm" color="light" onClick={handleReset} title="Reset View"><i className="ri-fullscreen-exit-line"></i></Button>
                     </div>
                 )}
@@ -206,7 +248,6 @@ const DocumentPreview = ({ file, loading, error }) => {
     );
 };
 
-// UPDATED: Added verificationDetails prop
 const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comment, onCommentChange, isVerified, onVerifiedChange, onSubmit, loading, canSubmit, readOnly = false, verificationDetails }) => (
     <div className="info-pane">
         <Card className="mb-3">
@@ -228,7 +269,6 @@ const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comme
             <CardHeader className="bg-light p-3" style={{ borderTop: '3px solid #405189' }}><h6 className="mb-0">Document Details</h6></CardHeader>
             <CardBody className="p-2">
                 <ListGroup flush className="small">
-                    {/* Display session storage data if available */}
                     {verificationDetails ? (
                         <>
                             <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
@@ -237,27 +277,25 @@ const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comme
                             <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
                                 <strong>File Number:</strong><span className="text-muted ms-1">{verificationDetails.fileNumber || 'N/A'}</span>
                             </ListGroupItem>
-                            <hr className="my-1"/>
+                            <hr className="my-1" />
                         </>
                     ) : (
                         <ListGroupItem className="px-1 py-1 border-0 text-muted">Verification details are unavailable.</ListGroupItem>
                     )}
 
-                    {/* Display selected file's metadata */}
                     {selectedFile && (
                         <>
                             <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
-                                <strong>Doc Type:</strong><span className="text-muted ms-1">{selectedFile.category}</span>
+                                <strong>Doc Type:</strong><span className="text-muted ms-1">{selectedFile.category || 'N/A'}</span>
                             </ListGroupItem>
                             <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
-                                <strong>File Name:</strong><span className="text-muted ms-1 text-break">{selectedFile.name}</span>
+                                <strong>File Name:</strong><span className="text-muted ms-1 text-break">{selectedFile.name || selectedFile.DraftName}</span>
                             </ListGroupItem>
                             <ListGroupItem className="px-1 py-1 border-0 d-flex justify-content-between">
-                                <strong>Desc:</strong><span className="text-muted ms-1">{selectedFile.description}</span>
+                                <strong>Desc:</strong><span className="text-muted ms-1">{selectedFile.description || selectedFile.DraftDescription || 'N/A'}</span>
                             </ListGroupItem>
                         </>
                     )}
-                    
                 </ListGroup>
             </CardBody>
         </Card>
@@ -286,14 +324,13 @@ const DocumentInfoPanel = ({ selectedFile, highlights, tags, onTagsChange, comme
     </div>
 );
 
-// UPDATED: Added documentTypes prop
 const ScanPreviewModal = ({
     isOpen, onClose, onRescan, onAddPage, onSubmit, scannedData, onDataChange,
     activeIndex, setActiveIndex,
     isAddingPageLoading, isRescanning, isSubmittingDraft,
     setScannedDocumentData,
-    documentTypes, // ADDED
-    DocumentTypeDropdown // ADDED
+    documentTypes,
+    DocumentTypeDropdown
 }) => {
     const iframeRef = useRef(null);
     const [isIframeReady, setIsIframeReady] = useState(false);
@@ -338,7 +375,12 @@ const ScanPreviewModal = ({
             setOcrStatus('running');
             setRecognizedText('');
             setOcrError('');
-            iframeRef.current.contentWindow.postMessage({ type: 'RUN_OCR' }, '*');
+            // Use try/catch when posting messages, though usually safe
+            try {
+                iframeRef.current.contentWindow.postMessage({ type: 'RUN_OCR' }, '*');
+            } catch (e) {
+                console.error("Failed to trigger OCR");
+            }
         }
     };
 
@@ -378,7 +420,14 @@ const ScanPreviewModal = ({
 
     useEffect(() => {
         const handleMessageFromIframe = (event) => {
+            // FIX: Added safety check to ignore invalid messages (e.g. from extensions)
+            if (!event.data || typeof event.data !== 'object') return;
+            
             const { type, text, error } = event.data;
+            
+            // Only process messages with a valid type we expect
+            if (!type) return;
+
             switch (type) {
                 case 'IFRAME_READY':
                     setIsIframeReady(true);
@@ -402,13 +451,17 @@ const ScanPreviewModal = ({
                     }
                     break;
                 default:
+                    // Ignore unknown message types (they might be from extensions)
                     break;
             }
         };
-
         window.addEventListener('message', handleMessageFromIframe);
         return () => window.removeEventListener('message', handleMessageFromIframe);
     }, [scannedData, onDataChange]);
+
+    const isCategorySelected = scannedData?.doc?.category && scannedData.doc.category !== 'all';
+    const isOtherValid = !scannedData?.isOther || (scannedData?.isOther && scannedData?.docName?.trim().length > 0);
+    const canSubmit = isCategorySelected && isOtherValid;
 
     if (!scannedData) return null;
 
@@ -478,8 +531,6 @@ const ScanPreviewModal = ({
                                             <strong>Account ID:</strong>
                                             <span className="text-muted">{scannedData.doc.account_id}</span>
                                         </ListGroupItem>
-                                        
-                                        {/* --- MODIFICATION START --- */}
                                         <ListGroupItem className="px-2 py-2 border-0 d-flex justify-content-between align-items-center">
                                             <strong className="me-2">Document Type:<span className="text-danger">*</span></strong>
                                             <DocumentTypeDropdown
@@ -487,7 +538,6 @@ const ScanPreviewModal = ({
                                                 onChange={(e) => {
                                                     const newCategory = e.target.value;
                                                     const isOther = newCategory === 'other';
-                                                    
                                                     setScannedDocumentData(prev => ({
                                                         ...prev,
                                                         doc: { ...prev.doc, category: newCategory },
@@ -499,8 +549,6 @@ const ScanPreviewModal = ({
                                                 placeholder="Select Type..."
                                             />
                                         </ListGroupItem>
-                                        {/* --- MODIFICATION END --- */}
-
                                     </ListGroup>
                                 ) : (
                                     <div className="text-center text-muted p-3 small">
@@ -539,34 +587,34 @@ const ScanPreviewModal = ({
                     </Col>
                 </Row>
             </ModalBody>
-            <ModalFooter>
-                <Button color="light" onClick={onRescan} disabled={isActionInProgress}><i className="ri-scan-2-line me-1"></i> Rescan Page</Button>
-                <Button color="secondary" onClick={onAddPage} disabled={isActionInProgress}><i className="ri-add-line me-1"></i> Add Page</Button>
-                <Button color="primary" onClick={onSubmit} disabled={isActionInProgress}>
-                    {isSubmittingDraft ? (
-                        <><Spinner size="sm" className="me-1" /> Submitting...</>
-                    ) : (
-                        <><i className="ri-check-line me-1"></i> Submit Document</>
+            <ModalFooter className="d-flex justify-content-between align-items-center">
+                <div>
+                    <Button color="light" onClick={onRescan} disabled={isActionInProgress} className="me-2"><i className="ri-scan-2-line me-1"></i> Rescan Page</Button>
+                    <Button color="secondary" onClick={onAddPage} disabled={isActionInProgress}><i className="ri-add-line me-1"></i> Add Page</Button>
+                </div>
+                <div className="d-flex flex-column align-items-end">
+                    {!canSubmit && (
+                        <small className="text-danger mb-1 fw-bold">
+                            <i className="ri-error-warning-line me-1"></i>
+                            Please select a Document Type to submit.
+                        </small>
                     )}
-                </Button>
+                    <Button
+                        color="primary"
+                        onClick={onSubmit}
+                        disabled={isActionInProgress || !canSubmit}
+                    >
+                        {isSubmittingDraft ? (
+                            <><Spinner size="sm" className="me-1" /> Submitting...</>
+                        ) : (
+                            <><i className="ri-check-line me-1"></i> Submit Document</>
+                        )}
+                    </Button>
+                </div>
             </ModalFooter>
         </Modal>
     );
 };
-
-const getImageDimensions = (blob) => new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(blob);
-    img.onload = () => {
-        resolve({ width: img.naturalWidth, height: img.naturalHeight });
-        URL.revokeObjectURL(url);
-    };
-    img.onerror = (err) => {
-        reject(err);
-        URL.revokeObjectURL(url);
-    };
-    img.src = url;
-});
 
 // --- MAIN COMPONENT ---
 const DocumentReview = () => {
@@ -581,7 +629,7 @@ const DocumentReview = () => {
     const [loading, setLoading] = useState(false);
     const [documentsForReview, setDocumentsForReview] = useState(location.state?.draftDocuments || []);
     const [selectedFile, setSelectedFile] = useState(null);
-    const [fileTypeFilter, setFileTypeFilter] = useState('all');
+    const [setFileTypeFilter] = useState('all');
     const [documentTypes, setDocumentTypes] = useState([]);
     const [loadingDocumentTypes, setLoadingDocumentTypes] = useState(true);
     const [scannedHighlights, setScannedHighlights] = useState([]);
@@ -593,18 +641,14 @@ const DocumentReview = () => {
     const [socket, setSocket] = useState(null);
     const [scanningInProgress, setScanningInProgress] = useState(false);
     const [currentScanFileName, setCurrentScanFileName] = useState('');
-    
-    // --- TIMEOUT/INTERVAL REFS (FIX FOR STUCK MODAL) ---
+
     const scanTimeoutIdRef = useRef(null);
     const progressIntervalRef = useRef(null);
 
-    // --- FIX: Add ref to hold documents for safe cleanup ---
     const documentsForReviewRef = useRef(documentsForReview);
-    // Keep the ref in sync with the state
     useEffect(() => {
         documentsForReviewRef.current = documentsForReview;
     }, [documentsForReview]);
-
 
     const [isScanningModalOpen, setIsScanningModalOpen] = useState(false);
     const [scanProgress, setScanProgress] = useState(0);
@@ -616,15 +660,9 @@ const DocumentReview = () => {
     const [isRescanning, setIsRescanning] = useState(false);
     const [pageToRescanId, setPageToRescanId] = useState(null);
     const [isSubmittingDraft, setIsSubmittingDraft] = useState(false);
-    const [isBulkScanning, setIsBulkScanning] = useState(false); // NEW STATE FOR BULK SCAN
-
-    // NEW STATE: To hold verification data from session storage
+    const [isBulkScanning, setIsBulkScanning] = useState(false);
     const [verificationDetails, setVerificationDetails] = useState(null);
 
-
-    const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
-    
-    // Load verification details from location state (consumerData)
     useEffect(() => {
         if (consumerData) {
             setVerificationDetails({
@@ -637,16 +675,12 @@ const DocumentReview = () => {
         }
     }, [consumerData]);
 
-    // Socket connection
     useEffect(() => {
         const socketConnection = io(SCANNER_ENDPOINT,  { transports: ["websocket", "polling"], reconnection: false,  });
         setSocket(socketConnection);
-        socketConnection.on("connect", () => console.log("✅ Socket connected!"));
-        socketConnection.on("disconnect", () => console.log("🔌 Socket Disconnected."));
-        
+
         return () => {
             socketConnection.disconnect();
-            // Cleanup timers on component unmount
             if (scanTimeoutIdRef.current) {
                 clearTimeout(scanTimeoutIdRef.current);
             }
@@ -657,29 +691,22 @@ const DocumentReview = () => {
     }, []);
 
 
-    // --- NEW UNIFIED SOCKET LISTENER ---
 
     useEffect(() => {
         if (!socket) return;
 
-        // This single listener handles BOTH single and bulk scans
         const handleScanResponse = async (data) => {
-            console.log("Incoming scan data:", data);
-
-            // --- A. BULK SCAN (PDF) LOGIC (from LiveScanViewer sample) ---
-            // We check for 'isBulkScanning' state to ensure we're expecting this.
             if (isBulkScanning && data.type === "pdf" && data.images) {
                 if (progressIntervalRef.current) {
                     clearInterval(progressIntervalRef.current);
                     progressIntervalRef.current = null;
                 }
-                if (scanTimeoutIdRef.current) { 
-                    clearTimeout(scanTimeoutIdRef.current); 
-                    scanTimeoutIdRef.current = null; 
+                if (scanTimeoutIdRef.current) {
+                    clearTimeout(scanTimeoutIdRef.current);
+                    scanTimeoutIdRef.current = null;
                 }
-                
+
                 try {
-                    // 1. Fetch all images as blobs
                     const pagePromises = data.images.map(async (imageUrl, index) => {
                         const fullImageUrl = `${SCANNER_ENDPOINT}${imageUrl}`;
                         const fileResponse = await fetch(fullImageUrl);
@@ -701,20 +728,18 @@ const DocumentReview = () => {
                         throw new Error("Bulk scan completed but returned no pages.");
                     }
 
-                    // 2. Create the new document object for the modal
                     const newDoc = {
                         id: Date.now(), name: "BulkScannedDocument.pdf", type: 'application/pdf',
-                        category: 'all', // Set to 'all' for placeholder
+                        category: 'all',
                         createdAt: new Date().toISOString().split('T')[0],
                         createdBy: 'scanner', description: 'Newly scanned bulk document',
                         rr_no: consumerData.rr_no, consumer_name: consumerData.consumer_name,
                         account_id: consumerData.account_id,
-                        pages: newPages, // Add all fetched pages
+                        pages: newPages,
                         comment: '',
                         tags: ['scanned', 'new', 'bulk'],
                     };
 
-                    // 3. Set state to open the preview modal
                     setScanModalActiveIndex(0);
                     setScannedDocumentData({
                         doc: newDoc,
@@ -725,13 +750,12 @@ const DocumentReview = () => {
                         docName: '',
                         docRef: ''
                     });
-                    setIsScanPreviewModalOpen(true); // Open the modal
-                    setIsScanningModalOpen(false); // Close the "in progress" modal
+                    setIsScanPreviewModalOpen(true);
+                    setIsScanningModalOpen(false);
                     setIsBulkScanning(false);
                     setScanningInProgress(false);
 
                 } catch (error) {
-                    console.error("Error processing bulk scan pages:", error);
                     setResponse(error.message || "Could not retrieve the scanned bulk pages.");
                     setErrorModal(true);
                     setIsScanningModalOpen(false);
@@ -739,11 +763,10 @@ const DocumentReview = () => {
                     setScanningInProgress(false);
                 }
             }
-            // --- B. SINGLE SCAN LOGIC (Existing code) ---
             else if (scanningInProgress && currentScanFileName && data.fileName && data.fileName.includes(currentScanFileName)) {
-                if (scanTimeoutIdRef.current) { 
-                    clearTimeout(scanTimeoutIdRef.current); 
-                    scanTimeoutIdRef.current = null; 
+                if (scanTimeoutIdRef.current) {
+                    clearTimeout(scanTimeoutIdRef.current);
+                    scanTimeoutIdRef.current = null;
                 }
                 if (progressIntervalRef.current) {
                     clearInterval(progressIntervalRef.current);
@@ -791,7 +814,7 @@ const DocumentReview = () => {
                     } else {
                         const newDoc = {
                             id: Date.now(), name: data.fileName, type: blob.type,
-                            category: 'all', 
+                            category: 'all',
                             createdAt: new Date().toISOString().split('T')[0],
                             createdBy: 'scanner', description: 'Newly scanned document',
                             rr_no: consumerData.rr_no, consumer_name: consumerData.consumer_name,
@@ -806,7 +829,7 @@ const DocumentReview = () => {
                             highlights: [{ type: 'Header', text: 'Scanned Document' }, { type: 'Footer', text: `Scanned on: ${newDoc.createdAt}` }, { type: 'Word', text: newDoc.consumer_name },],
                             tags: newDoc.tags,
                             responseText: '',
-                            isOther: false, 
+                            isOther: false,
                             docName: '',
                             docRef: ''
                         });
@@ -816,7 +839,6 @@ const DocumentReview = () => {
                     setScanningInProgress(false);
 
                 } catch (error) {
-                    console.error("Error handling new scan:", error);
                     setResponse(error.message || "Could not retrieve the scanned file.");
                     setErrorModal(true);
                     setScanningInProgress(false);
@@ -833,12 +855,12 @@ const DocumentReview = () => {
         return () => { socket.off("new-scan-processed", handleScanResponse); };
 
     }, [
-        socket, 
-        scanningInProgress, // for single scan
-        currentScanFileName, // for single scan
-        isBulkScanning, // for bulk scan
-        consumerData, 
-        isAddingPage, 
+        socket,
+        scanningInProgress,
+        currentScanFileName,
+        isBulkScanning,
+        consumerData,
+        isAddingPage,
         pageToRescanId
     ]);
 
@@ -851,14 +873,12 @@ const DocumentReview = () => {
                 if (response?.status === "success" && response.data) setDocumentTypes(response.data);
                 else setDocumentTypes([{ DocumentList_Id: 1, DocumentListName: "Aadhar Card" }]);
             } catch (error) {
-                console.error("Error fetching document types:", error);
                 setDocumentTypes([{ DocumentList_Id: 1, DocumentListName: "Aadhar Card" }]);
             } finally { setLoadingDocumentTypes(false); }
         };
         fetchDocumentTypes();
     }, []);
 
-    // --- FIX 2: Create new handlers to update list state immediately ---
     const handleCommentChange = (newComment) => {
         setResponseText(newComment);
         if (selectedFile) {
@@ -877,83 +897,88 @@ const DocumentReview = () => {
         }
     };
 
-
-    const handleFileSelect = useCallback(async (file) => {
-        // --- FIX 2: REMOVED state-saving logic from here ---
-        // if (selectedFile) { ... }
-        
-        // 2. Find the new file to select and update the basic state immediately.
-        const newSelectedFile = documentsForReview.find(doc => doc.id === file.id);
-        if (!newSelectedFile) {
-            console.error("Selected file not found in the documents list.");
-            return;
-        }
-        setSelectedFile(newSelectedFile);
-        setResponseText(newSelectedFile.comment || '');
-        setMetaTags(newSelectedFile.tags || []);
-        setScannedHighlights([{ type: 'Header', text: 'BESCOM Bill' }, { type: 'Footer', text: newSelectedFile.createdAt }, { type: 'Word', text: newSelectedFile.consumer_name }]);
+    const handleFileSelect = useCallback(async (doc) => {
+        setSelectedFile(doc);
         setPreviewLoading(true);
         setPreviewError(null);
 
-        // 3. Asynchronously fetch and update the preview URL only if needed.
-        if (newSelectedFile.draftId && !newSelectedFile.previewUrl) {
-            console.log(`Attempting to fetch document preview for draftId: ${newSelectedFile.draftId}`);
-            try {
-                const response = await view(
-                    { flagId: 3, DocumentId: newSelectedFile.draftId },
-                    {
-                        responseType: "blob",
-                        headers: { "Content-Type": "application/json" },
-                        transformResponse: [(data, headers) => ({ data, headers })],
-                    }
-                );
+        setResponseText(doc.comment || doc.DraftDescription || '');
+        setMetaTags(doc.tags || (doc.MetaTags ? doc.MetaTags.split(',') : []));
+        setScannedHighlights([
+            { type: 'Header', text: 'Draft Document' },
+            { type: 'Footer', text: doc.createdAt || doc.UploadedAt || 'Unknown Date' },
+            { type: 'Word', text: doc.consumer_name || consumerData?.consumer_name || 'Consumer' }
+        ]);
 
-                const blob = response.data;
-                const contentType = (response.headers && response.headers['content-type']) || '';
-                
-                if (blob instanceof Blob && (contentType.startsWith('image/') || contentType === 'application/pdf')) {
-                    const fileUrl = URL.createObjectURL(blob);
-                    const hydratedFile = { ...newSelectedFile, previewUrl: fileUrl, fileObject: new File([blob], newSelectedFile.name, { type: contentType }), type: contentType };
-                    setDocumentsForReview(prev => prev.map(doc => doc.id === hydratedFile.id ? hydratedFile : doc));
-                    setSelectedFile(hydratedFile);
-                    console.log("Successfully fetched and set document preview.");
-                } else {
-                    // Defensive check: only attempt to read as text if the response is a Blob.
-                    if (blob instanceof Blob) {
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            try {
-                                const errorJson = JSON.parse(reader.result);
-                                setPreviewError(errorJson.message || "API did not return a valid document.");
-                            } catch (e) {
-                                setPreviewError(reader.result || "API did not return a valid document.");
-                            }
-                        };
-                        reader.onerror = () => {
-                            setPreviewError("Failed to read API response.");
-                        };
-                        reader.readAsText(blob);
-                    } else {
-                        setPreviewError("API response was not a valid file or error message.");
-                    }
-                }
-            } catch (err) {
-                console.error("Error fetching document preview:", err);
-                setPreviewError("Failed to load document preview: " + (err.message || 'An unknown error occurred.'));
-            } finally {
+        const docId = doc.Draft_Id || doc.draftId;
+
+        if (!docId) {
+            if (doc.previewUrl) {
                 setPreviewLoading(false);
+                return;
             }
-        } else {
-            // This handles bulk-scanned files (which have a previewUrl but no draftId)
-            // or files that already have their URL.
             setPreviewLoading(false);
-            if (!newSelectedFile.previewUrl) {
-                 console.log("No draftId or previewUrl found, skipping API call.");
-            }
+            return;
         }
-    // --- FIX 2: Removed responseText and metaTags from dependencies ---
-    }, [documentsForReview]);
 
+        try {
+            const requestPayload = {
+                flagId: 4,
+                Draft_Id: docId,
+            };
+
+            const response = await axios.post(
+                VIEW_DOCUMENT_URL,
+                requestPayload,
+                { responseType: "blob" }
+            );
+
+            let blobData = response.data ? response.data : response;
+            const headers = response.headers || {};
+            let contentType = headers['content-type'] || headers['Content-Type'];
+
+            if (!(blobData instanceof Blob)) {
+                blobData = new Blob([blobData], { type: contentType || 'application/octet-stream' });
+            }
+
+            if (blobData.type === 'application/json' || contentType === 'application/json') {
+                const text = await blobData.text();
+                try {
+                    const json = JSON.parse(text);
+                    throw new Error(json.message || json.error || "Server returned an error.");
+                } catch (e) {
+                    if (e.message !== "Server returned an error.") throw e;
+                }
+            }
+
+            const fileName = doc.name || doc.DraftName || "document.jpg";
+            let finalType = blobData.type;
+
+            if (!finalType || finalType === 'application/octet-stream') {
+                if (fileName.match(/\.pdf$/i)) finalType = 'application/pdf';
+                else if (fileName.match(/\.(jpeg|jpg)$/i)) finalType = 'image/jpeg';
+                else if (fileName.match(/\.png$/i)) finalType = 'image/png';
+                blobData = blobData.slice(0, blobData.size, finalType);
+            }
+
+            const fileUrl = URL.createObjectURL(blobData);
+
+            const hydratedFile = {
+                ...doc,
+                previewUrl: fileUrl,
+                fileObject: new File([blobData], fileName, { type: finalType }),
+                type: finalType
+            };
+
+            setDocumentsForReview(prev => prev.map(d => d.id === hydratedFile.id ? hydratedFile : d));
+            setSelectedFile(hydratedFile);
+
+        } catch (error) {
+            setPreviewError(error.message || "Failed to load document.");
+        } finally {
+            setPreviewLoading(false);
+        }
+    }, [documentsForReview, consumerData]);
 
     useEffect(() => {
         if (documentsForReview.length > 0 && !selectedFile) {
@@ -961,29 +986,20 @@ const DocumentReview = () => {
         }
     }, [documentsForReview, selectedFile, handleFileSelect]);
 
-    // --- FIX 1: MODIFIED BLOB URL CLEANUP ---
     useEffect(() => {
-        // This return function is the cleanup, which runs on unmount
         return () => {
-            console.log("DocumentReview unmounting. Revoking blob URLs.");
-            // Access the list via the ref
             const docs = documentsForReviewRef.current;
             docs.forEach(doc => {
                 if (doc.previewUrl && doc.previewUrl.startsWith('blob:')) {
                     URL.revokeObjectURL(doc.previewUrl);
-                    console.log(`Revoked: ${doc.previewUrl}`);
                 }
             });
         };
-    }, []); // Empty dependency array. This cleanup ONLY runs on unmount.
+    }, []);
 
     const handleSubmitReview = async () => {
         setLoading(true);
-        // --- FIX 2: No longer need to map state, documentsForReview is already up-to-date ---
         const finalDocuments = documentsForReview;
-        // const finalDocuments = documentsForReview.map(doc =>
-        //     (selectedFile && doc.id === selectedFile.id) ? { ...doc, comment: responseText, tags: metaTags } : doc
-        // );
         if (finalDocuments.length === 0) {
             setResponse(`Please scan at least one document.`);
             setErrorModal(true); setLoading(false); return;
@@ -996,7 +1012,6 @@ const DocumentReview = () => {
             user = JSON.parse(authUserString).user;
             if (!user || !user.User_Id || !user.Email) throw new Error("User ID or Email not found in session.");
         } catch (error) {
-            console.error("Session Error:", error);
             setResponse("Your user session is invalid. Please log in again.");
             setErrorModal(true); setLoading(false); return;
         }
@@ -1004,19 +1019,17 @@ const DocumentReview = () => {
             setResponse("Consumer data is missing. Please try again.");
             setErrorModal(true); setLoading(false); return;
         }
-        
-        // Append verification details from state (which came from props)
+
         if (verificationDetails) {
-             formData.append('NoOfPages', verificationDetails.noOfPages || '');
-             formData.append('FileNumber', verificationDetails.fileNumber || '');
-             formData.append('ContractorName', verificationDetails.contractorName || '');
-             formData.append('ApprovedBy', verificationDetails.approvedBy || '');
-             formData.append('CategoryName', verificationDetails.category || '');
+            formData.append('NoOfPages', verificationDetails.noOfPages || '');
+            formData.append('FileNumber', verificationDetails.fileNumber || '');
+            formData.append('ContractorName', verificationDetails.contractorName || '');
+            formData.append('ApprovedBy', verificationDetails.approvedBy || '');
+            formData.append('CategoryName', verificationDetails.category || '');
         }
 
         formData.append('flagId', '10');
         formData.append('DocumentName', `Docs for ${consumerData.rr_no}`);
-        // --- FIX 2: Use the local responseText, which is for the *selected* file ---
         formData.append('DocumentDescription', responseText);
         formData.append('MetaTags', metaTags.join(','));
         formData.append('CreatedByUser_Id', user.User_Id);
@@ -1032,10 +1045,11 @@ const DocumentReview = () => {
         const predefinedApiKeys = new Set(documentTypes.map(d => d.DocumentListName.replace(/[^a-zA-Z0-9]/g, '')));
 
         finalDocuments.forEach(doc => {
-            const potentialApiKey = doc.category.replace(/[^a-zA-Z0-9]/g, '');
+            const catName = doc.category || doc.DraftName || 'OtherDocuments';
+            const potentialApiKey = catName.replace(/[^a-zA-Z0-9]/g, '');
             const apiKey = predefinedApiKeys.has(potentialApiKey) ? potentialApiKey : 'OtherDocuments';
             if (doc.fileObject && apiKey) {
-                formData.append(apiKey, doc.fileObject, doc.name);
+                formData.append(apiKey, doc.fileObject, doc.name || doc.DraftName);
                 fileCount++;
             }
         });
@@ -1053,7 +1067,6 @@ const DocumentReview = () => {
                 throw new Error(apiResponse?.message || 'Submission failed.');
             }
         } catch (error) {
-            console.error("API Submission Error:", error);
             setResponse(error?.message || "An unknown error occurred.");
             setErrorModal(true);
         } finally {
@@ -1066,7 +1079,6 @@ const DocumentReview = () => {
         navigate('/Preview', { state: { refresh: true } });
     };
 
-    // --- UPDATED SINGLE SCAN TRIGGER ---
     const handleApiScan = async (docTypeLabel) => {
         if (!socket || !socket.connected) {
             setResponse("Scanner is not connected. Please try again.");
@@ -1081,30 +1093,25 @@ const DocumentReview = () => {
         const baseFileName = `${docTypeLabel.replace(/\s+/g, '_')}_${timestamp}`;
         const fileNameForApi = `${baseFileName}.jpg`;
 
-        console.log(`🚀 Initiating scan for: ${fileNameForApi}`);
         setScanningInProgress(true);
-        setCurrentScanFileName(baseFileName); // <-- IMPORTANT for socket listener
+        setCurrentScanFileName(baseFileName);
 
         if (!isAddingPage && !isRescanning) {
             setIsScanningModalOpen(true);
         }
 
         setScanProgress(0);
-        // Clear any previous interval
         if (progressIntervalRef.current) {
             clearInterval(progressIntervalRef.current);
         }
         progressIntervalRef.current = setInterval(() => setScanProgress(prev => Math.min(prev + 10, 90)), 250);
 
         try {
-            // Just trigger the scan, response will come via socket
             await axios.post(`${SCANNER_ENDPOINT}/scan-service/scan`, { fileName: fileNameForApi, format: "jpg", colorMode: "color" }, { timeout: 30000 });
-            
-            // Clear previous timeout just in case
+
             if (scanTimeoutIdRef.current) {
                 clearTimeout(scanTimeoutIdRef.current);
             }
-            // Set a new timeout in case socket doesn't respond
             scanTimeoutIdRef.current = setTimeout(() => {
                 if (progressIntervalRef.current) {
                     clearInterval(progressIntervalRef.current);
@@ -1120,15 +1127,14 @@ const DocumentReview = () => {
                 setResponse('Scan timed out. The scanner did not respond.');
                 setErrorModal(true);
                 scanTimeoutIdRef.current = null;
-            }, 30000); // 30 second timeout
+            }, 30000);
 
         } catch (error) {
-            // This catch block handles axios errors (e.g., network error, 500 status, or axios timeout)
             if (progressIntervalRef.current) {
                 clearInterval(progressIntervalRef.current);
                 progressIntervalRef.current = null;
             }
-            if (scanTimeoutIdRef.current) { // Clear the success timeout if axios fails
+            if (scanTimeoutIdRef.current) {
                 clearTimeout(scanTimeoutIdRef.current);
                 scanTimeoutIdRef.current = null;
             }
@@ -1139,8 +1145,7 @@ const DocumentReview = () => {
             setIsScanningModalOpen(false);
             setIsRescanning(false);
             setPageToRescanId(null);
-            
-            console.error("Scan Error:", error || "An undefined error was caught");
+
             setResponse(error?.message || 'Error initiating scan. Check network and scanner connection.');
             setErrorModal(true);
         }
@@ -1149,11 +1154,10 @@ const DocumentReview = () => {
     const handleScanClick = () => {
         setIsAddingPage(false);
         setIsRescanning(false);
-        const docTypeLabel = 'Scanned_Document'; // Use a generic label
+        const docTypeLabel = 'Scanned_Document';
         handleApiScan(docTypeLabel);
     };
 
-    // --- UPDATED BULK SCAN TRIGGER ---
     const handleBulkScan = async () => {
         if (!socket || !socket.connected) {
             setResponse("Scanner is not connected. Please try again.");
@@ -1161,33 +1165,31 @@ const DocumentReview = () => {
             return;
         }
 
-        console.log("🚀 Initiating Bulk Scan...");
-        setIsBulkScanning(true); // <-- IMPORTANT
-        setScanningInProgress(true); // <-- IMPORTANT
-        setIsScanningModalOpen(true); // Reuse the scanning modal
+        setIsBulkScanning(true);
+        setScanningInProgress(true);
+        setIsScanningModalOpen(true);
         setScanProgress(0);
-        
+
         if (progressIntervalRef.current) {
             clearInterval(progressIntervalRef.current);
         }
-        progressIntervalRef.current = setInterval(() => setScanProgress(prev => Math.min(prev + 10, 90)), 250);
+        progressIntervalRef.current = setInterval(() => setScanProgress(prev => Math.min(prev + 1, 95)), 1000);
 
         const payload = {
-            deviceName: "Canon MF460 ser_6CF2D8AE9F40", 
-            fileName: "ProjectDocsBatch.pdf", 
-            format: "pdf" 
+            deviceName: "Canon MF460 ser_6CF2D8AE9F40",
+            fileName: "ProjectDocsBatch.pdf",
+            format: "pdf"
         };
-//yes
+
+        const BULK_TIMEOUT_MS = 600000;
+
         try {
-           
-            // The response will come over the socket via the `useEffect[socket]` listener.
-            await axios.post(`${SCANNER_ENDPOINT}/scan-service/bulk-scan`, payload, { timeout: 60000 }); 
-            
-            // Set a timeout in case the socket never responds
-            ////updated
+            await axios.post(`${SCANNER_ENDPOINT}/scan-service/bulk-scan`, payload, { timeout: BULK_TIMEOUT_MS });
+
             if (scanTimeoutIdRef.current) {
                 clearTimeout(scanTimeoutIdRef.current);
             }
+
             scanTimeoutIdRef.current = setTimeout(() => {
                 if (progressIntervalRef.current) {
                     clearInterval(progressIntervalRef.current);
@@ -1196,13 +1198,12 @@ const DocumentReview = () => {
                 setScanningInProgress(false);
                 setIsBulkScanning(false);
                 setIsScanningModalOpen(false);
-                setResponse('Bulk Scan timed out. The scanner did not respond over the socket.');
+                setResponse('Bulk Scan timed out. The scanner is taking too long to respond.');
                 setErrorModal(true);
                 scanTimeoutIdRef.current = null;
-            }, 60000); // 60 second timeout for bulk scan
+            }, BULK_TIMEOUT_MS);
 
-        } catch (error) { // This catches errors in *triggering* the scan
-            console.error("Bulk Scan Trigger Error:", error);
+        } catch (error) {
             if (progressIntervalRef.current) {
                 clearInterval(progressIntervalRef.current);
                 progressIntervalRef.current = null;
@@ -1214,7 +1215,13 @@ const DocumentReview = () => {
             setIsScanningModalOpen(false);
             setIsBulkScanning(false);
             setScanningInProgress(false);
-            setResponse(error?.message || 'Error initiating bulk scan. Check scanner connection.');
+
+            const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+            const errorMsg = isTimeout
+                ? "The scanner is taking a long time. If the scanner is still moving, please wait."
+                : (error?.message || 'Error initiating bulk scan. Check scanner connection.');
+
+            setResponse(errorMsg);
             setErrorModal(true);
         }
     };
@@ -1277,14 +1284,6 @@ const DocumentReview = () => {
 
     const handleSubmitScannedDocument = async () => {
         if (!scannedDocumentData) return;
-        
-        // ADDED VALIDATION
-        if (scannedDocumentData.doc.category === 'all' || !scannedDocumentData.doc.category) {
-            alert('Please select a Document Type.'); return;
-        }
-        if (scannedDocumentData.isOther && !scannedDocumentData.docName.trim()) {
-            alert('Document Name is required for "Other" type.'); return;
-        }
 
         setIsSubmittingDraft(true);
 
@@ -1295,7 +1294,6 @@ const DocumentReview = () => {
             user = JSON.parse(authUserString).user;
             if (!user || !user.User_Id || !user.Email) throw new Error("User ID or Email not found in session.");
         } catch (error) {
-            console.error("Session Error:", error);
             setResponse("Your user session is invalid. Please log in again.");
             setErrorModal(true);
             setIsSubmittingDraft(false);
@@ -1313,31 +1311,26 @@ const DocumentReview = () => {
 
         try {
             if (doc.pages.length > 1) {
-                // --- BULK SCAN: PROCESS EACH PAGE AS A SEPARATE DOCUMENT ---
                 const newlyAddedDocuments = [];
                 let uploadFailed = false;
 
                 for (let i = 0; i < doc.pages.length; i++) {
                     const page = doc.pages[i];
-                    
+
                     try {
-                        // 1. Process the image (apply rotation)
                         const blobToProcess = page.rotation % 360 !== 0
                             ? await getRotatedImageBlob(page.blob, page.rotation)
                             : page.blob;
 
-                        // 2. Determine file name and category
                         const finalCategory = isOther ? docName.trim() : doc.category;
                         const baseName = finalCategory.replace(/[^a-zA-Z0-9]/g, '_');
                         const finalDocName = `Scanned_${baseName}_Page_${i + 1}.jpg`;
 
-                        // 3. Create File and Preview URL
                         const finalFileObject = new File([blobToProcess], finalDocName, { type: 'image/jpeg' });
                         const finalPreviewUrl = URL.createObjectURL(blobToProcess);
 
-                        // 4. Create the document object for this page
                         let finalDoc = {
-                            ...doc, // Spreads consumer_name, rr_no, account_id, etc.
+                            ...doc,
                             id: Date.now() + i,
                             comment: responseText,
                             tags: tags,
@@ -1353,9 +1346,8 @@ const DocumentReview = () => {
                             finalDoc.description += ` (Ref: ${docRef.trim()}, Page ${i + 1})`;
                         }
 
-                        // 5. Create FormData for this single page
                         const formData = new FormData();
-                        formData.append('flagId', '12'); // Save as draft
+                        formData.append('flagId', '12');
                         formData.append('DraftName', finalDoc.name);
                         formData.append('DraftDescription', finalDoc.comment || 'Newly scanned document.');
                         formData.append('MetaTags', finalDoc.tags.join(','));
@@ -1365,47 +1357,40 @@ const DocumentReview = () => {
                         formData.append('div_code', consumerData.div_code || '');
                         formData.append('sd_code', consumerData.sd_code || '');
                         formData.append('so_code', consumerData.so_code || '');
-                        formData.append('Category_Id', '1'); // Assuming default category ID
+                        formData.append('Category_Id', '1');
                         formData.append('Role_Id', '');
                         formData.append('DraftFile', finalDoc.fileObject);
 
-                        // 6. Upload this page as a new draft
                         const apiResponse = await postDocumentUpload(formData);
 
                         if (apiResponse?.status === 'success') {
                             finalDoc.draftId = apiResponse.draftId;
                             finalDoc.documentId = apiResponse.documentId;
-                            console.log(`✅ Draft saved successfully for Page ${i + 1} (ID: ${apiResponse.draftId})`);
-                            delete finalDoc.pages; // Remove the pages array from this single-page doc
+                            delete finalDoc.pages;
                             newlyAddedDocuments.push(finalDoc);
                         } else {
                             throw new Error(apiResponse?.message || `Failed to save draft for page ${i + 1}.`);
                         }
 
                     } catch (error) {
-                        console.error(`API Draft Upload Error for Page ${i + 1}:`, error);
                         const errorMessage = error.response?.data?.message || error.message || "An unknown error occurred.";
                         setResponse(`Failed to upload page ${i + 1}: ${errorMessage}. Aborting remaining uploads.`);
                         setErrorModal(true);
                         uploadFailed = true;
-                        break; // Stop on first failure
+                        break;
                     }
-                } // --- End of for loop ---
+                }
 
-                // 7. Update main component state after all uploads (or on failure)
                 setDocumentsForReview(prevDocs => [...newlyAddedDocuments, ...prevDocs]);
                 setIsScanPreviewModalOpen(false);
                 setScannedDocumentData(null);
                 setFileTypeFilter('all');
-                
+
                 if (newlyAddedDocuments.length > 0 && !uploadFailed) {
-                    // Select the first new document
                     setTimeout(() => handleFileSelect(newlyAddedDocuments[0]), 100);
                 }
 
             } else if (doc.pages.length === 1) {
-                // --- SINGLE PAGE: PROCESS AS ONE DOCUMENT (Existing Logic) ---
-                
                 let finalFileObject, finalPreviewUrl;
                 let finalDocName = doc.name;
 
@@ -1421,11 +1406,10 @@ const DocumentReview = () => {
                         finalPreviewUrl = singlePage.previewUrl;
                     }
                 } catch (error) {
-                     console.error("Error processing file:", error);
-                     setResponse("Failed to process the scanned page. Please try again.");
-                     setErrorModal(true);
-                     setIsSubmittingDraft(false);
-                     return;
+                    setResponse("Failed to process the scanned page. Please try again.");
+                    setErrorModal(true);
+                    setIsSubmittingDraft(false);
+                    return;
                 }
 
                 let finalDoc = {
@@ -1472,7 +1456,6 @@ const DocumentReview = () => {
                     if (apiResponse?.status === 'success') {
                         const draftId = apiResponse.draftId;
                         const documentId = apiResponse.documentId;
-                        console.log(`✅ Draft saved successfully with ID: ${draftId}, Document ID: ${documentId}`);
                         finalDoc.draftId = draftId;
                         finalDoc.documentId = documentId;
 
@@ -1486,21 +1469,17 @@ const DocumentReview = () => {
                         throw new Error(apiResponse?.message || 'Failed to save document draft.');
                     }
                 } catch (error) {
-                    console.error("API Draft Upload Error:", error);
                     const errorMessage = error.response?.data?.message || error.message || "An unknown error occurred while uploading the draft.";
                     setResponse(errorMessage);
                     setErrorModal(true);
                 }
 
             } else {
-                // --- NO PAGES ---
                 setResponse("No pages were scanned for this document.");
                 setErrorModal(true);
                 return;
             }
         } catch (error) {
-            // This catch is for the new outer try block, mainly for page processing errors
-            console.error("General Error in handleSubmitScannedDocument:", error);
             setResponse(error.message || "An unexpected error occurred while processing pages.");
             setErrorModal(true);
         } finally {
@@ -1637,20 +1616,21 @@ const DocumentReview = () => {
                                         )}
                                     </Col>
                                 </Row>
-                                
+
                                 <Row className="main-review-layout g-3 d-flex">
-                                    <Col xl={3} lg={4} className="d-flex flex-column">
+                                    <Col xl={3} lg={4} className="d-flex flex-column" style={{ height: '65vh' }}>
                                         <DocumentThumbnails documents={documentsForReview} selectedFile={selectedFile} onFileSelect={handleFileSelect} />
                                     </Col>
+
                                     <Col xl={6} lg={8} className="d-flex" style={{ height: '65vh' }}>
                                         <DocumentPreview file={selectedFile} loading={previewLoading} error={previewError} />
                                     </Col>
+
                                     <Col xl={3} lg={12} className="d-flex flex-column mt-3 mt-xl-0">
                                         <DocumentInfoPanel
                                             selectedFile={selectedFile} highlights={scannedHighlights} tags={metaTags}
-                                            // --- FIX 2: Pass the new handlers ---
-                                            onTagsChange={handleTagsChange} 
-                                            comment={responseText} 
+                                            onTagsChange={handleTagsChange}
+                                            comment={responseText}
                                             onCommentChange={(e) => handleCommentChange(e.target.value)}
                                             isVerified={isVerified} onVerifiedChange={setIsVerified} onSubmit={handleSubmitReview}
                                             loading={loading} canSubmit={documentsForReview.length > 0} readOnly={!selectedFile}
@@ -1689,34 +1669,34 @@ const DocumentReview = () => {
                     </ModalBody>
                 </Modal>
                 <style>{`
-            .thumbnail-pane { overflow-y: auto; }
-            .info-pane { display: flex; flex-direction: column; height: 100%; }
-            .zoom-controls { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.8); border-radius: 8px; padding: 5px; display: flex; gap: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 10; }
-            .thumbnail-card { cursor: pointer; transition: all 0.2s ease-in-out; border: 1px solid #e9ecef; background-color: #f8f9fa; }
-            .thumbnail-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-            .thumbnail-card.active { background-color: #e0e7ff; border-color: #405189; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-            .thumbnail-name { font-size: 11px; line-height: 1.2; }
-            .tag-badge { background-color: #f3f3f9; color: #495057; border: 1px solid #e9ecef; display: inline-flex; align-items: center; }
-            .btn-close-xs { background-size: 0.5em; opacity: 0.8; }
-            .tag-container {
-                max-height: 5.5rem;
-                overflow-y: auto;
-            }
-            .scanning-overlay {
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background-color: rgba(255, 255, 255, 0.9);
-                z-index: 1056;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                border-radius: 0 0 .3rem .3rem;
-            }
-        `}</style>
+                    .thumbnail-pane { overflow-y: auto; }
+                    .info-pane { display: flex; flex-direction: column; height: 100%; }
+                    .zoom-controls { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.8); border-radius: 8px; padding: 5px; display: flex; gap: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 10; }
+                    .thumbnail-card { cursor: pointer; transition: all 0.2s ease-in-out; border: 1px solid #e9ecef; background-color: #f8f9fa; }
+                    .thumbnail-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+                    .thumbnail-card.active { background-color: #e0e7ff; border-color: #405189; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+                    .thumbnail-name { font-size: 11px; line-height: 1.2; }
+                    .tag-badge { background-color: #f3f3f9; color: #495057; border: 1px solid #e9ecef; display: inline-flex; align-items: center; }
+                    .btn-close-xs { background-size: 0.5em; opacity: 0.8; }
+                    .tag-container {
+                        max-height: 5.5rem;
+                        overflow-y: auto;
+                    }
+                    .scanning-overlay {
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: rgba(255, 255, 255, 0.9);
+                        z-index: 1056;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        align-items: center;
+                        border-radius: 0 0 .3rem .3rem;
+                    }
+                `}</style>
             </Container>
         </div>
     );

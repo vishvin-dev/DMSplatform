@@ -47,6 +47,7 @@ const applyRoutes = (app) => {
 
   app.use(backendHelpers.MISREPORT, MISReport);
   
+
 };
 
 export default applyRoutes;

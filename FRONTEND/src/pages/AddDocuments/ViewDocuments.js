@@ -5,7 +5,7 @@ import {
     Alert, Spinner
 } from 'reactstrap';
 import { getDocumentDropdowns, viewDocument, getAllUserDropDownss } from '../../helpers/fakebackend_helper';
-import axios from 'axios'; // <-- ***** YOU MUST ADD THIS IMPORT *****
+import axios from 'axios';
 import { ToastContainer } from 'react-toastify';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
@@ -402,12 +402,26 @@ const ViewDocuments = () => {
             const requestUserName = obj.user.Email;
             const roleId = obj.user.Role_Id;
 
-            const params = {
-                flagId: 1,
-                accountId: account_id,
-                roleId,
-                requestUserName: requestUserName
-            };
+            // --- ROLE ID PAYLOAD LOGIC ---
+            let params = {};
+
+            // Check if Role_Id is 1 or 4
+            if (roleId === 1 || roleId === 4) {
+                // Special payload for Admins (Role 1 & 4)
+                params = {
+                    flagId: 3,
+                    accountId: account_id
+                };
+            } else {
+                // Default payload for other users
+                params = {
+                    flagId: 1,
+                    accountId: account_id,
+                    roleId,
+                    requestUserName: requestUserName
+                };
+            }
+
             const response = await viewDocument(params);
 
             if (response?.status === "success") {
@@ -428,26 +442,30 @@ const ViewDocuments = () => {
 
                 // Then show documents after a short delay
                 setTimeout(() => {
-                    const transformedDocuments = response.data.map(doc => ({
-                        id: doc.DocumentId + '_' + doc.Version_Id, // Unique ID combining DocumentId and Version_Id
-                        name: doc.DocumentName,
-                        description: doc.DocumentDescription,
-                        createdBy: doc.CreatedByUserName,
-                        createdAt: formatDate(doc.CreatedAt),
-                        category: doc.CategoryName,
-                        // --- START: MODIFIED ---
-                        status: doc.VersionStatusName, // Use VersionStatusName as per your API response
-                        approvalComment: doc.ChangeReason, // Add approval comment
-                        approvedOn: formatDate(doc.UploadedAt), // Add approval/version upload date
-                        // --- END: MODIFIED ---
-                        url: doc.FilePath,
-                        type: doc.FilePath.split('.').pop().toLowerCase(),
-                        documentId: doc.DocumentId,
-                        versionId: doc.Version_Id, // This is the key field for API calls
-                        versionLabel: doc.VersionLabel,
-                        isLatest: doc.IsLatest,
-                        updatedOn: formatDate(doc.UpdatedOn)
-                    }));
+                    const transformedDocuments = response.data.map(doc => {
+                        // --- ERROR FIX HERE: handle missing FilePath safely ---
+                        const safeFilePath = doc.FilePath || '';
+                        const fileType = safeFilePath ? safeFilePath.split('.').pop().toLowerCase() : 'unknown';
+
+                        return {
+                            id: doc.DocumentId + '_' + doc.Version_Id,
+                            name: doc.DocumentName,
+                            description: doc.DocumentDescription,
+                            createdBy: doc.CreatedByUserName,
+                            createdAt: formatDate(doc.CreatedAt),
+                            category: doc.CategoryName,
+                            status: doc.VersionStatusName,
+                            approvalComment: doc.ChangeReason,
+                            approvedOn: formatDate(doc.UploadedAt),
+                            url: safeFilePath,
+                            type: fileType,
+                            documentId: doc.DocumentId,
+                            versionId: doc.Version_Id,
+                            versionLabel: doc.VersionLabel,
+                            isLatest: doc.IsLatest,
+                            updatedOn: formatDate(doc.UpdatedOn)
+                        };
+                    });
 
                     setDocuments(transformedDocuments);
                     setHasSearched(true);
@@ -575,16 +593,13 @@ const ViewDocuments = () => {
 
             console.log('🚀 API Request Payload:', requestPayload);
 
-            // --- FIX: Use direct axios call ---
             const response = await axios.post(
                 VIEW_DOCUMENT_URL,
                 requestPayload,
                 { responseType: "blob" } // Critical: ensures data is treated as a blob
             );
 
-            // The blob is in response.data
             const receivedBlob = response;
-            // --- END FIX ---
 
             if (!(receivedBlob instanceof Blob)) {
                 console.error('❌ Response data was not a Blob.', receivedBlob);
@@ -615,7 +630,6 @@ const ViewDocuments = () => {
             }
 
             // If the blob type is not PDF, force it.
-            // This handles 'application/octet-stream' or empty type.
             if (receivedBlob.type !== 'application/pdf') {
                 console.warn(`⚠️ Blob type is '${receivedBlob.type}'. Forcing 'application/pdf'.`);
                 blobToView = new Blob([receivedBlob], { type: 'application/pdf' });
@@ -641,7 +655,6 @@ const ViewDocuments = () => {
             // Handle axios errors
             let errorMessage = error.message;
             if (error.response && error.response) {
-                // If the error response was *also* a blob (e.g., json error), try to read it
                 if (error.response instanceof Blob) {
                     try {
                         const errorText = await error.response.text();
@@ -662,7 +675,7 @@ const ViewDocuments = () => {
     };
     
 
-    // --- START: MODIFIED handleDownload (using direct axios) ---
+    // Handle file download
     const handleDownload = async (file) => {
         try {
             console.log('📥 Starting download for Version_Id:', file.versionId);
@@ -679,16 +692,13 @@ const ViewDocuments = () => {
 
             console.log('🚀 Download API Request:', requestPayload);
 
-            // --- FIX: Use direct axios call ---
             const response = await axios.post(
                 VIEW_DOCUMENT_URL,
                 requestPayload,
-                { responseType: "blob" } // Critical: ensures data is treated as a blob
+                { responseType: "blob" }
             );
 
-            // The blob is in response.data
             const receivedBlob = response;
-            // --- END FIX ---
 
             if (!(receivedBlob instanceof Blob)) {
                 console.error('❌ Download response was not a Blob.', receivedBlob);
@@ -731,7 +741,7 @@ const ViewDocuments = () => {
             link.href = url;
 
             // Create filename
-            const fileExtension = 'pdf'; // Forcing .pdf as it's the only type we handle
+            const fileExtension = 'pdf';
             const fileName = `${file.name || 'document'}_v${file.versionLabel || file.versionId}.${fileExtension}`;
 
             link.download = fileName;
@@ -749,7 +759,6 @@ const ViewDocuments = () => {
         } catch (err) {
             console.error("❌ Download failed:", err);
             let errorMessage = err.message;
-            // Try to read error from blob if it exists
             if (err.response && err.response && err.response instanceof Blob) {
                 try {
                     const errorText = await err.response.text();
@@ -763,7 +772,6 @@ const ViewDocuments = () => {
             setErrorModal(true);
         }
     };
-    // --- END: MODIFIED handleDownload ---
 
     return (
         <React.Fragment>
@@ -1130,9 +1138,7 @@ const ViewDocuments = () => {
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    
-                                                    {/* --- START: MODIFIED --- */}
-                                                    {/* Replaced "Uploaded On" with "Approval Comment" and "Approved On" */}
+
                                                     {selectedFile.approvalComment && (
                                                         <div className="col-12 mb-3">
                                                             <div className="d-flex align-items-center">
@@ -1154,7 +1160,6 @@ const ViewDocuments = () => {
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    {/* --- END: MODIFIED --- */}
 
                                                     <div className="col-12 mb-3">
                                                         <div className="d-flex align-items-center">
