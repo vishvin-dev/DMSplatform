@@ -570,7 +570,7 @@ const ViewDocuments = () => {
         return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
     };
 
-    // Handle file selection for preview
+    
     const handleFileSelect = async (file) => {
         console.log('📄 File selected:', file);
         console.log('🔑 Version_Id to be sent:', file.versionId);
@@ -673,6 +673,7 @@ const ViewDocuments = () => {
             setPreviewLoading(false);
         }
     };
+    
 
     // Handle file download
     const handleDownload = async (file) => {
