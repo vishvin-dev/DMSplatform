@@ -8,7 +8,6 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
-// FIX: Removed scanUpload from imports to prevent "export not found" error
 import { getDocumentDropdowns, postDocumentUpload } from '../../helpers/fakebackend_helper';
 import { io } from "socket.io-client";
 import axios from 'axios';
@@ -17,7 +16,6 @@ import axios from 'axios';
 // --- CONSTANTS ---
 const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
 const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
-// FIX: Added the scanUpload endpoint URL directly here
 const SCAN_UPLOAD_URL = "http://192.168.23.229:9000/backend-service/documentUpload/scanUpload";
 
 
@@ -632,7 +630,6 @@ const DocumentReview = () => {
     const [loading, setLoading] = useState(false);
     const [documentsForReview, setDocumentsForReview] = useState(location.state?.draftDocuments || []);
     const [selectedFile, setSelectedFile] = useState(null);
-    // FIX: Correctly destructured useState to get setter function
     const [fileTypeFilter, setFileTypeFilter] = useState('all');
     const [documentTypes, setDocumentTypes] = useState([]);
     const [loadingDocumentTypes, setLoadingDocumentTypes] = useState(true);
@@ -648,6 +645,8 @@ const DocumentReview = () => {
 
     const scanTimeoutIdRef = useRef(null);
     const progressIntervalRef = useRef(null);
+    // NEW: Ref to hold AbortController for cancelling API requests
+    const scanAbortControllerRef = useRef(null);
 
     const documentsForReviewRef = useRef(documentsForReview);
     useEffect(() => {
@@ -1001,7 +1000,6 @@ const DocumentReview = () => {
         };
     }, []);
 
-    // --- FIX: Updated handleSubmitReview to use direct axios call ---
     const handleSubmitReview = async () => {
         setLoading(true);
         const finalDocuments = documentsForReview;
@@ -1035,7 +1033,6 @@ const DocumentReview = () => {
         };
 
         try {
-            // FIX: Using axios directly here to avoid "export not found" issues with fakebackend_helper
             const response = await axios.post(SCAN_UPLOAD_URL, payload);
             const apiResponse = response.data;
             
@@ -1059,6 +1056,31 @@ const DocumentReview = () => {
         navigate('/Preview', { state: { refresh: true } });
     };
 
+    // --- NEW: Handle Cancel Scan Logic ---
+    const handleCancelScan = () => {
+        // Abort the ongoing axios request
+        if (scanAbortControllerRef.current) {
+            scanAbortControllerRef.current.abort();
+        }
+
+        // Clear timers
+        if (scanTimeoutIdRef.current) clearTimeout(scanTimeoutIdRef.current);
+        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+
+        // Reset all scanning related states
+        setIsScanningModalOpen(false);
+        setScanningInProgress(false);
+        setIsBulkScanning(false);
+        setIsAddingPage(false);
+        setIsAddingPageLoading(false);
+        setIsRescanning(false);
+        setPageToRescanId(null);
+        setCurrentScanFileName('');
+        
+        // Optional: Reset progress
+        setScanProgress(0);
+    };
+
     const handleApiScan = async (docTypeLabel) => {
         if (!socket || !socket.connected) {
             setResponse("Scanner is not connected. Please try again.");
@@ -1069,6 +1091,11 @@ const DocumentReview = () => {
             setPageToRescanId(null);
             return;
         }
+
+        // Create new AbortController
+        if (scanAbortControllerRef.current) scanAbortControllerRef.current.abort();
+        scanAbortControllerRef.current = new AbortController();
+
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const baseFileName = `${docTypeLabel.replace(/\s+/g, '_')}_${timestamp}`;
         const fileNameForApi = `${baseFileName}.jpg`;
@@ -1087,7 +1114,14 @@ const DocumentReview = () => {
         progressIntervalRef.current = setInterval(() => setScanProgress(prev => Math.min(prev + 10, 90)), 250);
 
         try {
-            await axios.post(`${SCANNER_ENDPOINT}/scan-service/scan`, { fileName: fileNameForApi, format: "jpg", colorMode: "color" }, { timeout: 30000 });
+            await axios.post(
+                `${SCANNER_ENDPOINT}/scan-service/scan`, 
+                { fileName: fileNameForApi, format: "jpg", colorMode: "color" }, 
+                { 
+                    timeout: 30000,
+                    signal: scanAbortControllerRef.current.signal // Pass signal to axios
+                }
+            );
 
             if (scanTimeoutIdRef.current) {
                 clearTimeout(scanTimeoutIdRef.current);
@@ -1110,6 +1144,9 @@ const DocumentReview = () => {
             }, 30000);
 
         } catch (error) {
+            // Ignore abort errors
+            if (axios.isCancel(error)) return;
+
             if (progressIntervalRef.current) {
                 clearInterval(progressIntervalRef.current);
                 progressIntervalRef.current = null;
@@ -1145,6 +1182,10 @@ const DocumentReview = () => {
             return;
         }
 
+        // Create new AbortController
+        if (scanAbortControllerRef.current) scanAbortControllerRef.current.abort();
+        scanAbortControllerRef.current = new AbortController();
+
         setIsBulkScanning(true);
         setScanningInProgress(true);
         setIsScanningModalOpen(true);
@@ -1164,7 +1205,14 @@ const DocumentReview = () => {
         const BULK_TIMEOUT_MS = 600000;
 
         try {
-            await axios.post(`${SCANNER_ENDPOINT}/scan-service/bulk-scan`, payload, { timeout: BULK_TIMEOUT_MS });
+            await axios.post(
+                `${SCANNER_ENDPOINT}/scan-service/bulk-scan`, 
+                payload, 
+                { 
+                    timeout: BULK_TIMEOUT_MS,
+                    signal: scanAbortControllerRef.current.signal // Pass signal to axios
+                }
+            );
 
             if (scanTimeoutIdRef.current) {
                 clearTimeout(scanTimeoutIdRef.current);
@@ -1184,6 +1232,9 @@ const DocumentReview = () => {
             }, BULK_TIMEOUT_MS);
 
         } catch (error) {
+            // Ignore abort errors
+            if (axios.isCancel(error)) return;
+
             if (progressIntervalRef.current) {
                 clearInterval(progressIntervalRef.current);
                 progressIntervalRef.current = null;
@@ -1649,6 +1700,13 @@ const DocumentReview = () => {
                         <h4>Scanning in Progress...</h4>
                         <p className="text-muted">Waiting for document from scanner.</p>
                         <Progress animated color="primary" value={scanProgress} className="mt-4" />
+                        
+                        {/* Cancel Button Added Below */}
+                        <div className="mt-4">
+                            <Button color="danger" outline onClick={handleCancelScan}>
+                                Cancel Scan
+                            </Button>
+                        </div>
                     </ModalBody>
                 </Modal>
                 <style>{`
