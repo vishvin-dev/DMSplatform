@@ -8,13 +8,18 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
-import { getDocumentDropdowns, postDocumentUpload ,documentView } from '../../helpers/fakebackend_helper';
+// FIX: Removed scanUpload from imports to prevent "export not found" error
+import { getDocumentDropdowns, postDocumentUpload } from '../../helpers/fakebackend_helper';
 import { io } from "socket.io-client";
 import axios from 'axios';
+
 
 // --- CONSTANTS ---
 const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
 const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
+// FIX: Added the scanUpload endpoint URL directly here
+const SCAN_UPLOAD_URL = "http://192.168.23.229:9000/backend-service/documentUpload/scanUpload";
+
 
 // --- HELPERS ---
 const getHighlightBadgeStyle = (itemType) => {
@@ -627,7 +632,8 @@ const DocumentReview = () => {
     const [loading, setLoading] = useState(false);
     const [documentsForReview, setDocumentsForReview] = useState(location.state?.draftDocuments || []);
     const [selectedFile, setSelectedFile] = useState(null);
-    const [setFileTypeFilter] = useState('all');
+    // FIX: Correctly destructured useState to get setter function
+    const [fileTypeFilter, setFileTypeFilter] = useState('all');
     const [documentTypes, setDocumentTypes] = useState([]);
     const [loadingDocumentTypes, setLoadingDocumentTypes] = useState(true);
     const [scannedHighlights, setScannedHighlights] = useState([]);
@@ -674,7 +680,7 @@ const DocumentReview = () => {
     }, [consumerData]);
 
     useEffect(() => {
-        const socketConnection = io(SCANNER_ENDPOINT, { transports: ["websocket", "polling"] });
+        const socketConnection = io(SCANNER_ENDPOINT,  { transports: ["websocket", "polling"], reconnection: false,  });
         setSocket(socketConnection);
 
         return () => {
@@ -687,6 +693,8 @@ const DocumentReview = () => {
             }
         };
     }, []);
+
+
 
     useEffect(() => {
         if (!socket) return;
@@ -993,14 +1001,16 @@ const DocumentReview = () => {
         };
     }, []);
 
+    // --- FIX: Updated handleSubmitReview to use direct axios call ---
     const handleSubmitReview = async () => {
         setLoading(true);
         const finalDocuments = documentsForReview;
+        
         if (finalDocuments.length === 0) {
-            setResponse(`Please scan at least one document.`);
+            setResponse(`Please scan at least one document before submitting.`);
             setErrorModal(true); setLoading(false); return;
         }
-        const formData = new FormData();
+
         let user;
         try {
             const authUserString = sessionStorage.getItem('authUser');
@@ -1011,59 +1021,33 @@ const DocumentReview = () => {
             setResponse("Your user session is invalid. Please log in again.");
             setErrorModal(true); setLoading(false); return;
         }
-        if (!consumerData) {
-            setResponse("Consumer data is missing. Please try again.");
+
+        if (!consumerData || !consumerData.account_id) {
+            setResponse("Consumer Account ID is missing. Please try again.");
             setErrorModal(true); setLoading(false); return;
         }
 
-        if (verificationDetails) {
-            formData.append('NoOfPages', verificationDetails.noOfPages || '');
-            formData.append('FileNumber', verificationDetails.fileNumber || '');
-            formData.append('ContractorName', verificationDetails.contractorName || '');
-            formData.append('ApprovedBy', verificationDetails.approvedBy || '');
-            formData.append('CategoryName', verificationDetails.category || '');
-        }
+        const payload = {
+            account_id: consumerData.account_id,
+            CreatedByUser_Id: user.User_Id,
+            Status_Id: 1, 
+            requestUserName: user.Email
+        };
 
-        formData.append('flagId', '10');
-        formData.append('DocumentName', `Docs for ${consumerData.rr_no}`);
-        formData.append('DocumentDescription', responseText);
-        formData.append('MetaTags', metaTags.join(','));
-        formData.append('CreatedByUser_Id', user.User_Id);
-        formData.append('account_id', consumerData.account_id);
-        formData.append('CreatedByUserName', user.Email);
-        formData.append('div_code', consumerData.div_code || '');
-        formData.append('sd_code', consumerData.sd_code || '');
-        formData.append('so_code', consumerData.so_code || '');
-        formData.append('Category_Id', '1');
-        formData.append('Status_Id', '1');
-        let fileCount = 0;
-
-        const predefinedApiKeys = new Set(documentTypes.map(d => d.DocumentListName.replace(/[^a-zA-Z0-9]/g, '')));
-
-        finalDocuments.forEach(doc => {
-            const catName = doc.category || doc.DraftName || 'OtherDocuments';
-            const potentialApiKey = catName.replace(/[^a-zA-Z0-9]/g, '');
-            const apiKey = predefinedApiKeys.has(potentialApiKey) ? potentialApiKey : 'OtherDocuments';
-            if (doc.fileObject && apiKey) {
-                formData.append(apiKey, doc.fileObject, doc.name || doc.DraftName);
-                fileCount++;
-            }
-        });
-
-        if (fileCount === 0) {
-            setResponse("No valid file data found to upload. Please rescan.");
-            setErrorModal(true); setLoading(false); return;
-        }
         try {
-            const apiResponse = await postDocumentUpload(formData);
-            if (apiResponse?.status === 'success') {
-                setResponse(apiResponse.message || `Successfully uploaded files.`);
+            // FIX: Using axios directly here to avoid "export not found" issues with fakebackend_helper
+            const response = await axios.post(SCAN_UPLOAD_URL, payload);
+            const apiResponse = response.data;
+            
+            if (apiResponse && (apiResponse.status === 'success' || apiResponse.success || apiResponse.status === 200)) {
+                setResponse(apiResponse.message || `Successfully finalized and uploaded documents.`);
                 setSuccessModal(true);
             } else {
-                throw new Error(apiResponse?.message || 'Submission failed.');
+                throw new Error(apiResponse?.message || 'Final submission failed.');
             }
         } catch (error) {
-            setResponse(error?.message || "An unknown error occurred.");
+            const errorMsg = error.response?.data?.message || error?.message || "An unknown error occurred during final submission.";
+            setResponse(errorMsg);
             setErrorModal(true);
         } finally {
             setLoading(false);
@@ -1501,8 +1485,11 @@ const DocumentReview = () => {
         return (
             <div className="page-content"><Container>
                 <Alert color="danger" className="text-center">
-                    <h4 className="alert-heading">Error!</h4>
-                    <p>No consumer data found. Please return to the search page.</p><hr />
+                    <div className="alert-heading mb-2">
+                        <h4 className="mb-1">Error!</h4>
+                    </div>
+                    <p className="mb-3">No consumer data found. Please return to the search page.</p>
+                    <hr />
                     <Link to="/Preview" className="btn btn-danger">Go Back</Link>
                 </Alert>
             </Container></div>
@@ -1697,5 +1684,4 @@ const DocumentReview = () => {
         </div>
     );
 };
-
 export default DocumentReview;
