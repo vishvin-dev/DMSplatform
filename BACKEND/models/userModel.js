@@ -289,7 +289,7 @@ export const getCircle = async (zone_code) => {
 
 export const getZone=async()=>{
     const [result]=await pool.execute(
-        `SELECT DISTINCT zone, zone_code  FROM zone_codes ORDER BY ZONE;;`
+        `SELECT DISTINCT zone, zone_code  FROM zone_codes ORDER BY ZONE;`
     )
     return result;
 }
