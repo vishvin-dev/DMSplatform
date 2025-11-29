@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.post("/dropdown", authenticateToken, MISReportDropdown);
 router.post("/users", authenticateToken, getUsersDropdown);           
-router.post("/report", generateReport);
+router.post("/getReportData", generateReport);
 
 
 

@@ -7,7 +7,7 @@ import {
     getUsersByRoleAndLocation,
     getReportData
 } from "../../models/MisReport.js"
-// import { getDateRange } from "../../utils/DateMethods/dateMethods.js"
+import { getDateRange } from "../../utils/DateMethods/dateMethods.js"
 
 export const MISReportDropdown = async (req, res) => {
     const { flagId, zone_code, circle_code, div_code, sd_code, exclude_sections } = req.body;
@@ -59,26 +59,32 @@ export const getUsersDropdown = async (req, res) => {
 export const generateReport = async (req, res) => {
     try {
         const { filters = {}, dateMethod = "day", datePayload = {} } = req.body;
+        console.log(req.body)
 
-        // calculate date range
         let dateRange;
         try {
             dateRange = getDateRange(dateMethod, datePayload);
         } catch (err) {
-            return res.status(400).json({ status: false, message: err.message });
+            return res.status(400).json({
+                status: false,
+                message: err.message
+            });
         }
 
-        // fetch report rows from model
         const rows = await getReportData(filters, dateRange);
 
-        // Optionally you can do aggregation here (sum, count etc). For now return rows.
         return res.status(200).json({
             status: true,
-            meta: { dateRange, filters },
+            meta: { filters, dateRange },
             data: rows
         });
+
     } catch (error) {
         console.error("generateReport Error:", error);
-        return res.status(500).json({ status: false, message: "Internal Server Error", error: error.message });
+        return res.status(500).json({
+            status: false,
+            message: "Internal Server Error",
+            error: error.message
+        });
     }
 };
