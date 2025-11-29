@@ -126,65 +126,65 @@ export const getUsersByRoleAndLocation = async (roleId, filters = {}) => {
 
 
 
-// export const getReportData = async (filters = {}, dateRange = {}) => {
-//   const {
-//     zone_code,
-//     circle_code,
-//     div_code,
-//     sd_code,
-//     so_code,
-//     role_id,
-//     user_id
-//   } = filters;
+export const getReportData = async (filters = {}, dateRange = {}) => {
+  const {
+    zone_code,
+    circle_code,
+    div_code,
+    sd_code,
+    so_code,
+    role_id,
+    user_id
+  } = filters;
 
-//   let query = `
-//     SELECT *
-//     FROM report_data
-//     WHERE 1 = 1
-//   `;
-//   const params = [];
+  let query = `
+    SELECT *
+    FROM report_data
+    WHERE 1 = 1
+  `;
+  const params = [];
 
-//   // Location filters
-//   if (zone_code) {
-//     query += ` AND zone_code = ?`; params.push(zone_code);
-//   }
-//   if (circle_code) {
-//     query += ` AND circle_code = ?`; params.push(circle_code);
-//   }
-//   if (div_code) {
-//     query += ` AND div_code = ?`; params.push(div_code);
-//   }
-//   if (sd_code) {
-//     query += ` AND sd_code = ?`; params.push(sd_code);
-//   }
-//   if (so_code) {
-//     if (Array.isArray(so_code) && so_code.length > 0) {
-//       const placeholders = so_code.map(() => "?").join(",");
-//       query += ` AND so_code IN (${placeholders})`;
-//       params.push(...so_code);
-//     } else {
-//       query += ` AND so_code = ?`;
-//       params.push(so_code);
-//     }
-//   }
+  // Location filters
+  if (zone_code) {
+    query += ` AND zone_code = ?`; params.push(zone_code);
+  }
+  if (circle_code) {
+    query += ` AND circle_code = ?`; params.push(circle_code);
+  }
+  if (div_code) {
+    query += ` AND div_code = ?`; params.push(div_code);
+  }
+  if (sd_code) {
+    query += ` AND sd_code = ?`; params.push(sd_code);
+  }
+  if (so_code) {
+    if (Array.isArray(so_code) && so_code.length > 0) {
+      const placeholders = so_code.map(() => "?").join(",");
+      query += ` AND so_code IN (${placeholders})`;
+      params.push(...so_code);
+    } else {
+      query += ` AND so_code = ?`;
+      params.push(so_code);
+    }
+  }
 
-//   // role & user filters
-//   if (role_id) {
-//     query += ` AND Role_Id = ?`; params.push(role_id);
-//   }
-//   if (user_id) {
-//     query += ` AND User_Id = ?`; params.push(user_id);
-//   }
+  // role & user filters
+  if (role_id) {
+    query += ` AND Role_Id = ?`; params.push(role_id);
+  }
+  if (user_id) {
+    query += ` AND User_Id = ?`; params.push(user_id);
+  }
 
-//   // date range filter (CreatedOn assumed)
-//   if (dateRange && dateRange.startDate && dateRange.endDate) {
-//     query += ` AND DATE(CreatedOn) BETWEEN ? AND ?`;
-//     params.push(dateRange.startDate, dateRange.endDate);
-//   }
+  // date range filter (CreatedOn assumed)
+  if (dateRange && dateRange.startDate && dateRange.endDate) {
+    query += ` AND DATE(CreatedOn) BETWEEN ? AND ?`;
+    params.push(dateRange.startDate, dateRange.endDate);
+  }
 
-//   // final ordering (adjust as needed)
-//   query += ` ORDER BY CreatedOn DESC`;
+  // final ordering (adjust as needed)
+  query += ` ORDER BY CreatedOn DESC`;
 
-//   const [rows] = await pool.execute(query, params);
-//   return rows;
-// };
+  const [rows] = await pool.execute(query, params);
+  return rows;
+};
