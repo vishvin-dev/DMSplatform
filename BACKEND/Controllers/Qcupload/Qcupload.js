@@ -136,6 +136,8 @@ export const Qcupload = async (req, res) => {
         else if (parseInt(flagId) === 5) {
             // accept multiple VersionIds
             const { VersionIds } = req.body;
+            if(!User_Id) return "User_Id is Required"
+            
             if (!Array.isArray(VersionIds) || VersionIds.length === 0) {
                 return res.status(400).json({ message: "VersionIds must be an array" });
             }
