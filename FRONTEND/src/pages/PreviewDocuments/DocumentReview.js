@@ -16,6 +16,8 @@ import axios from 'axios';
 // --- CONSTANTS ---
 const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
 const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
+const SCAN_UPLOAD_URL = "http://192.168.23.229:9000/backend-service/documentUpload/scanUpload";
+
 
 
 // --- HELPERS ---
@@ -629,7 +631,7 @@ const DocumentReview = () => {
     const [loading, setLoading] = useState(false);
     const [documentsForReview, setDocumentsForReview] = useState(location.state?.draftDocuments || []);
     const [selectedFile, setSelectedFile] = useState(null);
-    const [setFileTypeFilter] = useState('all');
+    const [fileTypeFilter, setFileTypeFilter] = useState('all');
     const [documentTypes, setDocumentTypes] = useState([]);
     const [loadingDocumentTypes, setLoadingDocumentTypes] = useState(true);
     const [scannedHighlights, setScannedHighlights] = useState([]);
@@ -644,6 +646,8 @@ const DocumentReview = () => {
 
     const scanTimeoutIdRef = useRef(null);
     const progressIntervalRef = useRef(null);
+    // NEW: Ref to hold AbortController for cancelling API requests
+    const scanAbortControllerRef = useRef(null);
 
     const documentsForReviewRef = useRef(documentsForReview);
     useEffect(() => {
@@ -1000,11 +1004,12 @@ const DocumentReview = () => {
     const handleSubmitReview = async () => {
         setLoading(true);
         const finalDocuments = documentsForReview;
+        
         if (finalDocuments.length === 0) {
-            setResponse(`Please scan at least one document.`);
+            setResponse(`Please scan at least one document before submitting.`);
             setErrorModal(true); setLoading(false); return;
         }
-        const formData = new FormData();
+
         let user;
         try {
             const authUserString = sessionStorage.getItem('authUser');
@@ -1015,59 +1020,32 @@ const DocumentReview = () => {
             setResponse("Your user session is invalid. Please log in again.");
             setErrorModal(true); setLoading(false); return;
         }
-        if (!consumerData) {
-            setResponse("Consumer data is missing. Please try again.");
+
+        if (!consumerData || !consumerData.account_id) {
+            setResponse("Consumer Account ID is missing. Please try again.");
             setErrorModal(true); setLoading(false); return;
         }
 
-        if (verificationDetails) {
-            formData.append('NoOfPages', verificationDetails.noOfPages || '');
-            formData.append('FileNumber', verificationDetails.fileNumber || '');
-            formData.append('ContractorName', verificationDetails.contractorName || '');
-            formData.append('ApprovedBy', verificationDetails.approvedBy || '');
-            formData.append('CategoryName', verificationDetails.category || '');
-        }
+        const payload = {
+            account_id: consumerData.account_id,
+            CreatedByUser_Id: user.User_Id,
+            Status_Id: 1, 
+            requestUserName: user.Email
+        };
 
-        formData.append('flagId', '10');
-        formData.append('DocumentName', `Docs for ${consumerData.rr_no}`);
-        formData.append('DocumentDescription', responseText);
-        formData.append('MetaTags', metaTags.join(','));
-        formData.append('CreatedByUser_Id', user.User_Id);
-        formData.append('account_id', consumerData.account_id);
-        formData.append('CreatedByUserName', user.Email);
-        formData.append('div_code', consumerData.div_code || '');
-        formData.append('sd_code', consumerData.sd_code || '');
-        formData.append('so_code', consumerData.so_code || '');
-        formData.append('Category_Id', '1');
-        formData.append('Status_Id', '1');
-        let fileCount = 0;
-
-        const predefinedApiKeys = new Set(documentTypes.map(d => d.DocumentListName.replace(/[^a-zA-Z0-9]/g, '')));
-
-        finalDocuments.forEach(doc => {
-            const catName = doc.category || doc.DraftName || 'OtherDocuments';
-            const potentialApiKey = catName.replace(/[^a-zA-Z0-9]/g, '');
-            const apiKey = predefinedApiKeys.has(potentialApiKey) ? potentialApiKey : 'OtherDocuments';
-            if (doc.fileObject && apiKey) {
-                formData.append(apiKey, doc.fileObject, doc.name || doc.DraftName);
-                fileCount++;
-            }
-        });
-
-        if (fileCount === 0) {
-            setResponse("No valid file data found to upload. Please rescan.");
-            setErrorModal(true); setLoading(false); return;
-        }
         try {
-            const apiResponse = await postDocumentUpload(formData);
-            if (apiResponse?.status === 'success') {
-                setResponse(apiResponse.message || `Successfully uploaded files.`);
+            const response = await axios.post(SCAN_UPLOAD_URL, payload);
+            const apiResponse = response.data;
+            
+            if (apiResponse && (apiResponse.status === 'success' || apiResponse.success || apiResponse.status === 200)) {
+                setResponse(apiResponse.message || `Successfully finalized and uploaded documents.`);
                 setSuccessModal(true);
             } else {
-                throw new Error(apiResponse?.message || 'Submission failed.');
+                throw new Error(apiResponse?.message || 'Final submission failed.');
             }
         } catch (error) {
-            setResponse(error?.message || "An unknown error occurred.");
+            const errorMsg = error.response?.data?.message || error?.message || "An unknown error occurred during final submission.";
+            setResponse(errorMsg);
             setErrorModal(true);
         } finally {
             setLoading(false);
@@ -1077,6 +1055,31 @@ const DocumentReview = () => {
     const handleSuccessAndNavigate = () => {
         setSuccessModal(false);
         navigate('/Preview', { state: { refresh: true } });
+    };
+
+    // --- NEW: Handle Cancel Scan Logic ---
+    const handleCancelScan = () => {
+        // Abort the ongoing axios request
+        if (scanAbortControllerRef.current) {
+            scanAbortControllerRef.current.abort();
+        }
+
+        // Clear timers
+        if (scanTimeoutIdRef.current) clearTimeout(scanTimeoutIdRef.current);
+        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+
+        // Reset all scanning related states
+        setIsScanningModalOpen(false);
+        setScanningInProgress(false);
+        setIsBulkScanning(false);
+        setIsAddingPage(false);
+        setIsAddingPageLoading(false);
+        setIsRescanning(false);
+        setPageToRescanId(null);
+        setCurrentScanFileName('');
+        
+        // Optional: Reset progress
+        setScanProgress(0);
     };
 
     const handleApiScan = async (docTypeLabel) => {
@@ -1089,6 +1092,11 @@ const DocumentReview = () => {
             setPageToRescanId(null);
             return;
         }
+
+        // Create new AbortController
+        if (scanAbortControllerRef.current) scanAbortControllerRef.current.abort();
+        scanAbortControllerRef.current = new AbortController();
+
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const baseFileName = `${docTypeLabel.replace(/\s+/g, '_')}_${timestamp}`;
         const fileNameForApi = `${baseFileName}.jpg`;
@@ -1107,7 +1115,14 @@ const DocumentReview = () => {
         progressIntervalRef.current = setInterval(() => setScanProgress(prev => Math.min(prev + 10, 90)), 250);
 
         try {
-            await axios.post(`${SCANNER_ENDPOINT}/scan-service/scan`, { fileName: fileNameForApi, format: "jpg", colorMode: "color" }, { timeout: 30000 });
+            await axios.post(
+                `${SCANNER_ENDPOINT}/scan-service/scan`, 
+                { fileName: fileNameForApi, format: "jpg", colorMode: "color" }, 
+                { 
+                    timeout: 30000,
+                    signal: scanAbortControllerRef.current.signal // Pass signal to axios
+                }
+            );
 
             if (scanTimeoutIdRef.current) {
                 clearTimeout(scanTimeoutIdRef.current);
@@ -1130,6 +1145,9 @@ const DocumentReview = () => {
             }, 30000);
 
         } catch (error) {
+            // Ignore abort errors
+            if (axios.isCancel(error)) return;
+
             if (progressIntervalRef.current) {
                 clearInterval(progressIntervalRef.current);
                 progressIntervalRef.current = null;
@@ -1165,6 +1183,10 @@ const DocumentReview = () => {
             return;
         }
 
+        // Create new AbortController
+        if (scanAbortControllerRef.current) scanAbortControllerRef.current.abort();
+        scanAbortControllerRef.current = new AbortController();
+
         setIsBulkScanning(true);
         setScanningInProgress(true);
         setIsScanningModalOpen(true);
@@ -1184,7 +1206,14 @@ const DocumentReview = () => {
         const BULK_TIMEOUT_MS = 600000;
 
         try {
-            await axios.post(`${SCANNER_ENDPOINT}/scan-service/bulk-scan`, payload, { timeout: BULK_TIMEOUT_MS });
+            await axios.post(
+                `${SCANNER_ENDPOINT}/scan-service/bulk-scan`, 
+                payload, 
+                { 
+                    timeout: BULK_TIMEOUT_MS,
+                    signal: scanAbortControllerRef.current.signal // Pass signal to axios
+                }
+            );
 
             if (scanTimeoutIdRef.current) {
                 clearTimeout(scanTimeoutIdRef.current);
@@ -1204,6 +1233,9 @@ const DocumentReview = () => {
             }, BULK_TIMEOUT_MS);
 
         } catch (error) {
+            // Ignore abort errors
+            if (axios.isCancel(error)) return;
+
             if (progressIntervalRef.current) {
                 clearInterval(progressIntervalRef.current);
                 progressIntervalRef.current = null;
@@ -1505,8 +1537,11 @@ const DocumentReview = () => {
         return (
             <div className="page-content"><Container>
                 <Alert color="danger" className="text-center">
-                    <h4 className="alert-heading">Error!</h4>
-                    <p>No consumer data found. Please return to the search page.</p><hr />
+                    <div className="alert-heading mb-2">
+                        <h4 className="mb-1">Error!</h4>
+                    </div>
+                    <p className="mb-3">No consumer data found. Please return to the search page.</p>
+                    <hr />
                     <Link to="/Preview" className="btn btn-danger">Go Back</Link>
                 </Alert>
             </Container></div>
@@ -1666,6 +1701,13 @@ const DocumentReview = () => {
                         <h4>Scanning in Progress...</h4>
                         <p className="text-muted">Waiting for document from scanner.</p>
                         <Progress animated color="primary" value={scanProgress} className="mt-4" />
+                        
+                        {/* Cancel Button Added Below */}
+                        <div className="mt-4">
+                            <Button color="danger" outline onClick={handleCancelScan}>
+                                Cancel Scan
+                            </Button>
+                        </div>
                     </ModalBody>
                 </Modal>
                 <style>{`
@@ -1701,5 +1743,4 @@ const DocumentReview = () => {
         </div>
     );
 };
-
 export default DocumentReview;
