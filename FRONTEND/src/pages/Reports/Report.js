@@ -4,7 +4,7 @@ import {
     Button, Input, Label, FormGroup,
     Alert, Spinner
 } from 'reactstrap';
-import { getDocumentDropdowns } from '../../helpers/fakebackend_helper';
+import { misReportdropdowns} from '../../helpers/fakebackend_helper';
 import { ToastContainer } from 'react-toastify';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
@@ -20,10 +20,11 @@ const Reports = () => {
     const [errorModal, setErrorModal] = useState(false);
 
     // Filter related states
+    const [zone, setZone] = useState('');
     const [circle, setCircle] = useState('');
     const [division, setDivision] = useState('');
     const [subDivision, setSubDivision] = useState('');
-    const [section, setSection] = useState('');
+    const [sections, setSections] = useState(['']); // Array to handle multiple sections
     const [userName, setUserName] = useState("");
     const [role, setRole] = useState('');
     const [selectedUser, setSelectedUser] = useState('');
@@ -32,31 +33,27 @@ const Reports = () => {
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
 
-    // Report results (retained for flow logic/mock data)
+    // Report results
     const [reportData, setReportData] = useState(null);
     const [showResults, setShowResults] = useState(false);
 
     // Dropdown data
+    const [zoneOptions, setZoneOptions] = useState([]);
     const [circleOptions, setCircleOptions] = useState([]);
     const [divisionName, setDivisionName] = useState([]);
     const [subDivisions, setSubDivisions] = useState([]);
     const [sectionOptions, setSectionOptions] = useState([]);
     const [userOptions, setUserOptions] = useState([]);
+    const [roleOptions, setRoleOptions] = useState([]);
 
-    // User access level states
-    const [userLevel, setUserLevel] = useState('');
-    const [isFieldsDisabled, setIsFieldsDisabled] = useState({
-        circle: false,
-        division: false,
-        subDivision: false,
-        section: false
-    });
+    // Store all available sections (without exclusions)
+    const [allSectionOptions, setAllSectionOptions] = useState([]);
 
     document.title = `Reports | DMS`;
 
     const flagIdFunction = useCallback(async (params) => {
         try {
-            const res = await getDocumentDropdowns(params);
+            const res = await misReportdropdowns(params);
             return res?.data || [];
         } catch (error) {
             console.error(`Error fetching data for flag ${params.flagId}:`, error.message);
@@ -66,8 +63,22 @@ const Reports = () => {
 
     // --- Core Logic Functions ---
 
+    // Load roles from API
+    const loadRoles = useCallback(async () => {
+        try {
+            const rolesData = await flagIdFunction({
+                flagId: 6,
+                requestUserName: userName
+            });
+            setRoleOptions(rolesData);
+        } catch (error) {
+            console.error('Error loading roles:', error.message);
+            setRoleOptions([]);
+        }
+    }, [userName, flagIdFunction]);
+
     const loadUsers = useCallback(async () => {
-        if (!role || !circle || !division || !subDivision || !section) {
+        if (!role || !zone) {
             setUserOptions([]);
             setSelectedUser('');
             return;
@@ -75,21 +86,18 @@ const Reports = () => {
 
         try {
             let users = [];
-            // --- MOCK USER DATA INJECTION ---
-            if (role === 'Uploader') {
-                users = [
-                    { id: 'U1001', user_name: 'Alex Johnson', email: 'alex.j@example.com', name: 'Alex Johnson' },
-                    { id: 'U1002', user_name: 'Priya Sharma', email: 'priya.s@example.com', name: 'Priya Sharma' },
-                ];
-            } else if (role === 'QC') {
-                users = [
-                    { id: 'Q2001', user_name: 'Manager Bob', email: 'manager.b@example.com', name: 'Manager Bob' },
-                    { id: 'Q2002', user_name: 'Supervisor Carol', email: 'supervisor.c@example.com', name: 'Supervisor Carol' },
-                ];
-            } else {
-                users = [];
-            }
-            // --- END MOCK ---
+            // API call to fetch users based on role and location
+            const userResponse = await misReportdropdowns({
+                flagId: 7, // Assuming flagId 7 for users
+                requestUserName: userEmail,
+                zone_code: zone,
+                circle_code: circle,
+                div_code: division,
+                sd_code: subDivision,
+                role: role
+            });
+            
+            users = userResponse?.data || [];
 
             setUserOptions(users);
 
@@ -103,165 +111,108 @@ const Reports = () => {
             setUserOptions([]);
             setSelectedUser('');
         }
-    }, [role, circle, division, subDivision, section, selectedUser]);
+    }, [role, zone, circle, division, subDivision, userName, selectedUser]);
 
-
-    const loadDropdownDataFromSession = useCallback(async () => {
-        const authUser = JSON.parse(sessionStorage.getItem("authUser"));
-        const zones = authUser?.user?.zones || [];
-        const currentUserEmail = authUser?.user?.Email;
-        setUserName(currentUserEmail || "");
-
-        if (zones.length === 0) return;
-
-        const userZone = zones[0];
-        const level = userZone.level;
-        setUserLevel(level);
-
-        const loadNextLevelAndAutoselect = async (currentLevelCode, flagId, setOptions, setCode, disableKey) => {
-            const nextOptions = await flagIdFunction({
-                flagId,
-                requestUserName: currentUserEmail,
-                ...(flagId === 1 && { circle_code: currentLevelCode }),
-                ...(flagId === 2 && { div_code: currentLevelCode }),
-                ...(flagId === 3 && { sd_code: currentLevelCode }),
-            });
-
-            setOptions(nextOptions);
-
-            if (nextOptions.length === 1) {
-                const nextCode = nextOptions[0].circle_code || nextOptions[0].div_code || nextOptions[0].sd_code || nextOptions[0].so_code;
-                setCode(nextCode);
-                setIsFieldsDisabled(prev => ({ ...prev, [disableKey]: true }));
-                return nextCode;
-            } else {
-                setIsFieldsDisabled(prev => ({ ...prev, [disableKey]: false }));
-                return null;
-            }
-        };
-
-        if (level === 'section') {
-            const circleData = [{ circle_code: userZone.circle_code, circle: userZone.circle }];
-            const divisionData = [{ div_code: userZone.div_code, division: userZone.division }];
-            const subDivisionData = [{ sd_code: userZone.sd_code, sub_division: userZone.sub_division }];
-            const sectionData = zones.filter(z => z.sd_code === userZone.sd_code).map(zone => ({
-                so_code: zone.so_code, section_office: zone.section_office
-            }));
-
-            setCircleOptions(circleData);
-            setDivisionName(divisionData);
-            setSubDivisions(subDivisionData);
-            setSectionOptions(sectionData);
-
-            setCircle(userZone.circle_code);
-            setDivision(userZone.div_code);
-            setSubDivision(userZone.sd_code);
-            setIsFieldsDisabled({
-                circle: true, division: true, subDivision: true,
-                section: sectionData.length === 1
-            });
-            if (sectionData.length === 1) {
-                setSection(sectionData[0].so_code);
-            }
-        }
-        else if (level === 'subdivision') {
-            const circleData = [{ circle_code: userZone.circle_code, circle: userZone.circle }];
-            const divisionData = [{ div_code: userZone.div_code, division: userZone.division }];
-            setCircleOptions(circleData);
-            setDivisionName(divisionData);
-            setCircle(userZone.circle_code);
-            setDivision(userZone.div_code);
-
-            const uniqueSubDivisions = Array.from(new Set(zones.map(z => z.sd_code)))
-                .map(sdCode => zones.find(z => z.sd_code === sdCode))
-                .map(zone => ({ sd_code: zone.sd_code, sub_division: zone.sub_division }));
-
-            setSubDivisions(uniqueSubDivisions);
-
-            const isSingleSubDivision = uniqueSubDivisions.length === 1;
-            setIsFieldsDisabled({ circle: true, division: true, subDivision: isSingleSubDivision, section: false });
-
-            if (isSingleSubDivision) {
-                const selectedSdCode = uniqueSubDivisions[0].sd_code;
-                setSubDivision(selectedSdCode);
-                await loadNextLevelAndAutoselect(selectedSdCode, 3, setSectionOptions, setSection, 'section');
-            }
-        }
-        else if (level === 'division') {
-            const circleData = [{ circle_code: userZone.circle_code, circle: userZone.circle }];
-            setCircleOptions(circleData);
-            setCircle(userZone.circle_code);
-
-            const uniqueDivisions = Array.from(new Set(zones.map(z => z.div_code)))
-                .map(divCode => zones.find(z => z.div_code === divCode))
-                .map(zone => ({ div_code: zone.div_code, division: zone.division }));
-            setDivisionName(uniqueDivisions);
-
-            const isSingleDivision = uniqueDivisions.length === 1;
-            setIsFieldsDisabled({ circle: true, division: isSingleDivision, subDivision: false, section: false });
-
-            if (isSingleDivision) {
-                const selectedDivCode = uniqueDivisions[0].div_code;
-                setDivision(selectedDivCode);
-                const sdCode = await loadNextLevelAndAutoselect(selectedDivCode, 2, setSubDivisions, setSubDivision, 'subDivision');
-                if (sdCode) {
-                    await loadNextLevelAndAutoselect(sdCode, 3, setSectionOptions, setSection, 'section');
-                }
-            }
-        }
-        else if (level === 'circle') {
-            const uniqueCircles = Array.from(new Set(zones.map(z => z.circle_code)))
-                .map(circleCode => zones.find(z => z.circle_code === circleCode))
-                .map(zone => ({ circle_code: zone.circle_code, circle: zone.circle }));
-            setCircleOptions(uniqueCircles);
-
-            const isSingleCircle = uniqueCircles.length === 1;
-            setIsFieldsDisabled({ circle: isSingleCircle, division: false, subDivision: false, section: false });
-
-            if (isSingleCircle) {
-                const selectedCircleCode = uniqueCircles[0].circle_code;
-                setCircle(selectedCircleCode);
-
-                const divCode = await loadNextLevelAndAutoselect(selectedCircleCode, 1, setDivisionName, setDivision, 'division');
-                if (divCode) {
-                    const sdCode = await loadNextLevelAndAutoselect(divCode, 2, setSubDivisions, setSubDivision, 'subDivision');
-                    if (sdCode) {
-                        await loadNextLevelAndAutoselect(sdCode, 3, setSectionOptions, setSection, 'section');
-                    }
-                }
-            }
-        }
-    }, [flagIdFunction]);
-
+    // Load initial zones and roles
     useEffect(() => {
         const loadInitialData = async () => {
             const authUser = JSON.parse(sessionStorage.getItem("authUser"));
             const userEmail = authUser?.user?.Email;
             if (userEmail) {
                 setUserName(userEmail);
-                await loadDropdownDataFromSession();
+                
+                // Load zones initially
+                try {
+                    const zonesData = await flagIdFunction({
+                        flagId: 1,
+                        requestUserName: userEmail
+                    });
+                    setZoneOptions(zonesData);
+                } catch (error) {
+                    console.error('Error loading zones:', error.message);
+                }
+
+                // Load roles initially
+                await loadRoles();
             }
         };
         loadInitialData();
-    }, [loadDropdownDataFromSession]);
+    }, [flagIdFunction, loadRoles]);
 
     // Load users when role or location filters change
     useEffect(() => {
         loadUsers();
-    }, [circle, division, subDivision, section, role, loadUsers]);
+    }, [zone, circle, division, subDivision, role, loadUsers]);
+
+    // Load all sections without exclusions
+    const loadAllSections = useCallback(async () => {
+        if (!subDivision) {
+            setAllSectionOptions([]);
+            setSectionOptions([]);
+            return;
+        }
+
+        try {
+            const sectionsData = await flagIdFunction({
+                flagId: 5,
+                requestUserName: userName,
+                sd_code: subDivision,
+                exclude_sections: [] // Get all sections initially
+            });
+            setAllSectionOptions(sectionsData);
+            setSectionOptions(sectionsData); // Set both all sections and current options
+        } catch (error) {
+            console.error('Error loading sections:', error.message);
+            setAllSectionOptions([]);
+            setSectionOptions([]);
+        }
+    }, [subDivision, userName, flagIdFunction]);
+
+    // Load sections when subDivision changes
+    useEffect(() => {
+        if (subDivision) {
+            loadAllSections();
+        } else {
+            setAllSectionOptions([]);
+            setSectionOptions([]);
+        }
+    }, [subDivision, loadAllSections]);
+
+    // Update section options based on selected sections
+    useEffect(() => {
+        if (allSectionOptions.length > 0) {
+            const selectedSections = sections.filter(section => section !== '');
+            
+            if (selectedSections.length === 0) {
+                // If no sections selected, show all options
+                setSectionOptions(allSectionOptions);
+            } else {
+                // Filter out selected sections from available options
+                const availableSections = allSectionOptions.filter(
+                    section => !selectedSections.includes(section.so_code)
+                );
+                setSectionOptions(availableSections);
+            }
+        }
+    }, [sections, allSectionOptions]);
 
     const resetSubsequentFilters = (changedLevel) => {
-        if (changedLevel === 'circle' && !isFieldsDisabled.division) {
+        if (changedLevel === 'zone') {
+            setCircle('');
+            setCircleOptions([]);
+        }
+        if (changedLevel === 'zone' || changedLevel === 'circle') {
             setDivision('');
             setDivisionName([]);
         }
-        if ((changedLevel === 'circle' || changedLevel === 'division') && !isFieldsDisabled.subDivision) {
+        if (changedLevel === 'zone' || changedLevel === 'circle' || changedLevel === 'division') {
             setSubDivision('');
             setSubDivisions([]);
         }
-        if ((changedLevel !== 'section') && !isFieldsDisabled.section) {
-            setSection('');
+        if (changedLevel === 'zone' || changedLevel === 'circle' || changedLevel === 'division' || changedLevel === 'subDivision') {
+            setSections(['']);
             setSectionOptions([]);
+            setAllSectionOptions([]);
         }
         setSelectedUser('');
         setUserOptions([]);
@@ -269,14 +220,29 @@ const Reports = () => {
         setShowResults(false);
     };
 
+    const handleZoneChange = async (e) => {
+        const selectedZoneCode = e.target.value;
+        setZone(selectedZoneCode);
+        resetSubsequentFilters('zone');
+
+        if (selectedZoneCode) {
+            const circles = await flagIdFunction({
+                flagId: 2,
+                requestUserName: userName,
+                zone_code: selectedZoneCode
+            });
+            setCircleOptions(circles);
+        }
+    };
+
     const handleCircleChange = async (e) => {
         const selectedCircleCode = e.target.value;
         setCircle(selectedCircleCode);
         resetSubsequentFilters('circle');
 
-        if (selectedCircleCode && (userLevel === 'circle' || !isFieldsDisabled.division)) {
+        if (selectedCircleCode) {
             const divisions = await flagIdFunction({
-                flagId: 1,
+                flagId: 3,
                 requestUserName: userName,
                 circle_code: selectedCircleCode
             });
@@ -287,12 +253,11 @@ const Reports = () => {
     const handleDivisionChange = async (e) => {
         const selectedDivCode = e.target.value;
         setDivision(selectedDivCode);
-
         resetSubsequentFilters('division');
 
-        if (selectedDivCode && (userLevel === 'division' || userLevel === 'circle' || !isFieldsDisabled.subDivision)) {
+        if (selectedDivCode) {
             const subdivisions = await flagIdFunction({
-                flagId: 2,
+                flagId: 4,
                 requestUserName: userName,
                 div_code: selectedDivCode
             });
@@ -303,25 +268,34 @@ const Reports = () => {
     const handleSubDivisionChange = async (e) => {
         const selectedSdCode = e.target.value;
         setSubDivision(selectedSdCode);
-
         resetSubsequentFilters('subDivision');
 
         if (selectedSdCode) {
-            if (userLevel === 'section' || userLevel === 'subdivision' || userLevel === 'division' || userLevel === 'circle') {
-                const sections = await flagIdFunction({
-                    flagId: 3,
-                    requestUserName: userName,
-                    sd_code: selectedSdCode
-                });
-                setSectionOptions(sections);
-                setIsFieldsDisabled(prev => ({
-                    ...prev,
-                    section: sections.length === 1
-                }));
-                if (sections.length === 1) {
-                    setSection(sections[0].so_code);
-                }
-            }
+            // Load all sections without any exclusions
+            loadAllSections();
+        }
+    };
+
+    const handleSectionChange = (index, value) => {
+        const newSections = [...sections];
+        newSections[index] = value;
+        setSections(newSections);
+        
+        // The useEffect above will automatically update sectionOptions based on the new selections
+    };
+
+    const addSection = () => {
+        if (sections.length < 3) {
+            setSections([...sections, '']);
+        }
+    };
+
+    const removeSection = (index) => {
+        if (sections.length > 1) {
+            const newSections = sections.filter((_, i) => i !== index);
+            setSections(newSections);
+            
+            // The useEffect above will automatically update sectionOptions when sections change
         }
     };
 
@@ -342,19 +316,34 @@ const Reports = () => {
         setShowResults(false);
     };
 
-    const handleResetFilters = () => {
-        setCircle(''); setDivision(''); setSubDivision(''); setSection('');
+    const handleResetFilters = async () => {
+        setZone(''); setCircle(''); setDivision(''); setSubDivision(''); setSections(['']);
         setRole(''); setSelectedUser(''); setReportType(''); setDateRange('');
         setCustomStartDate(''); setCustomEndDate('');
         setReportData(null); setShowResults(false);
-        setCircleOptions([]); setDivisionName([]); setSubDivisions([]); setSectionOptions([]); setUserOptions([]);
-        setIsFieldsDisabled({ circle: false, division: false, subDivision: false, section: false });
-        loadDropdownDataFromSession();
+        setCircleOptions([]); setDivisionName([]); setSubDivisions([]); 
+        setSectionOptions([]); setAllSectionOptions([]); setUserOptions([]);
+        
+        // Reload zones and roles
+        const loadZonesAndRoles = async () => {
+            try {
+                const zonesData = await flagIdFunction({
+                    flagId: 1,
+                    requestUserName: userName
+                });
+                setZoneOptions(zonesData);
+                
+                await loadRoles();
+            } catch (error) {
+                console.error('Error loading zones:', error.message);
+            }
+        };
+        loadZonesAndRoles();
     };
 
     const validateForm = () => {
-        if (!circle || !division || !subDivision || !section) {
-            setResponse('Please fill all required location filters');
+        if (!zone) {
+            setResponse('Zone is required');
             setErrorModal(true);
             return false;
         }
@@ -371,138 +360,56 @@ const Reports = () => {
         return true;
     };
 
-    const generateMockReportData = (role, userId, reportType, startDate, endDate) => {
-        const selectedUserObj = userOptions.find(user =>
-            user.id === userId || user.user_id === userId || user.email === userId
-        );
-        const userNameDisplay = selectedUserObj ?
-            (selectedUserObj.user_name || selectedUserObj.name || selectedUserObj.email || 'Selected User') :
-            'Selected User';
-
-        const mockData = {
-            summary: {
-                totalDocuments: Math.floor(Math.random() * 1000) + 100,
-                approvedDocuments: Math.floor(Math.random() * 800) + 50,
-                pendingDocuments: Math.floor(Math.random() * 100) + 10,
-                rejectedDocuments: Math.floor(Math.random() * 50) + 5,
-            },
-            details: [],
-            filters: {
-                role, user: userNameDisplay, reportType,
-                dateRange: `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`,
-                circle: circleOptions.find(c => c.circle_code === circle)?.circle || circle,
-                division: divisionName.find(d => d.div_code === division)?.division || division,
-                subDivision: subDivisions.find(s => s.sd_code === subDivision)?.sub_division || subDivision,
-                section: sectionOptions.find(s => s.so_code === section)?.section_office || section
-            }
-        };
-
-        for (let i = 1; i <= 20; i++) {
-            mockData.details.push({
-                id: i,
-                documentName: `Document_${i}.pdf`,
-                accountId: `ACC${String(i).padStart(6, '0')}`,
-                consumerName: `Consumer ${i}`,
-                uploadedBy: userNameDisplay,
-                uploadDate: new Date(startDate.getTime() + Math.random() * (endDate.getTime() - startDate.getTime())).toLocaleDateString(),
-                status: ['Approved', 'Pending', 'Rejected'][Math.floor(Math.random() * 3)],
-                category: ['Bill', 'Connection', 'Complaint', 'Service'][Math.floor(Math.random() * 4)]
+    const generateReportData = async (role, userId, reportType, startDate, endDate) => {
+        try {
+            const selectedSections = sections.filter(section => section !== '');
+            
+            const reportResponse = await misReportdropdowns({
+                flagId: 8, // Assuming flagId 8 for report generation
+                requestUserName: userName,
+                zone_code: zone,
+                circle_code: circle,
+                div_code: division,
+                sd_code: subDivision,
+                so_codes: selectedSections, // Send array of selected sections
+                role: role,
+                user_id: userId,
+                report_type: reportType,
+                start_date: startDate.toISOString().split('T')[0],
+                end_date: endDate.toISOString().split('T')[0]
             });
+
+            return reportResponse?.data || {
+                summary: {
+                    totalDocuments: 0,
+                    approvedDocuments: 0,
+                    pendingDocuments: 0,
+                    rejectedDocuments: 0,
+                },
+                details: [],
+                filters: {
+                    role,
+                    user: selectedUser,
+                    reportType,
+                    dateRange: `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`,
+                    zone: zoneOptions.find(z => z.zone_code === zone)?.zone || zone,
+                    circle: circleOptions.find(c => c.circle_code === circle)?.circle || circle,
+                    division: divisionName.find(d => d.div_code === division)?.division || division,
+                    subDivision: subDivisions.find(s => s.sd_code === subDivision)?.sub_division || subDivision,
+                    sections: selectedSections.map(sec => 
+                        allSectionOptions.find(s => s.so_code === sec)?.section_office || sec
+                    )
+                }
+            };
+        } catch (error) {
+            console.error('Error generating report data:', error);
+            throw error;
         }
-        return mockData;
     };
 
-
-    // --- FUNCTION TO OPEN REPORT IN STANDALONE HTML WINDOW ---
     const openReportInNewWindow = (reportData) => {
         const safeReportData = JSON.stringify(reportData);
 
-        // --- PDF EXPORT CONTENT (Clean Data Only) ---
-        const getPdfContent = (data) => {
-            const detailsRows = data.details.map((item, index) => `
-                <tr>
-                    <td>${index + 1}</td>
-                    <td>${item.documentName}</td>
-                    <td>${item.accountId}</td>
-                    <td>${item.consumerName}</td>
-                    <td>${item.uploadedBy}</td>
-                    <td>${item.uploadDate}</td>
-                    <td>${item.status}</td>
-                    <td>${item.category}</td>
-                </tr>
-            `).join('');
-
-            return `
-                <html>
-                    <head>
-                        <title>Report - ${data.filters.reportType}</title>
-                        <style>
-                            body { font-family: Arial, sans-serif; margin: 20px; }
-                            h2, h4 { margin: 5px 0; text-align: center; }
-                            .filters p { margin: 5px 0; }
-                            .filters { margin-bottom: 20px; border: 1px solid #ddd; padding: 10px; font-size: 10pt; }
-                            .summary table { width: 100%; margin-bottom: 20px; border-collapse: collapse; }
-                            .summary th, .summary td { border: 1px solid #ddd; padding: 8px; text-align: center; font-weight: bold; }
-                            table.detail-table { width: 100%; border-collapse: collapse; }
-                            table.detail-table th, table.detail-table td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 9pt; }
-                            table.detail-table th { background-color: #f2f2f2; }
-                        </style>
-                    </head>
-                    <body>
-                        <h2>${data.filters.reportType} Report</h2>
-                        <h4>User: ${data.filters.user} | Role: ${data.filters.role}</h4>
-
-                        <div class="filters">
-                            <p><strong>Location:</strong> ${data.filters.circle} / ${data.filters.division} / ${data.filters.subDivision} / ${data.filters.section}</p>
-                            <p><strong>Date Range:</strong> ${data.filters.dateRange}</p>
-                        </div>
-
-                        <div class="summary">
-                            <h4>Summary</h4>
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Total Documents</th>
-                                        <th>Approved</th>
-                                        <th>Pending</th>
-                                        <th>Rejected</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>${data.summary.totalDocuments}</td>
-                                        <td>${data.summary.approvedDocuments}</td>
-                                        <td>${data.summary.pendingDocuments}</td>
-                                        <td>${data.summary.rejectedDocuments}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <h4>Detailed Records</h4>
-                        <table class="detail-table">
-                            <thead>
-                                <tr>
-                                    <th>S.No</th>
-                                    <th>Document Name</th>
-                                    <th>Account ID</th>
-                                    <th>Consumer Name</th>
-                                    <th>Uploaded By</th>
-                                    <th>Upload Date</th>
-                                    <th>Status</th>
-                                    <th>Category</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${detailsRows}
-                            </tbody>
-                        </table>
-                    </body>
-                </html>
-            `;
-        };
-        
-        // --- BASE HTML FOR THE VIEWER TAB (With embedded JS functions) ---
         const baseHtmlContent = `
             <!DOCTYPE html>
             <html lang="en">
@@ -512,7 +419,6 @@ const Reports = () => {
                 <title>${reportData.filters.reportType} Report | DMS</title>
                 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
                 <style>
-                    /* Display Styles */
                     body { font-family: Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
                     .report-container { max-width: 1400px; margin: 20px auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
                     .header { background-color: #007bff; color: white; padding: 15px; border-radius: 6px 6px 0 0; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
@@ -532,10 +438,7 @@ const Reports = () => {
                 <script>
                     const REPORT_DATA = ${safeReportData};
                     
-                    // --- EXPORT FUNCTIONS (Optimized for data output) ---
-                    
                     function exportToPDF() {
-                        // Use the clean content from the function
                         const pdfContent = (function(data) {
                             const detailsRows = data.details.map((item, index) => \`
                                 <tr>
@@ -571,7 +474,9 @@ const Reports = () => {
                                         <h4>User: \${data.filters.user} | Role: \${data.filters.role}</h4>
 
                                         <div class="filters">
-                                            <p><strong>Location:</strong> \${data.filters.circle} / \${data.filters.division} / \${data.filters.subDivision} / \${data.filters.section}</p>
+                                            <p><strong>Zone:</strong> \${data.filters.zone}</p>
+                                            <p><strong>Location:</strong> \${data.filters.circle} / \${data.filters.division} / \${data.filters.subDivision}</p>
+                                            <p><strong>Sections:</strong> \${data.filters.sections.join(', ')}</p>
                                             <p><strong>Date Range:</strong> \${data.filters.dateRange}</p>
                                         </div>
 
@@ -623,33 +528,33 @@ const Reports = () => {
                         const printWindow = window.open();
                         printWindow.document.write(pdfContent);
                         printWindow.document.close();
-                        // Use timeout to ensure content is fully rendered before print command
                         setTimeout(() => printWindow.print(), 250); 
                     }
 
                     function exportToExcel() {
                         let csvContent = "";
                         
-                        // 1. Filter Metadata (Clean)
+                        // Filter Metadata
                         csvContent += "Report Type," + REPORT_DATA.filters.reportType + "\\n";
                         csvContent += "User," + REPORT_DATA.filters.user + "\\n";
+                        csvContent += "Zone," + REPORT_DATA.filters.zone + "\\n";
                         csvContent += "Date Range," + REPORT_DATA.filters.dateRange + "\\n";
                         csvContent += "Circle," + REPORT_DATA.filters.circle + "\\n";
                         csvContent += "Division," + REPORT_DATA.filters.division + "\\n";
                         csvContent += "Sub Division," + REPORT_DATA.filters.subDivision + "\\n";
-                        csvContent += "Section," + REPORT_DATA.filters.section + "\\n\\n";
+                        csvContent += "Sections," + REPORT_DATA.filters.sections.join('; ') + "\\n\\n";
                         
-                        // 2. Summary (Clean)
+                        // Summary
                         csvContent += "Summary\\n";
                         csvContent += "Total Documents," + REPORT_DATA.summary.totalDocuments + "\\n";
                         csvContent += "Approved Documents," + REPORT_DATA.summary.approvedDocuments + "\\n";
                         csvContent += "Pending Documents," + REPORT_DATA.summary.pendingDocuments + "\\n";
                         csvContent += "Rejected Documents," + REPORT_DATA.summary.rejectedDocuments + "\\n\\n";
                         
-                        // 3. Table Headers (Clean)
+                        // Table Headers
                         csvContent += "S.No,Document Name,Account ID,Consumer Name,Uploaded By,Upload Date,Status,Category\\n";
                         
-                        // 4. Data Rows (Clean - uses quotes to protect text fields)
+                        // Data Rows
                         REPORT_DATA.details.forEach((row, index) => {
                             csvContent += (index + 1) + ',"' + row.documentName + '","' + row.accountId + '","' + row.consumerName + '","' + row.uploadedBy + '","' + row.uploadDate + '","' + row.status + '","' + row.category + '"\\n';
                         });
@@ -667,7 +572,6 @@ const Reports = () => {
                         window.close();
                     }
 
-                    // --- Render function for the current tab viewer ---
                     function renderReport(data) {
                         const root = document.getElementById('report-root');
                         
@@ -710,10 +614,11 @@ const Reports = () => {
                                 <div class="filters-box">
                                     <h6 class="mb-3">Applied Filters</h6>
                                     <div class="row g-2">
+                                        <div class="col-md-3"><small class="text-muted">Zone:</small><div class="fw-semibold">\${data.filters.zone}</div></div>
                                         <div class="col-md-3"><small class="text-muted">Circle:</small><div class="fw-semibold">\${data.filters.circle}</div></div>
                                         <div class="col-md-3"><small class="text-muted">Division:</small><div class="fw-semibold">\${data.filters.division}</div></div>
                                         <div class="col-md-3"><small class="text-muted">Sub Division:</small><div class="fw-semibold">\${data.filters.subDivision}</div></div>
-                                        <div class="col-md-3"><small class="text-muted">Section:</small><div class="fw-semibold">\${data.filters.section}</div></div>
+                                        <div class="col-md-6"><small class="text-muted">Sections:</small><div class="fw-semibold">\${data.filters.sections.join(', ')}</div></div>
                                         <div class="col-md-3"><small class="text-muted">Role:</small><div class="fw-semibold">\${data.filters.role}</div></div>
                                         <div class="col-md-3"><small class="text-muted">User:</small><div class="fw-semibold">\${data.filters.user}</div></div>
                                         <div class="col-md-6"><small class="text-muted">Date Range:</small><div class="fw-semibold">\${data.filters.dateRange}</div></div>
@@ -746,7 +651,6 @@ const Reports = () => {
                         \`;
                     }
 
-                    // Render the report immediately on load
                     document.addEventListener('DOMContentLoaded', () => {
                         renderReport(REPORT_DATA);
                     });
@@ -759,7 +663,6 @@ const Reports = () => {
         newWindow.document.write(baseHtmlContent);
         newWindow.document.close();
     };
-
 
     const handleGenerateReport = async () => {
         try {
@@ -802,19 +705,17 @@ const Reports = () => {
                     endDate.setHours(23, 59, 59, 999);
             }
 
-            setTimeout(() => {
-                const generatedReportData = generateMockReportData(role, selectedUser, reportType, startDate, endDate);
+            const generatedReportData = await generateReportData(role, selectedUser, reportType, startDate, endDate);
 
-                // Open the custom-generated HTML window directly
-                openReportInNewWindow(generatedReportData);
+            // Open the custom-generated HTML window directly
+            openReportInNewWindow(generatedReportData);
 
-                setReportData(generatedReportData);
-                setShowResults(true);
+            setReportData(generatedReportData);
+            setShowResults(true);
 
-                setResponse('Report generated successfully and opened in a new window.');
-                setSuccessModal(true);
-                setLoading(false);
-            }, 2000);
+            setResponse('Report generated successfully and opened in a new window.');
+            setSuccessModal(true);
+            setLoading(false);
 
         } catch (error) {
             console.error('Error generating report:', error.message);
@@ -847,7 +748,7 @@ const Reports = () => {
                     {/* Progressive Card Display */}
                     <Row className="mb-4">
                         {/* Card 1: Location Filters - Always visible */}
-                        <Col lg={3} md={6} className="mb-3">
+                        <Col lg={4} md={6} className="mb-3">
                             <Card className="h-100">
                                 <CardHeader className="bg-primary text-white p-2">
                                     <h6 className="mb-0 card-title text-white">
@@ -859,14 +760,34 @@ const Reports = () => {
                                         <FormGroup className="mb-0">
                                             <div className="row align-items-center">
                                                 <div className="col-4">
-                                                    <Label className="form-label fw-medium mb-0">Circle <span className="text-danger">*</span></Label>
+                                                    <Label className="form-label fw-medium mb-0">Zone <span className="text-danger">*</span></Label>
+                                                </div>
+                                                <div className="col-8">
+                                                    <Input
+                                                        type="select"
+                                                        value={zone}
+                                                        onChange={handleZoneChange}
+                                                        className="form-select"
+                                                    >
+                                                        <option value="">Select Zone</option>
+                                                        {zoneOptions.map(zone => (
+                                                            <option key={zone.zone_code} value={zone.zone_code}>{zone.zone}</option>
+                                                        ))}
+                                                    </Input>
+                                                </div>
+                                            </div>
+                                        </FormGroup>
+
+                                        <FormGroup className="mb-0">
+                                            <div className="row align-items-center">
+                                                <div className="col-4">
+                                                    <Label className="form-label fw-medium mb-0">Circle</Label>
                                                 </div>
                                                 <div className="col-8">
                                                     <Input
                                                         type="select"
                                                         value={circle}
                                                         onChange={handleCircleChange}
-                                                        disabled={isFieldsDisabled.circle}
                                                         className="form-select"
                                                     >
                                                         <option value="">Select Circle</option>
@@ -881,14 +802,13 @@ const Reports = () => {
                                         <FormGroup className="mb-0">
                                             <div className="row align-items-center">
                                                 <div className="col-4">
-                                                    <Label className="form-label fw-medium mb-0">Division <span className="text-danger">*</span></Label>
+                                                    <Label className="form-label fw-medium mb-0">Division</Label>
                                                 </div>
                                                 <div className="col-8">
                                                     <Input
                                                         type="select"
                                                         value={division}
                                                         onChange={handleDivisionChange}
-                                                        disabled={isFieldsDisabled.division || !circle}
                                                         className="form-select"
                                                     >
                                                         <option value="">Select Division</option>
@@ -903,14 +823,13 @@ const Reports = () => {
                                         <FormGroup className="mb-0">
                                             <div className="row align-items-center">
                                                 <div className="col-4">
-                                                    <Label className="form-label fw-medium mb-0">Sub Division <span className="text-danger">*</span></Label>
+                                                    <Label className="form-label fw-medium mb-0">Sub Division</Label>
                                                 </div>
                                                 <div className="col-8">
                                                     <Input
                                                         type="select"
                                                         value={subDivision}
                                                         onChange={handleSubDivisionChange}
-                                                        disabled={isFieldsDisabled.subDivision || !division}
                                                         className="form-select"
                                                     >
                                                         <option value="">Select Sub Division</option>
@@ -924,37 +843,68 @@ const Reports = () => {
                                             </div>
                                         </FormGroup>
 
-                                        <FormGroup className="mb-0">
-                                            <div className="row align-items-center">
-                                                <div className="col-4">
-                                                    <Label className="form-label fw-medium mb-0">Section <span className="text-danger">*</span></Label>
+                                        {/* Multiple Sections */}
+                                        {sections.map((sectionValue, index) => (
+                                            <FormGroup key={index} className="mb-0">
+                                                <div className="row align-items-center">
+                                                    <div className="col-4">
+                                                        <Label className="form-label fw-medium mb-0">
+                                                            Section {index + 1}
+                                                        </Label>
+                                                    </div>
+                                                    <div className="col-7">
+                                                        <Input
+                                                            type="select"
+                                                            value={sectionValue}
+                                                            onChange={(e) => handleSectionChange(index, e.target.value)}
+                                                            className="form-select"
+                                                        >
+                                                            <option value="">Select Section</option>
+                                                            {sectionOptions.map(sec => (
+                                                                <option key={sec.so_code} value={sec.so_code}>
+                                                                    {sec.section_office}
+                                                                </option>
+                                                            ))}
+                                                        </Input>
+                                                    </div>
+                                                    <div className="col-1">
+                                                        {sections.length > 1 && (
+                                                            <Button
+                                                                color="danger"
+                                                                size="sm"
+                                                                className="p-1"
+                                                                onClick={() => removeSection(index)}
+                                                            >
+                                                                <i className="ri-close-line"></i>
+                                                            </Button>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div className="col-8">
-                                                    <Input
-                                                        type="select"
-                                                        value={section}
-                                                        onChange={(e) => { setSection(e.target.value); resetSubsequentFilters('section'); }}
-                                                        disabled={isFieldsDisabled.section || !subDivision}
-                                                        className="form-select"
-                                                    >
-                                                        <option value="">Select Section</option>
-                                                        {sectionOptions.map(sec => (
-                                                            <option key={sec.so_code} value={sec.so_code}>
-                                                                {sec.section_office}
-                                                            </option>
-                                                        ))}
-                                                    </Input>
-                                                </div>
+                                            </FormGroup>
+                                        ))}
+
+                                        {/* Add Section Button */}
+                                        {sections.length < 3 && (
+                                            <div className="text-center mt-2">
+                                                <Button
+                                                    color="outline-primary"
+                                                    size="sm"
+                                                    onClick={addSection}
+                                                    disabled={!subDivision}
+                                                >
+                                                    <i className="ri-add-line me-1"></i>
+                                                    Add Section
+                                                </Button>
                                             </div>
-                                        </FormGroup>
+                                        )}
                                     </div>
                                 </CardBody>
                             </Card>
                         </Col>
 
-                        {/* Card 2: Report Parameters - Show after location filters are complete */}
-                        {circle && division && subDivision && section && (
-                            <Col lg={3} md={6} className="mb-3">
+                        {/* Card 2: Report Parameters - Show after zone is selected */}
+                        {zone && (
+                            <Col lg={4} md={6} className="mb-3">
                                 <Card className="h-100">
                                     <CardHeader className="bg-primary text-white p-2">
                                         <h6 className="mb-0 card-title text-white">
@@ -976,8 +926,11 @@ const Reports = () => {
                                                             className="form-select"
                                                         >
                                                             <option value="">Select Role</option>
-                                                            <option value="Uploader">Uploader</option>
-                                                            <option value="QC">QC</option>
+                                                            {roleOptions.map(role => (
+                                                                <option key={role.Role_Id} value={role.RoleName}>
+                                                                    {role.RoleName}
+                                                                </option>
+                                                            ))}
                                                         </Input>
                                                     </div>
                                                 </div>
@@ -993,7 +946,6 @@ const Reports = () => {
                                                             type="select"
                                                             value={selectedUser}
                                                             onChange={(e) => setSelectedUser(e.target.value)}
-                                                            disabled={!role || userOptions.length === 0}
                                                             className="form-select"
                                                         >
                                                             <option value="">Select User</option>
@@ -1060,8 +1012,8 @@ const Reports = () => {
                         )}
 
                         {/* Card 3: Date Range & Actions - Show after report parameters are selected */}
-                        {circle && division && subDivision && section && role && selectedUser && reportType && dateRange && (
-                            <Col lg={3} md={6} className="mb-3">
+                        {zone && role && selectedUser && reportType && dateRange && (
+                            <Col lg={4} md={6} className="mb-3">
                                 <Card className="h-100">
                                     <CardHeader className="bg-primary text-white p-2">
                                         <h6 className="mb-0 card-title text-white">
@@ -1110,7 +1062,7 @@ const Reports = () => {
                                                     </>
                                                 ) : (
                                                     <div className="text-muted text-center pt-5 pb-5">
-                                                        Date range calculated dynamically for: **{dateRange.toUpperCase()}**
+                                                        Date range calculated dynamically for: <strong>{dateRange.toUpperCase()}</strong>
                                                     </div>
                                                 )}
                                             </div>
