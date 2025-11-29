@@ -391,6 +391,7 @@ export const singleZoneUpload =(data) => api.create(url.SINGLE_ZONE_UPLOAD,data)
 export const singleConsumerUpload =(data) => api.create (url.SINGLE_CONSUMER_UPLOAD,data);
 export const Scanning =(data) => api.create(url.SCAN_IMPLEMENT,data);
 export const documentAudit =(data) => api.create(url.Document_Audit,data);
+export const misReportdropdowns =(data) => api.create(url.misReportdrpdwns,data);
 
 
 
