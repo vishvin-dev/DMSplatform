@@ -13,6 +13,7 @@ import BillingReport from "../pages/MIsReport/BillingReport"
 import ReasonWiseBillingEfficiency from "../pages/MIsReport/ReasonWiseBillingEfficiency"
 import ResetPassword from "../pages/Authentication/ResetPassword"
 import ForcePasswordGuard from "../Routes/ForcePasswordGuard"
+import ReportView from '../pages/Reports/ReportView';
 
 
 const Index = () => {
@@ -35,6 +36,7 @@ const Index = () => {
                     <Route path="reportPreview" element={<ReportPreview />} />
                     <Route path="billingReport" element={<BillingReport />} />
                     <Route path="reasonWiseBillingEfficiency" element={<ReasonWiseBillingEfficiency />} />
+                    <Route path="report-view" element={<ReportView />} />
 
 
                     <Route
