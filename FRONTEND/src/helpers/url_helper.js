@@ -273,7 +273,7 @@ export const Document_Audit= "/backend-service/document_audit_logs";
 export const BULK_SCAN= "/scan-service/bulk-scan";
 export const misReportdrpdwns= "/backend-service/misReport/dropdown"
 export const UserDpdwns= "/backend-service/misReport/users"
-
+export const SCAN_UPLOAD= "/backend-service/documentUpload/scanUpload"
 //DOCUMENT CATEGORY
 export const DOCUMENT_CATEGORY_GET_URL = "/es-admin-svc/es/admin/documentCategory";
 export const DOCUMENT_CATEGORY_GET_TYPE_URL = "/es-admin-svc/es/admin/documentType";

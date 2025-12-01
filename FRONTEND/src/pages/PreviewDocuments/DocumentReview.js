@@ -8,8 +8,8 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
-// UPDATED: Added scanUpload back to imports as requested
-// import { getDocumentDropdowns, postDocumentUpload, scanUpload } from '../../helpers/fakebackend_helper';
+// Ensure these helpers are correctly imported from your project structure
+import { getDocumentDropdowns, postDocumentUpload, scanUpload } from '../../helpers/fakebackend_helper';
 import { io } from "socket.io-client";
 import axios from 'axios';
 
@@ -82,28 +82,65 @@ const TagEditor = ({ tags, onAddTag, onRemoveTag, readOnly = false }) => {
     );
 };
 
-const DocumentThumbnails = ({ documents, selectedFile, onFileSelect }) => (
-    <Card className="h-100 d-flex flex-column">
-        <CardHeader className="bg-light p-3 position-relative" style={{ borderTop: '3px solid #405189' }}>
-            <h5 className="mb-0">Documents<Badge color="secondary" pill>{documents.length}</Badge></h5>
-        </CardHeader>
-        <CardBody className="p-2 thumbnail-pane flex-grow-1" style={{ overflowY: 'auto', minHeight: 0 }}>
-            <Row className="g-2">
-                {documents.map(doc => (
-                    <Col key={doc.id} xs={6} md={4} lg={6}>
-                        <div
-                            className={`thumbnail-card p-2 border rounded text-center ${selectedFile?.id === doc.id ? 'active' : ''}`}
-                            onClick={() => onFileSelect(doc)}
-                        >
-                            {getFileIcon(doc.name || doc.DraftName)}
-                            <p className="thumbnail-name text-muted small mt-2 mb-0 text-truncate">{doc.name || doc.DraftName}</p>
-                        </div>
-                    </Col>
-                ))}
-            </Row>
-        </CardBody>
-    </Card>
-);
+// --- UPDATED THUMBNAILS COMPONENT ---
+const DocumentThumbnails = ({ documents, selectedFile, onFileSelect }) => {
+    
+    const renderThumbnailContent = (doc) => {
+        const fileName = doc.name || doc.DraftName || '';
+        // Check if file is likely an image based on extension or mime type
+        const isImage = fileName.match(/\.(jpg|jpeg|png|gif|bmp)$/i) || (doc.type && doc.type.startsWith('image/'));
+        
+        // If it is an image and we have the blob URL, show the image
+        if (isImage && doc.previewUrl) {
+            return (
+                <img 
+                    src={doc.previewUrl} 
+                    alt={fileName}
+                    loading="lazy"
+                    style={{ 
+                        width: '100%', 
+                        height: '100%', 
+                        objectFit: 'contain', 
+                        borderRadius: '4px'
+                    }} 
+                />
+            );
+        }
+        
+        // Fallback to icon for PDFs or loading state
+        return getFileIcon(fileName);
+    };
+
+    return (
+        <Card className="h-100 d-flex flex-column">
+            <CardHeader className="bg-light p-3 position-relative" style={{ borderTop: '3px solid #405189' }}>
+                <h5 className="mb-0">Documents<Badge color="secondary" pill className="ms-1">{documents.length}</Badge></h5>
+            </CardHeader>
+            <CardBody className="p-2 thumbnail-pane flex-grow-1" style={{ overflowY: 'auto', minHeight: 0 }}>
+                <Row className="g-2">
+                    {documents.map(doc => (
+                        <Col key={doc.id} xs={6} md={4} lg={6}>
+                            <div
+                                className={`thumbnail-card p-2 border rounded text-center ${selectedFile?.id === doc.id ? 'active' : ''}`}
+                                onClick={() => onFileSelect(doc)}
+                                style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                            >
+                                {/* Fixed height container for thumbnail */}
+                                <div className="d-flex align-items-center justify-content-center mb-2 bg-white rounded border-light" 
+                                     style={{ height: '100px', overflow: 'hidden', border: '1px solid #f0f0f0' }}>
+                                    {renderThumbnailContent(doc)}
+                                </div>
+                                <p className="thumbnail-name text-muted small mt-0 mb-0 text-truncate" title={doc.name || doc.DraftName}>
+                                    {doc.name || doc.DraftName}
+                                </p>
+                            </div>
+                        </Col>
+                    ))}
+                </Row>
+            </CardBody>
+        </Card>
+    );
+};
 
 const DocumentPreview = ({ file, loading, error }) => {
     const [zoom, setZoom] = useState(1);
@@ -376,7 +413,6 @@ const ScanPreviewModal = ({
             setOcrStatus('running');
             setRecognizedText('');
             setOcrError('');
-            // Use try/catch when posting messages, though usually safe
             try {
                 iframeRef.current.contentWindow.postMessage({ type: 'RUN_OCR' }, '*');
             } catch (e) {
@@ -421,12 +457,9 @@ const ScanPreviewModal = ({
 
     useEffect(() => {
         const handleMessageFromIframe = (event) => {
-            // FIX: Added safety check to ignore invalid messages (e.g. from extensions)
             if (!event.data || typeof event.data !== 'object') return;
             
             const { type, text, error } = event.data;
-            
-            // Only process messages with a valid type we expect
             if (!type) return;
 
             switch (type) {
@@ -452,7 +485,6 @@ const ScanPreviewModal = ({
                     }
                     break;
                 default:
-                    // Ignore unknown message types (they might be from extensions)
                     break;
             }
         };
@@ -645,7 +677,6 @@ const DocumentReview = () => {
 
     const scanTimeoutIdRef = useRef(null);
     const progressIntervalRef = useRef(null);
-    // NEW: Ref to hold AbortController for cancelling API requests
     const scanAbortControllerRef = useRef(null);
 
     const documentsForReviewRef = useRef(documentsForReview);
@@ -665,6 +696,60 @@ const DocumentReview = () => {
     const [isSubmittingDraft, setIsSubmittingDraft] = useState(false);
     const [isBulkScanning, setIsBulkScanning] = useState(false);
     const [verificationDetails, setVerificationDetails] = useState(null);
+
+    // --- PRE-LOAD THUMBNAILS LOGIC ---
+    useEffect(() => {
+        const fetchThumbnail = async (doc) => {
+            if (doc.previewUrl || (!doc.Draft_Id && !doc.draftId)) return;
+            const docId = doc.Draft_Id || doc.draftId;
+
+            try {
+                const response = await axios.post(
+                    VIEW_DOCUMENT_URL,
+                    { flagId: 4, Draft_Id: docId },
+                    { responseType: "blob" }
+                );
+
+                let blobData = response.data ? response.data : response;
+                if (blobData.type === 'application/json') return;
+
+                const fileName = doc.name || doc.DraftName || "doc.jpg";
+                let finalType = blobData.type;
+                if (!finalType || finalType === 'application/octet-stream') {
+                    if (fileName.match(/\.pdf$/i)) finalType = 'application/pdf';
+                    else if (fileName.match(/\.(jpeg|jpg)$/i)) finalType = 'image/jpeg';
+                    else if (fileName.match(/\.png$/i)) finalType = 'image/png';
+                    blobData = blobData.slice(0, blobData.size, finalType);
+                }
+
+                const fileUrl = URL.createObjectURL(blobData);
+
+                setDocumentsForReview((prevDocs) => 
+                    prevDocs.map((d) => {
+                        const currentId = d.Draft_Id || d.draftId || d.id;
+                        if (currentId === docId) {
+                            return { ...d, previewUrl: fileUrl, type: finalType };
+                        }
+                        return d;
+                    })
+                );
+                
+                if (selectedFile && (selectedFile.Draft_Id === docId || selectedFile.draftId === docId)) {
+                     setSelectedFile(prev => ({ ...prev, previewUrl: fileUrl, type: finalType }));
+                }
+            } catch (error) {
+                console.error("Error pre-loading thumbnail:", error);
+            }
+        };
+
+        if (documentsForReview && documentsForReview.length > 0) {
+            documentsForReview.forEach(doc => {
+                if (!doc.previewUrl) {
+                    fetchThumbnail(doc);
+                }
+            });
+        }
+    }, [documentsForReview.length]);
 
     useEffect(() => {
         if (consumerData) {
@@ -692,8 +777,6 @@ const DocumentReview = () => {
             }
         };
     }, []);
-
-
 
     useEffect(() => {
         if (!socket) return;
@@ -915,11 +998,19 @@ const DocumentReview = () => {
 
         const docId = doc.Draft_Id || doc.draftId;
 
+        // Optimization: If we already have the blob url from pre-loading, skip fetch
+        if (doc.previewUrl && !doc.previewUrl.startsWith('blob:')) {
+            // It might be a static URL, but if it is a blob, we are good.
+            // If it is just a string URL and we need to fetch blob for hydration?
+            // The pre-loader logic handles blob creation. If it's here, we likely have it.
+             setPreviewLoading(false);
+             return;
+        } else if (doc.previewUrl) {
+             setPreviewLoading(false);
+             return;
+        }
+
         if (!docId) {
-            if (doc.previewUrl) {
-                setPreviewLoading(false);
-                return;
-            }
             setPreviewLoading(false);
             return;
         }
@@ -1000,7 +1091,6 @@ const DocumentReview = () => {
         };
     }, []);
 
-    // --- SUBMIT REVIEW WITH IMPORTED scanUpload ---
     const handleSubmitReview = async () => {
         setLoading(true);
         const finalDocuments = documentsForReview;
@@ -1034,7 +1124,6 @@ const DocumentReview = () => {
         };
 
         try {
-            // FIX: Using the imported scanUpload function
             const apiResponse = await scanUpload(payload);
             
             if (apiResponse && (apiResponse.status === 'success' || apiResponse.success || apiResponse.status === 200)) {
@@ -1057,18 +1146,14 @@ const DocumentReview = () => {
         navigate('/Preview', { state: { refresh: true } });
     };
 
-    // --- NEW: Handle Cancel Scan Logic ---
     const handleCancelScan = () => {
-        // Abort the ongoing axios request
         if (scanAbortControllerRef.current) {
             scanAbortControllerRef.current.abort();
         }
 
-        // Clear timers
         if (scanTimeoutIdRef.current) clearTimeout(scanTimeoutIdRef.current);
         if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
 
-        // Reset all scanning related states
         setIsScanningModalOpen(false);
         setScanningInProgress(false);
         setIsBulkScanning(false);
@@ -1078,7 +1163,6 @@ const DocumentReview = () => {
         setPageToRescanId(null);
         setCurrentScanFileName('');
         
-        // Optional: Reset progress
         setScanProgress(0);
     };
 
@@ -1093,7 +1177,6 @@ const DocumentReview = () => {
             return;
         }
 
-        // Create new AbortController
         if (scanAbortControllerRef.current) scanAbortControllerRef.current.abort();
         scanAbortControllerRef.current = new AbortController();
 
@@ -1120,7 +1203,7 @@ const DocumentReview = () => {
                 { fileName: fileNameForApi, format: "jpg", colorMode: "color" }, 
                 { 
                     timeout: 30000,
-                    signal: scanAbortControllerRef.current.signal // Pass signal to axios
+                    signal: scanAbortControllerRef.current.signal 
                 }
             );
 
@@ -1145,7 +1228,6 @@ const DocumentReview = () => {
             }, 30000);
 
         } catch (error) {
-            // Ignore abort errors
             if (axios.isCancel(error)) return;
 
             if (progressIntervalRef.current) {
@@ -1183,7 +1265,6 @@ const DocumentReview = () => {
             return;
         }
 
-        // Create new AbortController
         if (scanAbortControllerRef.current) scanAbortControllerRef.current.abort();
         scanAbortControllerRef.current = new AbortController();
 
@@ -1211,7 +1292,7 @@ const DocumentReview = () => {
                 payload, 
                 { 
                     timeout: BULK_TIMEOUT_MS,
-                    signal: scanAbortControllerRef.current.signal // Pass signal to axios
+                    signal: scanAbortControllerRef.current.signal 
                 }
             );
 
@@ -1233,7 +1314,6 @@ const DocumentReview = () => {
             }, BULK_TIMEOUT_MS);
 
         } catch (error) {
-            // Ignore abort errors
             if (axios.isCancel(error)) return;
 
             if (progressIntervalRef.current) {
@@ -1702,7 +1782,6 @@ const DocumentReview = () => {
                         <p className="text-muted">Waiting for document from scanner.</p>
                         <Progress animated color="primary" value={scanProgress} className="mt-4" />
                         
-                        {/* Cancel Button Added Below */}
                         <div className="mt-4">
                             <Button color="danger" outline onClick={handleCancelScan}>
                                 Cancel Scan
