@@ -3,7 +3,8 @@ import {
     getCirclee,
     getDivisionss,
     getSubDivisionss,
-    getSectionss, getRoless,
+    getSectionss, 
+    getRoless,
     getUsersByRoleAndLocation,
     getReportData
 } from "../../models/MisReport.js"
@@ -59,8 +60,7 @@ export const getUsersDropdown = async (req, res) => {
 export const generateReport = async (req, res) => {
     try {
         const { filters = {}, dateMethod = "day", datePayload = {} } = req.body;
-        console.log(req.body)
-
+    
         let dateRange;
         try {
             dateRange = getDateRange(dateMethod, datePayload);
@@ -75,7 +75,7 @@ export const generateReport = async (req, res) => {
 
         return res.status(200).json({
             status: true,
-            meta: { filters, dateRange },
+            // meta: { filters },
             data: rows
         });
 
