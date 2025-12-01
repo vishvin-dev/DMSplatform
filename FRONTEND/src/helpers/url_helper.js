@@ -272,6 +272,7 @@ export const SCAN_IMPLEMENT="/scan-service/scan";
 export const Document_Audit= "/backend-service/document_audit_logs";
 export const BULK_SCAN= "/scan-service/bulk-scan";
 export const misReportdrpdwns= "/backend-service/misReport/dropdown"
+export const UserDpdwns= "/backend-service/misReport/users"
 
 //DOCUMENT CATEGORY
 export const DOCUMENT_CATEGORY_GET_URL = "/es-admin-svc/es/admin/documentCategory";
@@ -605,7 +606,6 @@ export const DELETE_TEAMDATA = "/delete/teamData";
 export const ADD_NEW_TEAMDATA = "/add/teamData";
 export const UPDATE_TEAMDATA = "/update/teamData";
 
-// File Manager
 // Folder
 export const GET_FOLDERS = "/folder";
 export const DELETE_FOLDER = "/delete/folder";
