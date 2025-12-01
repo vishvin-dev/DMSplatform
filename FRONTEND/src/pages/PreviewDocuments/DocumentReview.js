@@ -9,7 +9,7 @@ import BreadCrumb from '../../Components/Common/BreadCrumb';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
 // UPDATED: Added scanUpload back to imports as requested
-import { getDocumentDropdowns, postDocumentUpload, scanUpload } from '../../helpers/fakebackend_helper';
+// import { getDocumentDropdowns, postDocumentUpload, scanUpload } from '../../helpers/fakebackend_helper';
 import { io } from "socket.io-client";
 import axios from 'axios';
 
