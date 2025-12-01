@@ -394,6 +394,7 @@ export const Scanning =(data) => api.create(url.SCAN_IMPLEMENT,data);
 export const documentAudit =(data) => api.create(url.Document_Audit,data);
 export const misReportdropdowns =(data) => api.create(url.misReportdrpdwns,data);
 export const misReportuserdrpdwns =(data) => api.create(url.UserDpdwns,data);
+export const misReportdata =(data) => api.create(url.misReportDMS,data);
 
 
 
