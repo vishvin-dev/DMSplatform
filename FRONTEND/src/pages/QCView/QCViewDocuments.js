@@ -3440,7 +3440,7 @@ const QCViewDocuments = () => {
 
         const payload = {
             flagId: 5,  
-            user_id: userInfo.userId,  
+            User_Id: userInfo.userId,  
             Role_Id: userInfo.roleId,
             VersionIds: [versionId]  
         };
@@ -3477,7 +3477,7 @@ const QCViewDocuments = () => {
             const payload = {
                 flagId: 6,
                 User_Id: userInfo.userId,
-                Version_Id: [versionId],
+                VersionIds: [versionId],
                 comment: reason
             };
 

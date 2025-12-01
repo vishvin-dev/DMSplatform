@@ -378,6 +378,7 @@ export const qcView = (data) => api.create(url.GET_QC_DOCUMENT, data);
 export const qcPreview = (data, config = {}) => api.create(url.GET_QC_DOCUMENT, data, config);
 export const qcApproveReject = (data) => api.create(url.GET_QC_DOCUMENT, data);
 export const bulkscan =(data) => api.create(url.BULK_SCAN,data);
+// export const scanUpload =(data) => api.create(url.SCAN_UPLOAD,data);
 // export const view = (data, config = {}) =>
 //   api.create(url.VIEW_DOCUMENT, data, config);
 export const view = (data, config = {}) =>
@@ -392,6 +393,7 @@ export const singleConsumerUpload =(data) => api.create (url.SINGLE_CONSUMER_UPL
 export const Scanning =(data) => api.create(url.SCAN_IMPLEMENT,data);
 export const documentAudit =(data) => api.create(url.Document_Audit,data);
 export const misReportdropdowns =(data) => api.create(url.misReportdrpdwns,data);
+export const misReportuserdrpdwns =(data) => api.create(url.UserDpdwns,data);
 
 
 

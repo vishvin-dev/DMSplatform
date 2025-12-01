@@ -8,7 +8,8 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
 import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
-import { getDocumentDropdowns, postDocumentUpload } from '../../helpers/fakebackend_helper';
+// UPDATED: Added scanUpload back to imports as requested
+// import { getDocumentDropdowns, postDocumentUpload, scanUpload } from '../../helpers/fakebackend_helper';
 import { io } from "socket.io-client";
 import axios from 'axios';
 
@@ -16,8 +17,6 @@ import axios from 'axios';
 // --- CONSTANTS ---
 const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
 const SCANNER_ENDPOINT = "http://192.168.23.229:5000";
-const SCAN_UPLOAD_URL = "http://192.168.23.229:9000/backend-service/documentUpload/scanUpload";
-
 
 
 // --- HELPERS ---
@@ -1001,6 +1000,7 @@ const DocumentReview = () => {
         };
     }, []);
 
+    // --- SUBMIT REVIEW WITH IMPORTED scanUpload ---
     const handleSubmitReview = async () => {
         setLoading(true);
         const finalDocuments = documentsForReview;
@@ -1034,8 +1034,8 @@ const DocumentReview = () => {
         };
 
         try {
-            const response = await axios.post(SCAN_UPLOAD_URL, payload);
-            const apiResponse = response.data;
+            // FIX: Using the imported scanUpload function
+            const apiResponse = await scanUpload(payload);
             
             if (apiResponse && (apiResponse.status === 'success' || apiResponse.success || apiResponse.status === 200)) {
                 setResponse(apiResponse.message || `Successfully finalized and uploaded documents.`);
