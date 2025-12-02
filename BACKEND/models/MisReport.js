@@ -321,3 +321,11 @@ export const getReportData = async (filters = {}, dateRange = {}) => {
     sections: Object.values(sectionMap)
   };
 };
+
+export const sectionRoleUsersWiseReports=async()=>{
+  try {
+    
+  } catch (error) {
+    
+  }
+}
