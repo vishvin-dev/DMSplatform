@@ -378,7 +378,7 @@ export const qcView = (data) => api.create(url.GET_QC_DOCUMENT, data);
 export const qcPreview = (data, config = {}) => api.create(url.GET_QC_DOCUMENT, data, config);
 export const qcApproveReject = (data) => api.create(url.GET_QC_DOCUMENT, data);
 export const bulkscan =(data) => api.create(url.BULK_SCAN,data);
-// export const scanUpload =(data) => api.create(url.SCAN_UPLOAD,data);
+export const scanUpload =(data) => api.create(url.SCAN_UPLOAD,data);
 // export const view = (data, config = {}) =>
 //   api.create(url.VIEW_DOCUMENT, data, config);
 export const view = (data, config = {}) =>
