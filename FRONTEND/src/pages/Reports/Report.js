@@ -9,6 +9,7 @@
 // import ErrorModal from '../../Components/Common/ErrorModal';
 // import BreadCrumb from '../../Components/Common/BreadCrumb';
 // import 'react-datepicker/dist/react-datepicker.css';
+// import { useNavigate } from 'react-router-dom';
 
 // const Reports = () => {
 //     // State management
@@ -29,16 +30,16 @@
 //     const [role, setRole] = useState('');
 //     const [selectedUser, setSelectedUser] = useState('');
 //     const [reportType, setReportType] = useState('');
-//     const [dateMethod, setDateMethod] = useState(''); // Changed from dateRange to dateMethod
+//     const [dateMethod, setDateMethod] = useState('');
 //     const [customStartDate, setCustomStartDate] = useState('');
 //     const [customEndDate, setCustomEndDate] = useState('');
-//     const [selectedDate, setSelectedDate] = useState(''); // For day selection
-//     const [selectedMonth, setSelectedMonth] = useState(''); // For month selection
-//     const [selectedYear, setSelectedYear] = useState(''); // For month selection
+//     const [selectedDate, setSelectedDate] = useState('');
+//     const [selectedMonth, setSelectedMonth] = useState('');
+//     const [selectedYear, setSelectedYear] = useState('');
 
-//     // Report results
-//     const [reportData, setReportData] = useState(null);
-//     const [showResults, setShowResults] = useState(false);
+//     // Report results - REMOVED local state for reportData
+//     // const [reportData, setReportData] = useState(null);
+//     // const [showResults, setShowResults] = useState(false);
 
 //     // Dropdown data
 //     const [zoneOptions, setZoneOptions] = useState([]);
@@ -50,6 +51,9 @@
 
 //     // Store all available sections (Source of Truth)
 //     const [allSectionOptions, setAllSectionOptions] = useState([]);
+
+//     // Add navigate hook
+//     const navigate = useNavigate();
 
 //     document.title = `Reports | DMS`;
 
@@ -208,8 +212,8 @@
 //             setAllSectionOptions([]);
 //         }
 //         setSelectedUser('');
-//         setReportData(null);
-//         setShowResults(false);
+//         // REMOVED: setReportData(null);
+//         // REMOVED: setShowResults(false);
 //     };
 
 //     const handleZoneChange = async (e) => {
@@ -289,8 +293,8 @@
 //     const handleRoleChange = (e) => {
 //         setRole(e.target.value);
 //         setSelectedUser('');
-//         setReportData(null);
-//         setShowResults(false);
+//         // REMOVED: setReportData(null);
+//         // REMOVED: setShowResults(false);
 //     };
 
 //     const handleDateMethodChange = (e) => {
@@ -304,8 +308,8 @@
 //         setSelectedMonth('');
 //         setSelectedYear('');
         
-//         setReportData(null);
-//         setShowResults(false);
+//         // REMOVED: setReportData(null);
+//         // REMOVED: setShowResults(false);
 //     };
 
 //     const handleResetFilters = async () => {
@@ -313,7 +317,7 @@
 //         setRole(''); setSelectedUser(''); setReportType(''); setDateMethod('');
 //         setCustomStartDate(''); setCustomEndDate('');
 //         setSelectedDate(''); setSelectedMonth(''); setSelectedYear('');
-//         setReportData(null); setShowResults(false);
+//         // REMOVED: setReportData(null); setShowResults(false);
 //         setCircleOptions([]); setDivisionName([]); setSubDivisions([]);
 //         setAllSectionOptions([]); setUserOptions([]);
 
@@ -413,7 +417,7 @@
 //             // Add sections if available
 //             const activeSections = sections.filter(s => s !== '');
 //             if (activeSections.length > 0) {
-//                 filters.so_code = activeSections[0]; // Taking first section as per API pattern
+//                 filters.so_code = activeSections[0];
 //             }
 
 //             // Build date payload
@@ -432,13 +436,41 @@
 //             const reportResponse = await misReportdata(payload);
             
 //             if (reportResponse && reportResponse.status) {
-//                 setReportData(reportResponse);
-//                 setShowResults(true);
+//                 // Store report data in localStorage
+//                 const reportStorageData = {
+//                     reportData: reportResponse,
+//                     filters: {
+//                         zone,
+//                         circle,
+//                         division,
+//                         subDivision,
+//                         sections: activeSections,
+//                         role,
+//                         selectedUser,
+//                         reportType,
+//                         dateMethod,
+//                         customStartDate,
+//                         customEndDate,
+//                         selectedDate,
+//                         selectedMonth,
+//                         selectedYear
+//                     },
+//                     timestamp: new Date().toISOString()
+//                 };
+                
+//                 localStorage.setItem('reportData', JSON.stringify(reportStorageData));
+                
 //                 setLoading(false);
                 
 //                 // Show success modal
-//                 setResponse('Report generated successfully!');
+//                 setResponse('Report generated successfully! Redirecting to report view...');
 //                 setSuccessModal(true);
+                
+//                 // Navigate to report view screen after 2 seconds
+//                 setTimeout(() => {
+//                     navigate('/report-view');
+//                 }, 2000);
+                
 //             } else {
 //                 throw new Error('Failed to generate report');
 //             }
@@ -449,148 +481,6 @@
 //             setResponse(error.message || 'Failed to generate report');
 //             setErrorModal(true);
 //         }
-//     };
-
-//     const renderReportResults = () => {
-//         if (!reportData || !showResults) return null;
-
-//         const { meta, data } = reportData;
-//         const { summary, rows } = data;
-//         const { filters, dateRange } = meta;
-
-//         return (
-//             <Card className="mt-4">
-//                 <CardHeader className="bg-success text-white">
-//                     <h5 className="mb-0 card-title text-white">
-//                         <i className="ri-file-chart-line me-2"></i>
-//                         Report Results
-//                     </h5>
-//                 </CardHeader>
-//                 <CardBody>
-//                     {/* Filters Summary */}
-//                     <div className="mb-4 p-3 border rounded bg-light">
-//                         <h6 className="mb-3">Filters Applied:</h6>
-//                         <Row>
-//                             {filters.div_code && (
-//                                 <Col md={3}>
-//                                     <div className="mb-2">
-//                                         <small className="text-muted">Division Code:</small>
-//                                         <div className="fw-semibold">{filters.div_code}</div>
-//                                     </div>
-//                                 </Col>
-//                             )}
-//                             {filters.sd_code && (
-//                                 <Col md={3}>
-//                                     <div className="mb-2">
-//                                         <small className="text-muted">Sub Division Code:</small>
-//                                         <div className="fw-semibold">{filters.sd_code}</div>
-//                                     </div>
-//                                 </Col>
-//                             )}
-//                             {filters.so_code && (
-//                                 <Col md={3}>
-//                                     <div className="mb-2">
-//                                         <small className="text-muted">Section Office:</small>
-//                                         <div className="fw-semibold">{filters.so_code}</div>
-//                                     </div>
-//                                 </Col>
-//                             )}
-//                             <Col md={3}>
-//                                 <div className="mb-2">
-//                                     <small className="text-muted">Date Range:</small>
-//                                     <div className="fw-semibold">
-//                                         {dateRange.startDate} to {dateRange.endDate}
-//                                     </div>
-//                                 </div>
-//                             </Col>
-//                         </Row>
-//                     </div>
-
-//                     {/* Summary Statistics */}
-//                     <Row className="mb-4">
-//                         <Col md={12}>
-//                             <h6 className="mb-3">Summary Statistics:</h6>
-//                         </Col>
-//                         <Col md={2}>
-//                             <div className="summary-card bg-primary text-white">
-//                                 <div className="fs-4 fw-bold">{summary.total || 0}</div>
-//                                 <div className="small">Total Documents</div>
-//                             </div>
-//                         </Col>
-//                         <Col md={2}>
-//                             <div className="summary-card bg-success text-white">
-//                                 <div className="fs-4 fw-bold">{summary.approved || 0}</div>
-//                                 <div className="small">Approved</div>
-//                             </div>
-//                         </Col>
-//                         <Col md={2}>
-//                             <div className="summary-card bg-warning text-white">
-//                                 <div className="fs-4 fw-bold">{summary.pending || 0}</div>
-//                                 <div className="small">Pending</div>
-//                             </div>
-//                         </Col>
-//                         <Col md={2}>
-//                             <div className="summary-card bg-danger text-white">
-//                                 <div className="fs-4 fw-bold">{summary.rejected || 0}</div>
-//                                 <div className="small">Rejected</div>
-//                             </div>
-//                         </Col>
-//                         <Col md={2}>
-//                             <div className="summary-card bg-info text-white">
-//                                 <div className="fs-4 fw-bold">{summary.reuploaded || 0}</div>
-//                                 <div className="small">Reuploaded</div>
-//                             </div>
-//                         </Col>
-//                     </Row>
-
-//                     {/* Detailed Data Table */}
-//                     <div className="table-responsive">
-//                         <h6 className="mb-3">Detailed Records:</h6>
-//                         {rows && rows.length > 0 ? (
-//                             <table className="table table-bordered table-striped">
-//                                 <thead className="table-dark">
-//                                     <tr>
-//                                         <th>#</th>
-//                                         <th>Document ID</th>
-//                                         <th>Account ID</th>
-//                                         <th>Consumer Name</th>
-//                                         <th>Uploaded By</th>
-//                                         <th>Upload Date</th>
-//                                         <th>Status</th>
-//                                         <th>Category</th>
-//                                     </tr>
-//                                 </thead>
-//                                 <tbody>
-//                                     {rows.map((item, index) => (
-//                                         <tr key={index}>
-//                                             <td>{index + 1}</td>
-//                                             <td>{item.documentId || 'N/A'}</td>
-//                                             <td>{item.accountId || 'N/A'}</td>
-//                                             <td>{item.consumerName || 'N/A'}</td>
-//                                             <td>{item.uploadedBy || 'N/A'}</td>
-//                                             <td>{item.uploadDate || 'N/A'}</td>
-//                                             <td>
-//                                                 <span className={`badge ${item.status === 'Approved' ? 'bg-success' : 
-//                                                     item.status === 'Pending' ? 'bg-warning' : 
-//                                                     item.status === 'Rejected' ? 'bg-danger' : 'bg-secondary'}`}>
-//                                                     {item.status || 'Unknown'}
-//                                                 </span>
-//                                             </td>
-//                                             <td>{item.category || 'N/A'}</td>
-//                                         </tr>
-//                                     ))}
-//                                 </tbody>
-//                             </table>
-//                         ) : (
-//                             <div className="text-center p-5 border rounded">
-//                                 <i className="ri-file-search-line fs-1 text-muted mb-3"></i>
-//                                 <p className="text-muted">No data found for the selected filters</p>
-//                             </div>
-//                         )}
-//                     </div>
-//                 </CardBody>
-//             </Card>
-//         );
 //     };
 
 //     // Generate month options
@@ -869,7 +759,7 @@
 //                                                         <Input
 //                                                             type="select"
 //                                                             value={reportType}
-//                                                             onChange={(e) => { setReportType(e.target.value); setReportData(null); setShowResults(false); }}
+//                                                             onChange={(e) => { setReportType(e.target.value); }}
 //                                                             className="form-select"
 //                                                         >
 //                                                             <option value="">Select Report Type</option>
@@ -1077,9 +967,6 @@
 //                             </Col>
 //                         )}
 //                     </Row>
-
-//                     {/* Display Report Results */}
-//                     {renderReportResults()}
 //                 </Container>
 //             </div>
 //         </React.Fragment>
@@ -1087,6 +974,20 @@
 // };
 
 // export default Reports;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1108,7 +1009,6 @@ import SuccessModal from '../../Components/Common/SuccessModal';
 import ErrorModal from '../../Components/Common/ErrorModal';
 import BreadCrumb from '../../Components/Common/BreadCrumb';
 import 'react-datepicker/dist/react-datepicker.css';
-import { useNavigate } from 'react-router-dom'; // Add this import
 
 const Reports = () => {
     // State management
@@ -1136,10 +1036,6 @@ const Reports = () => {
     const [selectedMonth, setSelectedMonth] = useState('');
     const [selectedYear, setSelectedYear] = useState('');
 
-    // Report results - REMOVED local state for reportData
-    // const [reportData, setReportData] = useState(null);
-    // const [showResults, setShowResults] = useState(false);
-
     // Dropdown data
     const [zoneOptions, setZoneOptions] = useState([]);
     const [circleOptions, setCircleOptions] = useState([]);
@@ -1151,8 +1047,8 @@ const Reports = () => {
     // Store all available sections (Source of Truth)
     const [allSectionOptions, setAllSectionOptions] = useState([]);
 
-    // Add navigate hook
-    const navigate = useNavigate();
+    // Track if at least one section is selected
+    const [isSectionSelected, setIsSectionSelected] = useState(false);
 
     document.title = `Reports | DMS`;
 
@@ -1169,6 +1065,33 @@ const Reports = () => {
     // Get current date in YYYY-MM-DD format
     const getCurrentDate = () => {
         return new Date().toISOString().split('T')[0];
+    };
+
+    // Get current month
+    const getCurrentMonth = () => {
+        return (new Date().getMonth() + 1).toString();
+    };
+
+    const getCurrentMonthName = () => {
+        const monthNames = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        return monthNames[new Date().getMonth()];
+    };
+
+    // Get week range (current week - from Monday to Sunday)
+    const getWeekRange = () => {
+        const today = new Date();
+        const day = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+        const monday = new Date(today.setDate(diff));
+        const sunday = new Date(today.setDate(diff + 6));
+        
+        return {
+            start: monday.toISOString().split('T')[0],
+            end: sunday.toISOString().split('T')[0]
+        };
     };
 
     // --- Core Logic Functions ---
@@ -1193,9 +1116,11 @@ const Reports = () => {
         const selectedRoleObj = roleOptions.find(r => r.RoleName === role);
         const roleIdToSend = selectedRoleObj ? selectedRoleObj.Role_Id : "";
 
-        // Determine so_code (taking the first selected section if available, else empty)
+        // Get all active sections (filter out empty strings)
         const activeSections = sections.filter(s => s !== '');
-        const soCodeToSend = activeSections.length > 0 ? activeSections[0] : "";
+        
+        // For API payload - send array of sections if available
+        const soCodeToSend = activeSections.length > 0 ? activeSections : [];
 
         // Construct Payload as requested
         const payload = {
@@ -1204,8 +1129,10 @@ const Reports = () => {
             circle_code: circle || "",
             div_code: division || "",
             sd_code: subDivision || "",
-            so_code: soCodeToSend
+            so_code: soCodeToSend 
         };
+
+        console.log("User API Payload:", JSON.stringify(payload, null, 2));
 
         try {
             // Call the new API function
@@ -1258,10 +1185,25 @@ const Reports = () => {
         loadInitialData();
     }, [flagIdFunction, loadRoles]);
 
-    // Load users when ANY filter changes (including sections)
+    // Load users when ANY filter changes (including sections) - FIXED with proper dependency
     useEffect(() => {
-        loadUsers();
-    }, [zone, circle, division, subDivision, sections, role, loadUsers]);
+        if (role && zone && isSectionSelected) {
+            loadUsers();
+        }
+    }, [zone, circle, division, subDivision, sections, role, loadUsers, isSectionSelected]);
+
+    // Check if at least one section is selected
+    useEffect(() => {
+        const hasSelectedSection = sections.some(section => section !== '');
+        setIsSectionSelected(hasSelectedSection);
+        
+        // If no section is selected, disable role and user dropdowns
+        if (!hasSelectedSection) {
+            setRole('');
+            setSelectedUser('');
+            setUserOptions([]);
+        }
+    }, [sections]);
 
     // Load all sections without exclusions
     const loadAllSections = useCallback(async () => {
@@ -1309,10 +1251,11 @@ const Reports = () => {
         if (changedLevel === 'zone' || changedLevel === 'circle' || changedLevel === 'division' || changedLevel === 'subDivision') {
             setSections(['']);
             setAllSectionOptions([]);
+            setIsSectionSelected(false);
         }
+        setRole('');
         setSelectedUser('');
-        // REMOVED: setReportData(null);
-        // REMOVED: setShowResults(false);
+        setUserOptions([]);
     };
 
     const handleZoneChange = async (e) => {
@@ -1392,8 +1335,7 @@ const Reports = () => {
     const handleRoleChange = (e) => {
         setRole(e.target.value);
         setSelectedUser('');
-        // REMOVED: setReportData(null);
-        // REMOVED: setShowResults(false);
+        setUserOptions([]);
     };
 
     const handleDateMethodChange = (e) => {
@@ -1407,8 +1349,12 @@ const Reports = () => {
         setSelectedMonth('');
         setSelectedYear('');
         
-        // REMOVED: setReportData(null);
-        // REMOVED: setShowResults(false);
+        // Set default values based on date method
+        if (method === 'day') {
+            setSelectedDate(getCurrentDate());
+        } else if (method === 'month') {
+            setSelectedMonth(getCurrentMonth());
+        }
     };
 
     const handleResetFilters = async () => {
@@ -1416,9 +1362,9 @@ const Reports = () => {
         setRole(''); setSelectedUser(''); setReportType(''); setDateMethod('');
         setCustomStartDate(''); setCustomEndDate('');
         setSelectedDate(''); setSelectedMonth(''); setSelectedYear('');
-        // REMOVED: setReportData(null); setShowResults(false);
         setCircleOptions([]); setDivisionName([]); setSubDivisions([]);
         setAllSectionOptions([]); setUserOptions([]);
+        setIsSectionSelected(false);
 
         const loadZonesAndRoles = async () => {
             try {
@@ -1441,6 +1387,11 @@ const Reports = () => {
             setErrorModal(true);
             return false;
         }
+        if (!isSectionSelected) {
+            setResponse('Please select at least one section');
+            setErrorModal(true);
+            return false;
+        }
         if (!role || !selectedUser || !reportType || !dateMethod) {
             setResponse('Please fill all required report parameters');
             setErrorModal(true);
@@ -1456,8 +1407,8 @@ const Reports = () => {
             setErrorModal(true);
             return false;
         }
-        if (dateMethod === 'month' && (!selectedMonth || !selectedYear)) {
-            setResponse('Please select both month and year for month method');
+        if (dateMethod === 'month' && !selectedMonth) {
+            setResponse('Please select a month for month method');
             setErrorModal(true);
             return false;
         }
@@ -1465,39 +1416,28 @@ const Reports = () => {
     };
 
     const buildDatePayload = () => {
-        const today = new Date();
-        
         switch(dateMethod) {
             case 'day':
-                if (selectedDate) {
-                    return { date: selectedDate };
-                }
-                return { date: getCurrentDate() };
+                return { date: selectedDate || getCurrentDate() };
                 
             case 'week':
-                return { date: getCurrentDate() };
+                const weekRange = getWeekRange();
+                return {
+                    startDate: weekRange.start,
+                    endDate: weekRange.end
+                };
                 
             case 'month':
-                if (selectedMonth && selectedYear) {
-                    return { 
-                        year: parseInt(selectedYear), 
-                        month: parseInt(selectedMonth) 
-                    };
-                }
-                // If no specific month selected, use current month
                 return { 
-                    year: today.getFullYear(), 
-                    month: today.getMonth() + 1 
+                    year: new Date().getFullYear(),
+                    month: parseInt(selectedMonth || getCurrentMonth()) 
                 };
                 
             case 'custom':
-                if (customStartDate && customEndDate) {
-                    return {
-                        startDate: customStartDate,
-                        endDate: customEndDate
-                    };
-                }
-                return {};
+                return {
+                    startDate: customStartDate,
+                    endDate: customEndDate
+                };
                 
             default:
                 return {};
@@ -1513,10 +1453,10 @@ const Reports = () => {
             if (division) filters.div_code = division;
             if (subDivision) filters.sd_code = subDivision;
             
-            // Add sections if available
+            // Add all active sections as array
             const activeSections = sections.filter(s => s !== '');
             if (activeSections.length > 0) {
-                filters.so_code = activeSections[0];
+                filters.so_code = activeSections;
             }
 
             // Build date payload
@@ -1562,13 +1502,22 @@ const Reports = () => {
                 setLoading(false);
                 
                 // Show success modal
-                setResponse('Report generated successfully! Redirecting to report view...');
+                setResponse('Report generated successfully! Opening report in new tab...');
                 setSuccessModal(true);
                 
-                // Navigate to report view screen after 2 seconds
+                // Open report in new tab after 1 second
                 setTimeout(() => {
-                    navigate('/report-view');
-                }, 2000);
+                    const newTab = window.open('/report-view', '_blank');
+                    
+                    // Clear localStorage after successfully opening new tab
+                    if (newTab) {
+                        setTimeout(() => {
+                            localStorage.removeItem('reportData');
+                        }, 1000); // Small delay to ensure data is loaded in new tab
+                    }
+                    
+                    setSuccessModal(false);
+                }, 1000);
                 
             } else {
                 throw new Error('Failed to generate report');
@@ -1597,13 +1546,6 @@ const Reports = () => {
         { value: '11', label: 'November' },
         { value: '12', label: 'December' }
     ];
-
-    // Generate year options (last 5 years and next 1 year)
-    const currentYear = new Date().getFullYear();
-    const yearOptions = Array.from({ length: 7 }, (_, i) => {
-        const year = currentYear - 5 + i;
-        return { value: year.toString(), label: year.toString() };
-    });
 
     return (
         <React.Fragment>
@@ -1735,7 +1677,7 @@ const Reports = () => {
                                                             <div className="row align-items-center">
                                                                 <div className="col-4">
                                                                     <Label className="form-label fw-medium mb-0">
-                                                                        Section {index + 1}
+                                                                        Section {index + 1} {index === 0 && <span className="text-danger">*</span>}
                                                                     </Label>
                                                                 </div>
                                                                 <div className="col-7">
@@ -1811,6 +1753,7 @@ const Reports = () => {
                                                             value={role}
                                                             onChange={handleRoleChange}
                                                             className="form-select"
+                                                            disabled={!isSectionSelected}
                                                         >
                                                             <option value="">Select Role</option>
                                                             {roleOptions.map(role => (
@@ -1819,6 +1762,11 @@ const Reports = () => {
                                                                 </option>
                                                             ))}
                                                         </Input>
+                                                        {!isSectionSelected && (
+                                                            <small className="text-muted d-block mt-1">
+                                                                Please select a section first
+                                                            </small>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </FormGroup>
@@ -1834,6 +1782,7 @@ const Reports = () => {
                                                             value={selectedUser}
                                                             onChange={(e) => setSelectedUser(e.target.value)}
                                                             className="form-select"
+                                                            disabled={!role}
                                                         >
                                                             <option value="">Select User</option>
                                                             {userOptions.map(user => (
@@ -1845,6 +1794,11 @@ const Reports = () => {
                                                                 </option>
                                                             ))}
                                                         </Input>
+                                                        {!role && (
+                                                            <small className="text-muted d-block mt-1">
+                                                                Please select a role first
+                                                            </small>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </FormGroup>
@@ -1884,9 +1838,9 @@ const Reports = () => {
                                                             className="form-select"
                                                         >
                                                             <option value="">Select Date Method</option>
-                                                            <option value="day">Day</option>
-                                                            <option value="week">Week</option>
-                                                            <option value="month">Month</option>
+                                                            <option value="day">Day (Current Day)</option>
+                                                            <option value="week">Week (Current Week)</option>
+                                                            <option value="month">Month (Current Month)</option>
                                                             <option value="custom">Custom Date Range</option>
                                                         </Input>
                                                     </div>
@@ -1906,8 +1860,8 @@ const Reports = () => {
                                         <h6 className="mb-0 card-title text-white">
                                             <i className="ri-calendar-line me-2"></i>
                                             {dateMethod === 'custom' ? 'Custom Date Range' : 
-                                             dateMethod === 'day' ? 'Select Date' :
-                                             dateMethod === 'month' ? 'Select Month' : 'Date Configuration'}
+                                             dateMethod === 'day' ? 'Select Date (Current Day)' :
+                                             dateMethod === 'month' ? 'Select Month (Current Month)' : 'Week (Current Week)'}
                                         </h6>
                                     </CardHeader>
                                     <CardBody className="d-flex flex-column">
@@ -1954,70 +1908,46 @@ const Reports = () => {
                                                     <FormGroup className="mb-0">
                                                         <div className="row align-items-center">
                                                             <div className="col-4">
-                                                                <Label className="form-label fw-medium mb-0">Select Date <span className="text-danger">*</span></Label>
+                                                                <Label className="form-label fw-medium mb-0">Current Date <span className="text-danger">*</span></Label>
                                                             </div>
                                                             <div className="col-8">
                                                                 <Input
                                                                     type="date"
-                                                                    value={selectedDate}
+                                                                    value={selectedDate || getCurrentDate()}
                                                                     onChange={(e) => setSelectedDate(e.target.value)}
                                                                     max={getCurrentDate()}
                                                                     className="form-control"
+                                                                    disabled={true}
                                                                 />
+                                                                <small className="text-muted">Current day selection is fixed</small>
                                                             </div>
                                                         </div>
                                                     </FormGroup>
                                                 ) : dateMethod === 'month' ? (
-                                                    <>
-                                                        <FormGroup className="mb-0">
-                                                            <div className="row align-items-center">
-                                                                <div className="col-4">
-                                                                    <Label className="form-label fw-medium mb-0">Month <span className="text-danger">*</span></Label>
-                                                                </div>
-                                                                <div className="col-8">
-                                                                    <Input
-                                                                        type="select"
-                                                                        value={selectedMonth}
-                                                                        onChange={(e) => setSelectedMonth(e.target.value)}
-                                                                        className="form-select"
-                                                                    >
-                                                                        <option value="">Select Month</option>
-                                                                        {monthOptions.map(month => (
-                                                                            <option key={month.value} value={month.value}>
-                                                                                {month.label}
-                                                                            </option>
-                                                                        ))}
-                                                                    </Input>
-                                                                </div>
+                                                    <FormGroup className="mb-0">
+                                                        <div className="row align-items-center">
+                                                            <div className="col-4">
+                                                                <Label className="form-label fw-medium mb-0">Current Month <span className="text-danger">*</span></Label>
                                                             </div>
-                                                        </FormGroup>
-
-                                                        <FormGroup className="mb-0">
-                                                            <div className="row align-items-center">
-                                                                <div className="col-4">
-                                                                    <Label className="form-label fw-medium mb-0">Year <span className="text-danger">*</span></Label>
-                                                                </div>
-                                                                <div className="col-8">
-                                                                    <Input
-                                                                        type="select"
-                                                                        value={selectedYear}
-                                                                        onChange={(e) => setSelectedYear(e.target.value)}
-                                                                        className="form-select"
-                                                                    >
-                                                                        <option value="">Select Year</option>
-                                                                        {yearOptions.map(year => (
-                                                                            <option key={year.value} value={year.value}>
-                                                                                {year.label}
-                                                                            </option>
-                                                                        ))}
-                                                                    </Input>
-                                                                </div>
+                                                            <div className="col-8">
+                                                                <Input
+                                                                    type="text"
+                                                                    value={`${getCurrentMonthName()} ${new Date().getFullYear()}`}
+                                                                    className="form-control"
+                                                                    disabled={true}
+                                                                    readOnly
+                                                                />
+                                                                <small className="text-muted">Current month selection is fixed</small>
                                                             </div>
-                                                        </FormGroup>
-                                                    </>
+                                                        </div>
+                                                    </FormGroup>
                                                 ) : (
                                                     <div className="text-muted text-center pt-5 pb-5">
-                                                        Date range calculated dynamically for: <strong>{dateMethod.toUpperCase()}</strong>
+                                                        <div>Current Week Range:</div>
+                                                        <div className="fw-bold mt-2">
+                                                            {getWeekRange().start} to {getWeekRange().end}
+                                                        </div>
+                                                        <small className="text-muted mt-2 d-block">Week selection is fixed to current week</small>
                                                     </div>
                                                 )}
                                             </div>
@@ -2032,9 +1962,7 @@ const Reports = () => {
                                                     className="w-100"
                                                     onClick={generateReportData}
                                                     disabled={loading || 
-                                                        (dateMethod === 'custom' && (!customStartDate || !customEndDate)) ||
-                                                        (dateMethod === 'day' && !selectedDate) ||
-                                                        (dateMethod === 'month' && (!selectedMonth || !selectedYear))}
+                                                        (dateMethod === 'custom' && (!customStartDate || !customEndDate))}
                                                 >
                                                     {loading ? (
                                                         <>
