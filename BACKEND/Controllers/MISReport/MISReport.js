@@ -3,9 +3,11 @@ import {
     getCirclee,
     getDivisionss,
     getSubDivisionss,
-    getSectionss, getRoless,
+    getSectionss,
+    getRoless,
     getUsersByRoleAndLocation,
-    getReportData
+    getReportData,
+    sectionRoleUsersWiseReports
 } from "../../models/MisReport.js"
 import { getDateRange } from "../../utils/DateMethods/dateMethods.js"
 
@@ -56,10 +58,9 @@ export const getUsersDropdown = async (req, res) => {
     }
 };
 
-export const generateReport = async (req, res) => {
+export const zonesCountsReport = async (req, res) => {
     try {
         const { filters = {}, dateMethod = "day", datePayload = {} } = req.body;
-        console.log(req.body)
 
         let dateRange;
         try {
@@ -75,7 +76,7 @@ export const generateReport = async (req, res) => {
 
         return res.status(200).json({
             status: true,
-            meta: { filters, dateRange },
+            // meta: { filters },
             data: rows
         });
 
@@ -88,3 +89,19 @@ export const generateReport = async (req, res) => {
         });
     }
 };
+
+
+export const sectionRoleUserWiseReport = async (req, res) => {
+    const { } = req.body
+    try {
+        let results
+        if (parseInt(flagId) === 1) {
+            results=await sectionRoleUsersWiseReports()
+        } else {
+            return res.status(400).json({ error: "Invalid flagId" });
+        }
+        return
+    } catch (error) {
+        console.log("generatingReport Error:", error)
+    }
+}
