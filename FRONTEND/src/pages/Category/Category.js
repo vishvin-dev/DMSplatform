@@ -177,8 +177,8 @@ const Category = () => {
             const filtered = databk.filter((item) => {
                 return (
                     (item.CategoryName || '').toLowerCase().includes(term.toLowerCase()) ||
-                    (item.Description || '').toLowerCase().includes(term.toLowerCase()) ||
-                    (item.requestUserName || '').toLowerCase().includes(term.toLowerCase())
+                    (item.Description || '').toLowerCase().includes(term.toLowerCase())
+                    // (item.requestUserName || '').toLowerCase().includes(term.toLowerCase())
                 );
             });
             setCategories(filtered);
@@ -200,11 +200,11 @@ const Category = () => {
         return sortedData.slice(start, end);
     }, [sortedData, page, pageSize]);
 
-    // Form validation schema
+    // Form validation schema - UPDATED: CategoryName max length changed from 75 to 50
     const validationSchema = Yup.object({
         CategoryName: Yup.string()
             .required('Category name is required')
-            .max(75, 'Category name must be less than 75 characters'),
+            .max(50, 'Category name must be less than 50 characters'),
         Description: Yup.string()
             .required('Description is required')
             .max(150, 'Description must be less than 150 characters')
@@ -583,7 +583,7 @@ const Category = () => {
                                 name="CategoryName"
                                 placeholder="Enter Category Name"
                                 type="text"
-                                maxLength={75}
+                                maxLength={50} // UPDATED: Changed from 75 to 50
                                 id="CategoryName"
                                 onChange={formik.handleChange}
                                 onBlur={formik.handleBlur}
@@ -595,6 +595,9 @@ const Category = () => {
                                     {formik.errors.CategoryName}
                                 </FormFeedback>
                             )}
+                            <div className="text-muted small mt-1">
+                                {formik.values.CategoryName?.length || 0}/50 characters
+                            </div>
                         </FormGroup>
 
                         <FormGroup className="mb-3">
