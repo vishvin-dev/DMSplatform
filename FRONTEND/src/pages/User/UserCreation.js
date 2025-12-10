@@ -738,7 +738,7 @@ const UserCreation = () => {
             projectName: "DMS",
             dateOfBirth: contactInfoValidation.values.dateOfBirth,
             phoneNumber: contactInfoValidation.values.contactNo,
-            maritalStatusId: contactInfoValidation.values.maritalStatus ? parseInt(contactInfoValidation.values.maritalStatus) : null,
+            maritalStatusId: parseInt(1),
             genderId: parseInt(contactInfoValidation.values.gender),
             email: loginInfoValidation.values.email,
             password: loginInfoValidation.values.password,
