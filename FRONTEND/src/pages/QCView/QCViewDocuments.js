@@ -2213,7 +2213,7 @@ import ErrorModal from '../../Components/Common/ErrorModal';
 
 const SORT_ARROW_SIZE = 13;
 
-const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
+const VIEW_DOCUMENT_URL = "http://192.168.23.18:9000/backend-service/documentUpload/documentView";
 
 function SortArrows({ direction, active }) {
     return (

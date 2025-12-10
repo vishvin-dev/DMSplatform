@@ -44,6 +44,7 @@ const login = async (req, res) => {
       }
     }
 
+
     // Check password
     const isMatch = await bcrypt.compare(password, user.Password);
 
@@ -141,3 +142,23 @@ const login = async (req, res) => {
 };
 
 export default login;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// C:\Users\Praveen\Desktop\DMSSSSS
+
+// mysqldump -u root -p dmstest1 > C:\Users\Praveen\Desktop\DMSSSSS\mysqldump.sql
+
