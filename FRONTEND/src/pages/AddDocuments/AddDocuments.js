@@ -5144,8 +5144,7 @@ const DocumentManagement = () => {
                 </Modal>
 
                 {/* The rest of the modals (Approved, Rejected, Re-upload) remain unchanged */}
-                {/* Approved Modal */}
-                <Modal
+               <Modal
                     isOpen={approvedModalOpen}
                     toggle={() => {
                         setApprovedModalOpen(false);
@@ -5157,7 +5156,354 @@ const DocumentManagement = () => {
                     size="xl"
                     className="custom-large-modal"
                 >
-                    {/* ... Approved Modal content remains the same ... */}
+                    <ModalHeader
+                        className="bg-primary text-white"
+                        toggle={() => {
+                            setApprovedModalOpen(false);
+                            setSelectedFile(null);
+                            setPreviewContent(null);
+                            setPreviewError(null);
+                            setSelectedConsumer(null);
+                        }}
+                        style={{
+                            borderBottom: '1px solid rgba(255,255,255,0.2)',
+                            padding: '1rem 1.5rem'
+                        }}
+                    >
+                        <div className="d-flex alignItems-center">
+                            <h5 className="mb-0 text-white">Approved Documents</h5>
+                            <Badge color="light" pill className="ms-2 text-primary">
+                                {documentCounts.approved} Approved
+                            </Badge>
+                        </div>
+                    </ModalHeader>
+                    <ModalBody className="p-3">
+                        <Container fluid>
+                            <Row className="g-3 results-container">
+                                <Col lg={3} className="h-100 d-flex flex-column">
+                                    <Card className="mb-3 slide-in-left fixed-height-card">
+                                        <CardHeader className="bg-light p-3 position-relative" style={{ borderTop: '3px solid #405189' }}>
+                                            <h5 className="mb-0">Consumer Information</h5>
+                                        </CardHeader>
+                                        <CardBody className="p-1 custom-scrollbar">
+                                            {selectedFile ? (
+                                                <div className="consumer-details">
+                                                    <div className="row g-0">
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center mb-1">
+                                                                <i className="ri-user-3-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">RR No:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedFile.rr_no || '-'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center mb-1">
+                                                                <i className="ri-profile-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Name:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedFile.consumer_name || '-'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center mb-1">
+                                                                <i className="ri-map-pin-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Address:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedFile.consumer_address || '-'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center text-muted py-1 h-100 d-flex flex-column justify-content-center">
+                                                    <i className="ri-user-line fs-5"></i>
+                                                    <p className="mt-1 x-small mb-0">No document selected</p>
+                                                </div>
+                                            )}
+                                        </CardBody>
+                                    </Card>
+
+                                    <Card className="slide-in-left delay-1 fixed-height-card">
+                                        <CardHeader className="bg-light p-3 position-relative" style={{ borderTop: '3px solid #405189' }}>
+                                            <h5 className="mb-0">Document Information</h5>
+                                        </CardHeader>
+                                        <CardBody className="p-1 custom-scrollbar">
+                                            {selectedFile ? (
+                                                <div className="document-details">
+                                                    <div className="d-flex alignItems-center mb-3">
+                                                        <div className="flex-shrink-0 me-1">
+                                                            {getFileIcon(selectedFile.name)}
+                                                        </div>
+                                                        <div>
+                                                            <h6 className="mb-0 x-small">{selectedFile.name}</h6>
+                                                            <small className="text-muted x-small">{selectedFile.category}</small>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="row g-0">
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-file-text-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Approval Comment:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedFile.description || 'None'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-user-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Approved By:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedFile.createdBy}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-calendar-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Approved On:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedFile.createdAt}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-checkbox-circle-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Status:</Label>
+                                                                    <Badge color="success" className="badge-soft-success x-small">
+                                                                        {selectedFile.status}
+                                                                    </Badge>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* ADDED: Version Information */}
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-git-branch-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Version:</Label>
+                                                                    <Badge color="info" className="badge-soft-info x-small">
+                                                                        {selectedFile.versionLabel} {selectedFile.isLatest ? '(Latest)' : ''}
+                                                                    </Badge>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center text-muted py-1 h-100 d-flex flex-column justify-content-center">
+                                                    <i className="ri-file-line fs-5"></i>
+                                                    <p className="mt-1 x-small mb-0">No document selected</p>
+                                                </div>
+                                            )}
+                                        </CardBody>
+                                    </Card>
+                                </Col>
+
+                                <Col lg={3} className="h-100 d-flex flex-column">
+                                    <Card className="h-100 fade-in delay-2">
+                                        <CardHeader
+                                            className="bg-light d-flex justify-content-between align-items-center"
+                                            style={{ borderTop: '3px solid #405189' }}
+                                        >
+                                            <h5 className="mb-0">Approved Documents</h5>
+                                            <Badge color="primary" pill className="text-uppercase px-3 py-2">
+                                                {approvedDocuments.length} {approvedDocuments.length === 1 ? 'file' : 'files'}
+                                            </Badge>
+                                        </CardHeader>
+                                        <CardBody className="p-0 uploaded-documents-container">
+                                            <div className="uploaded-documents-scrollable" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                                                {loading ? (
+                                                    <div className="text-center py-4">
+                                                        <div className="spinner-border text-primary" role="status">
+                                                            <span className="visually-hidden">Loading...</span>
+                                                        </div>
+                                                        <p className="mt-2">Loading approved documents...</p>
+                                                    </div>
+                                                ) : approvedDocuments.length > 0 ? (
+                                                    <ListGroup flush style={{ minHeight: '100%' }}>
+                                                        {approvedDocuments.map((doc, index) => (
+                                                            <div
+                                                                key={doc.id}
+                                                                className="fade-in-list-item"
+                                                                style={{ animationDelay: `${0.1 * index}s` }}
+                                                            >
+                                                                <ListGroupItem
+                                                                    action
+                                                                    active={selectedFile?.id === doc.id}
+                                                                    onClick={() => handleFileSelect(doc)}
+                                                                    className="d-flex align-items-center"
+                                                                    style={{
+                                                                        backgroundColor: selectedFile?.id === doc.id ? '#e9ecef' : 'transparent',
+                                                                        borderLeft: selectedFile?.id === doc.id ? '3px solid #9299b1ff' : '3px solid transparent',
+                                                                        cursor: "pointer"
+                                                                    }}
+                                                                >
+                                                                    <div className="flex-shrink-0 me-3">
+                                                                        {getFileIcon(doc.name)}
+                                                                    </div>
+                                                                    <div className="flex-grow-1 text-truncate">
+                                                                        <h6 className="mb-0 text-truncate" title={doc.name}>
+                                                                            {doc.name}
+                                                                        </h6>
+                                                                        <small className="text-muted d-block text-truncate">
+                                                                            Version: {doc.versionLabel} {doc.isLatest ? '(Latest)' : ''}
+                                                                        </small>
+                                                                    </div>
+                                                                    <Button
+                                                                        color="link"
+                                                                        size="sm"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleDownload(doc);
+                                                                        }}
+                                                                        title="Download"
+                                                                    >
+                                                                        <i className="ri-download-line"></i>
+                                                                    </Button>
+                                                                </ListGroupItem>
+                                                            </div>
+                                                        ))}
+                                                    </ListGroup>
+                                                ) : (
+                                                    <div className="text-center text-muted py-4 h-100 d-flex flex-column justify-content-center">
+                                                        No approved documents found
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardBody>
+                                    </Card>
+                                </Col>
+
+                                <Col lg={6} className="h-100 d-flex flex-column">
+                                    <Card className="h-100 slide-in-right delay-3 fixed-height-card">
+                                        <CardHeader className="bg-light p-3 position-relative"
+                                            style={{ borderTop: '3px solid #405189' }}>
+                                            <h5 className="mb-0">Document Preview</h5>
+                                            {selectedFile && (
+                                                <div className="position-absolute top-50 end-0 translate-middle-y me-3">
+                                                    <Button
+                                                        color="primary"
+                                                        size="sm"
+                                                        onClick={() => handleDownload(selectedFile)}
+                                                        disabled={!previewContent}
+                                                    >
+                                                        <i className="ri-download-line me-1"></i> Download
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </CardHeader>
+                                        <CardBody className="p-0 preview-container">
+                                            <div className="preview-scrollable">
+                                                {previewLoading ? (
+                                                    <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
+                                                        <div className="spinner-border text-primary" role="status">
+                                                            <span className="visually-hidden">Loading...</span>
+                                                        </div>
+                                                        <p className="mt-2">Loading preview...</p>
+                                                    </div>
+                                                ) : previewError ? (
+                                                    <Alert color="danger" className="m-3 fade-in">
+                                                        <i className="ri-error-warning-line me-2"></i>
+                                                        {previewError}
+                                                    </Alert>
+                                                ) : selectedFile && previewContent ? (
+                                                    <div className="d-flex flex-column h-100">
+                                                        <div className="flex-grow-1 preview-content">
+                                                            {previewContent.type.includes('pdf') ? (
+                                                                <div className="pdf-viewer-container fade-in h-100">
+                                                                    <iframe
+                                                                        src={`${previewContent.url}#toolbar=0&navpanes=0&scrollbar=0`}
+                                                                        title="PDF Viewer"
+                                                                        className="w-100 h-100"
+                                                                        style={{ border: 'none' }}
+                                                                        onLoad={(e) => {
+                                                                            console.log('📄 PDF iframe loaded');
+                                                                            // Check if iframe has content
+                                                                            const iframe = e.target;
+                                                                            try {
+                                                                                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                                                                                console.log('📄 Iframe document readyState:', iframeDoc.readyState);
+                                                                            } catch (err) {
+                                                                                console.log('🔒 Cannot access iframe content (cross-origin)');
+                                                                            }
+                                                                        }}
+                                                                        onError={(e) => {
+                                                                            console.error('❌ PDF iframe error:', e);
+                                                                            setPreviewError('Failed to load PDF in iframe');
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            ) : previewContent.type.includes('image') ? (
+                                                                <div className="text-center fade-in p-3 h-100 d-flex align-items-center justify-content-center">
+                                                                    <img
+                                                                        src={previewContent.url}
+                                                                        alt="Document Preview"
+                                                                        className="img-fluid"
+                                                                        style={{
+                                                                            maxHeight: '100%',
+                                                                            maxWidth: '100%',
+                                                                            objectFit: 'contain'
+                                                                        }}
+                                                                        onError={(e) => {
+                                                                            console.error('❌ Image load error:', e);
+                                                                            setPreviewError('Failed to load image preview');
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
+                                                                    <i className="ri-file-line display-4 text-muted"></i>
+                                                                    <h5 className="mt-3">Preview not available</h5>
+                                                                    <p className="text-muted">
+                                                                        This file type ({previewContent.type}) cannot be previewed in the browser.
+                                                                    </p>
+                                                                    <Button
+                                                                        color="primary"
+                                                                        onClick={() => handleDownload(selectedFile)}
+                                                                        className="mt-2"
+                                                                    >
+                                                                        <i className="ri-download-line me-1"></i> Download File
+                                                                    </Button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center text-muted py-5 h-100 d-flex flex-column justify-content-center fade-in">
+                                                        <i className="ri-file-line display-4"></i>
+                                                        <h5 className="mt-3">No document selected</h5>
+                                                        <p>Select an approved file from the list to preview it here</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardBody>
+                                    </Card>
+                                </Col>
+                            </Row>
+                        </Container>
+                    </ModalBody>
+                    <ModalFooter>
+                        <Button color="secondary" onClick={() => {
+                            setApprovedModalOpen(false);
+                            setSelectedFile(null);
+                            setPreviewContent(null);
+                            setPreviewError(null);
+                        }}>
+                            Close
+                        </Button>
+                    </ModalFooter>
                 </Modal>
 
                 {/* Rejected Modal */}
@@ -5173,7 +5519,347 @@ const DocumentManagement = () => {
                     className="custom-large-modal"
                     backdrop={showReuploadModal ? 'static' : true}
                 >
-                    {/* ... Rejected Modal content remains the same ... */}
+                    <ModalHeader
+                        className="bg-primary text-white"
+                        toggle={() => {
+                            if (!showReuploadModal) {
+                                setRejectedModalOpen(false);
+                                setSelectedRejectedFile(null);
+                                setPreviewContent(null);
+                                setPreviewError(null);
+                            }
+                        }}
+                        style={{
+                            borderBottom: '1px solid rgba(255,255,255,0.2)',
+                            padding: '1rem 1.5rem'
+                        }}
+                    >
+                        <div className="d-flex alignItems-center">
+                            <h5 className="mb-0 text-white">Rejected Documents</h5>
+                            <Badge color="light" pill className="ms-2 text-danger">
+                                {documentCounts.rejected} Rejected
+                            </Badge>
+                        </div>
+                    </ModalHeader>
+
+                    <ModalBody className="p-3">
+                        <Container fluid>
+                            <Row className="g-3 results-container">
+                                <Col lg={3} className="h-100 d-flex flex-column">
+                                    <Card className="mb-3 slide-in-left fixed-height-card">
+                                        <CardHeader className="bg-light p-3 position-relative"
+                                            style={{ borderTop: '3px solid #405189' }}>
+                                            <h5 className="mb-0">Consumer Information</h5>
+                                        </CardHeader>
+                                        <CardBody className="p-1 custom-scrollbar">
+                                            {selectedRejectedFile ? (
+                                                <div className="consumer-details">
+                                                    <div className="row g-0">
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center mb-1">
+                                                                <i className="ri-user-3-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">RR Number:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedRejectedFile.rr_no || 'N/A'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center mb-1">
+                                                                <i className="ri-profile-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Name:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedRejectedFile.consumer_name}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center mb-1">
+                                                                <i className="ri-map-pin-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Address:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedRejectedFile.consumer_address}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center text-muted py-1 h-100 d-flex flex-column justify-content-center">
+                                                    <i className="ri-user-line fs-5"></i>
+                                                    <p className="mt-1 x-small mb-0">No document selected</p>
+                                                </div>
+                                            )}
+                                        </CardBody>
+                                    </Card>
+
+                                    <Card className="slide-in-left delay-1 fixed-height-card">
+                                        <CardHeader className="bg-light p-3 position-relative"
+                                            style={{ borderTop: '3px solid #405189' }}>
+                                            <h5 className="mb-0">Document Information</h5>
+                                        </CardHeader>
+                                        <CardBody className="p-1 custom-scrollbar">
+                                            {selectedRejectedFile ? (
+                                                <div className="document-details">
+                                                    <div className="d-flex alignItems-center mb-3">
+                                                        <div className="flex-shrink-0 me-1">
+                                                            {getFileIcon(selectedRejectedFile.name)}
+                                                        </div>
+                                                        <div>
+                                                            <h6 className="mb-0 x-small">{selectedRejectedFile.name}</h6>
+                                                            <small className="text-muted x-small">{selectedRejectedFile.category}</small>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="row g-0">
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-file-text-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Rejection Reason:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedRejectedFile.RejectionComment || 'None'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-user-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Rejected By:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedRejectedFile.createdBy}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-calendar-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Rejected On:</Label>
+                                                                    <span className="fw-semibold x-small">{selectedRejectedFile.createdAt}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-close-circle-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Status:</Label>
+                                                                    <Badge color="danger" className="badge-soft-danger x-small">
+                                                                        {selectedRejectedFile.status}
+                                                                    </Badge>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* ADDED: Version Information */}
+                                                        <div className="col-12 mb-3">
+                                                            <div className="d-flex alignItems-center">
+                                                                <i className="ri-git-branch-line me-1 text-primary fs-6"></i>
+                                                                <div className="d-flex alignItems-center gap-3">
+                                                                    <Label className="fw-medium text-muted x-small mb-0">Version:</Label>
+                                                                    <Badge color="info" className="badge-soft-info x-small">
+                                                                        {selectedRejectedFile.versionLabel} {selectedRejectedFile.isLatest ? '(Latest)' : ''}
+                                                                    </Badge>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center text-muted py-1 h-100 d-flex flex-column justify-content-center">
+                                                    <i className="ri-file-line fs-5"></i>
+                                                    <p className="mt-1 x-small mb-0">No document selected</p>
+                                                </div>
+                                            )}
+                                        </CardBody>
+                                    </Card>
+                                </Col>
+
+                                <Col lg={3} className="h-100 d-flex flex-column">
+                                    <Card className="h-100 fade-in delay-2">
+                                        <CardHeader className="bg-light d-flex justify-content-between align-items-center"
+                                            style={{ borderTop: '3px solid #405189' }}>
+                                            <h5 className="mb-0">Rejected Documents</h5>
+                                            <Badge color="danger" pill className="px-3 py-2">
+                                                {rejectedDocuments.length} files
+                                            </Badge>
+                                        </CardHeader>
+
+                                        <CardBody className="p-0 uploaded-documents-container">
+                                            <div className="uploaded-documents-scrollable p-2" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                                                {loading ? (
+                                                    <div className="text-center py-4">
+                                                        <Spinner color="primary">Loading...</Spinner>
+                                                        <p className="mt-2 text-muted">Loading rejected documents...</p>
+                                                    </div>
+                                                ) : rejectedDocuments.length > 0 ? (
+                                                    rejectedDocuments.map((doc) => (
+                                                        <Card
+                                                            key={doc.id}
+                                                            className={`document-card mb-2 shadow-sm--hover ${selectedRejectedFile?.id === doc.id ? 'active' : ''}`}
+                                                            onClick={() => handleRejectedFileSelect(doc)}
+                                                        >
+                                                            <CardBody className="p-2">
+                                                                <div className="d-flex align-items-center">
+                                                                    <div className="flex-shrink-0 me-3">
+                                                                        {getFileIcon(doc.name)}
+                                                                    </div>
+                                                                    <div className="flex-grow-1 overflow-hidden">
+                                                                        <h6 className="mb-0 text-truncate" title={doc.name}>{doc.name}</h6>
+                                                                        <small className="text-muted d-block text-truncate">
+                                                                            Version: {doc.versionLabel} {doc.isLatest ? '(Latest)' : ''}
+                                                                        </small>
+                                                                    </div>
+                                                                    <div className="flex-shrink-0 ms-2">
+                                                                        <Button
+                                                                            color="light"
+                                                                            className="btn-icon rounded-circle"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleReuploadClick(doc);
+                                                                            }}
+                                                                            title="Re-upload Document"
+                                                                        >
+                                                                            <i className="ri-upload-2-line"></i>
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                            </CardBody>
+                                                        </Card>
+                                                    ))
+                                                ) : (
+                                                    <div className="text-center text-muted py-4 h-100 d-flex flex-column justify-content-center">
+                                                        <i className="ri-file-excel-2-line fs-1 mb-3"></i>
+                                                        <h5>No Rejected Documents</h5>
+                                                        <p>You're all caught up!</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardBody>
+                                    </Card>
+                                </Col>
+
+                                <Col lg={6} className="h-100 d-flex flex-column">
+                                    <Card className="h-100 slide-in-right delay-3 fixed-height-card">
+                                        <CardHeader className="bg-light p-3 position-relative"
+                                            style={{ borderTop: '3px solid #405189' }}>
+                                            <h5 className="mb-0">Document Preview</h5>
+                                            {selectedRejectedFile && (
+                                                <div className="position-absolute top-50 end-0 translate-middle-y me-3">
+                                                    <Button
+                                                        color="primary"
+                                                        size="sm"
+                                                        onClick={() => handleDownload(selectedRejectedFile)}
+                                                        disabled={!previewContent}
+                                                    >
+                                                        <i className="ri-download-line me-1"></i> Download
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </CardHeader>
+                                        <CardBody className="p-0 preview-container">
+                                            <div className="preview-scrollable">
+                                                {previewLoading ? (
+                                                    <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
+                                                        <div className="spinner-border text-primary" role="status">
+                                                            <span className="visually-hidden">Loading...</span>
+                                                        </div>
+                                                        <p className="mt-2">Loading preview...</p>
+                                                    </div>
+                                                ) : previewError ? (
+                                                    <Alert color="danger" className="m-3 fade-in">
+                                                        <i className="ri-error-warning-line me-2"></i>
+                                                        {previewError}
+                                                    </Alert>
+                                                ) : selectedRejectedFile && previewContent ? (
+                                                    <div className="d-flex flex-column h-100">
+                                                        <div className="flex-grow-1 preview-content">
+                                                            {previewContent.type.includes('pdf') ? (
+                                                                <div className="pdf-viewer-container fade-in h-100">
+                                                                    <iframe
+                                                                        src={`${previewContent.url}#toolbar=0&navpanes=0&scrollbar=0`}
+                                                                        title="PDF Viewer"
+                                                                        className="w-100 h-100"
+                                                                        style={{ border: 'none' }}
+                                                                        onLoad={(e) => {
+                                                                            console.log('📄 PDF iframe loaded');
+                                                                            const iframe = e.target;
+                                                                            try {
+                                                                                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                                                                                console.log('📄 Iframe document readyState:', iframeDoc.readyState);
+                                                                            } catch (err) {
+                                                                                console.log('🔒 Cannot access iframe content (cross-origin)');
+                                                                            }
+                                                                        }}
+                                                                        onError={(e) => {
+                                                                            console.error('❌ PDF iframe error:', e);
+                                                                            setPreviewError('Failed to load PDF in iframe');
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            ) : previewContent.type.includes('image') ? (
+                                                                <div className="text-center fade-in p-3 h-100 d-flex align-items-center justify-content-center">
+                                                                    <img
+                                                                        src={previewContent.url}
+                                                                        alt="Document Preview"
+                                                                        className="img-fluid"
+                                                                        style={{
+                                                                            maxHeight: '100%',
+                                                                            maxWidth: '100%',
+                                                                            objectFit: 'contain'
+                                                                        }}
+                                                                        onError={(e) => {
+                                                                            console.error('❌ Image load error:', e);
+                                                                            setPreviewError('Failed to load image preview');
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-center py-5 fade-in h-100 d-flex flex-column justify-content-center">
+                                                                    <i className="ri-file-line display-4 text-muted"></i>
+                                                                    <h5 className="mt-3">Preview not available</h5>
+                                                                    <p className="text-muted">
+                                                                        This file type ({previewContent.type}) cannot be previewed in the browser.
+                                                                    </p>
+                                                                    <Button
+                                                                        color="primary"
+                                                                        onClick={() => handleDownload(selectedRejectedFile)}
+                                                                        className="mt-2"
+                                                                    >
+                                                                        <i className="ri-download-line me-1"></i> Download File
+                                                                    </Button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center text-muted py-5 h-100 d-flex flex-column justify-content-center fade-in">
+                                                        <i className="ri-file-line display-4"></i>
+                                                        <h5 className="mt-3">No document selected</h5>
+                                                        <p>Select a rejected file from the list to preview it here</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardBody>
+                                    </Card>
+                                </Col>
+                            </Row>
+                        </Container>
+                    </ModalBody>
+
+                    <ModalFooter>
+                        <Button color="secondary" onClick={() => {
+                            setRejectedModalOpen(false);
+                            setSelectedRejectedFile(null);
+                            setPreviewContent(null);
+                            setPreviewError(null);
+                        }}>
+                            Close
+                        </Button>
+                    </ModalFooter>
                 </Modal>
 
                 {/* Re-upload Document Modal */}
@@ -5184,7 +5870,181 @@ const DocumentManagement = () => {
                     centered
                     backdrop="static"
                 >
-                    {/* ... Re-upload Modal content remains the same ... */}
+                    <ModalHeader
+                        toggle={() => {
+                            setShowReuploadModal(false);
+                            setReuploadDocument(null);
+                            setNewDocumentFile(null);
+                            setNewDocumentPreview(null);
+                            setReuploadOldDocPreview(null);
+                        }}
+                        className="d-flex align-items-center bg-primary text-white"
+                    >
+                        <span className="align-items-center bg-primary text-white">Re-upload Document</span>
+                    </ModalHeader>
+
+                    <ModalBody>
+                        {reuploadDocument && (
+                            <Row className="g-3">
+                                <Col md={6}>
+                                    <h5>Previous Version</h5>
+                                    <div className="d-flex alignItems-center mb-3">
+                                        <div className="flex-shrink-0 me-3">
+                                            {getFileIcon(reuploadDocument.name)}
+                                        </div>
+                                        <div>
+                                            <p className="mb-1">{reuploadDocument.name}</p>
+                                            <small className="text-muted">Uploaded on: {reuploadDocument.createdAt}</small>
+                                        </div>
+                                    </div>
+                                    <Card style={{ height: '400px' }}>
+                                        <CardBody className="p-0 preview-container">
+                                            {reuploadFileLoading ? (
+                                                <div className="text-center py-5 h-100 d-flex flex-column justify-content-center">
+                                                    <Spinner color="primary" />
+                                                    <p className="mt-2">Loading document...</p>
+                                                </div>
+                                            ) : reuploadOldDocPreview ? (
+                                                <div className="h-100">
+                                                    {reuploadOldDocPreview.type.includes('pdf') ? (
+                                                        <iframe
+                                                            src={`${reuploadOldDocPreview.url}#toolbar=0&navpanes=0&scrollbar=0`}
+                                                            title="PDF Viewer"
+                                                            className="w-100 h-100"
+                                                            style={{ border: 'none' }}
+                                                        />
+                                                    ) : reuploadOldDocPreview.type.includes('image') ? (
+                                                        <div className="text-center p-3 h-100 d-flex alignItems-center justify-content-center">
+                                                            <img
+                                                                src={reuploadOldDocPreview.url}
+                                                                alt="Previous version"
+                                                                className="img-fluid"
+                                                                style={{ maxHeight: '100%' }}
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-center py-5 h-100 d-flex flex-column justify-content-center">
+                                                            <i className="ri-file-line display-4 text-muted"></i>
+                                                            <p>Preview not available</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="text-center py-5 h-100 d-flex flex-column justify-content-center">
+                                                    <i className="ri-file-line display-4 text-muted"></i>
+                                                    <p>Preview not available</p>
+                                                </div>
+                                            )}
+                                        </CardBody>
+                                    </Card>
+                                </Col>
+
+                                <Col md={6}>
+                                    <h5>Upload New Version</h5>
+                                    <FormGroup>
+                                        <Label for="documentReupload">Select new file</Label>
+                                        <Input
+                                            type="file"
+                                            id="documentReupload"
+                                            onChange={(e) => {
+                                                const file = e.target.files[0];
+                                                if (file) {
+                                                    setNewDocumentFile(file);
+                                                    if (file.type === 'application/pdf') {
+                                                        setNewDocumentPreview({
+                                                            type: 'pdf',
+                                                            url: URL.createObjectURL(file)
+                                                        });
+                                                    } else if (file.type.startsWith('image/')) {
+                                                        setNewDocumentPreview({
+                                                            type: file.type.split('/')[1],
+                                                            url: URL.createObjectURL(file)
+                                                        });
+                                                    } else {
+                                                        setNewDocumentPreview(null);
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                    </FormGroup>
+
+                                    <FormGroup>
+                                        <Label for="changeReason">Change Reason</Label>
+                                        <Input
+                                            type="text"
+                                            id="changeReason"
+                                            value={changeReason}
+                                            onChange={(e) => setChangeReason(e.target.value)}
+                                            placeholder="Enter reason for re-upload"
+                                            required
+                                        />
+                                    </FormGroup>
+
+                                    {newDocumentPreview ? (
+                                        <div className="mt-3">
+                                            <h6>New Version Preview</h6>
+                                            <Card style={{ height: '400px' }}>
+                                                <CardBody className="p-0 preview-container">
+                                                    {newDocumentPreview.type === 'pdf' ? (
+                                                        <iframe
+                                                            src={`${newDocumentPreview.url}#toolbar=0&navpanes=0&scrollbar=0`}
+                                                            title="PDF Viewer"
+                                                            className="w-100 h-100"
+                                                            style={{ border: 'none' }}
+                                                        />
+                                                    ) : ['jpeg', 'jpg', 'png', 'gif'].includes(newDocumentPreview.type) ? (
+                                                        <div className="text-center p-3 h-100 d-flex alignItems-center justify-content-center">
+                                                            <img
+                                                                src={newDocumentPreview.url}
+                                                                alt="New version preview"
+                                                                className="img-fluid"
+                                                                style={{ maxHeight: '100%' }}
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-center py-5 h-100 d-flex flex-column justify-content-center">
+                                                            <i className="ri-file-line display-4 text-muted"></i>
+                                                            <p>Preview not available</p>
+                                                        </div>
+                                                    )}
+                                                </CardBody>
+                                            </Card>
+                                        </div>
+                                    ) : (
+                                        <div className="mt-3 text-center py-5 border rounded" style={{ height: '400px' }}>
+                                            <i className="ri-file-upload-line display-4 text-muted"></i>
+                                            <p className="mt-2 text-muted">Select a file to preview the new version</p>
+                                        </div>
+                                    )}
+                                </Col>
+                            </Row>
+                        )}
+                    </ModalBody>
+                    <ModalFooter>
+                        <Button color="secondary" onClick={() => {
+                            setShowReuploadModal(false);
+                            setReuploadDocument(null);
+                            setNewDocumentFile(null);
+                            setNewDocumentPreview(null);
+                            setReuploadOldDocPreview(null);
+                        }}>
+                            Cancel
+                        </Button>
+                        <Button
+                            color="primary"
+                            onClick={handleReuploadSubmit}
+                            disabled={!newDocumentFile || uploadLoading || !changeReason}
+                        >
+                            {uploadLoading ? (
+                                <>
+                                    <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                    Re-uploading...
+                                </>
+                            ) : (
+                                'Submit Re-upload'
+                            )}
+                        </Button>
+                    </ModalFooter>
                 </Modal>
 
             </Container>
