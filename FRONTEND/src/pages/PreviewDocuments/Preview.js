@@ -19,7 +19,7 @@ import ErrorModal from '../../Components/Common/ErrorModal';
 import axios from 'axios'; // <-- ADDED
 
 // --- ADDED CONSTANTS ---
-const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
+const VIEW_DOCUMENT_URL = "http://192.168.23.18:9000/backend-service/documentUpload/documentView";
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB in bytes
 // --- END CONSTANTS ---
 

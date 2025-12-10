@@ -3014,7 +3014,7 @@ import axios from 'axios';
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB in bytes
 const MAX_TOTAL_DOCUMENTS = 5; // Maximum number of documents allowed
 
-const VIEW_DOCUMENT_URL = "http://192.168.23.229:9000/backend-service/documentUpload/documentView";
+const VIEW_DOCUMENT_URL = "http://192.168.23.18:9000/backend-service/documentUpload/documentView";
 
 const DocumentManagement = () => {
     // Modal states

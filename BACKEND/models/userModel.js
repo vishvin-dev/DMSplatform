@@ -4,7 +4,7 @@ import { pool } from "../Config/db.js";
 //this is the userCreation things ======================================//
 export const findUserByEmail = async (email) => {
     const [result] = await pool.execute(
-        `SELECT * FROM User WHERE Email = ? AND isDisabled = 0`,
+        `SELECT * FROM user WHERE Email = ? AND isDisabled = 0`,
         [email]
     );
     return result;
@@ -12,7 +12,7 @@ export const findUserByEmail = async (email) => {
 // this is the fetching the zoneaccess of teh user when he logins ok 
 export const findUserZones = async (userId) => {
     const [result] = await pool.execute(
-                    `SELECT
+        `SELECT
                 uza.UserZoneAccess_Id,
                 uza.zone_code,
                 (SELECT zone FROM zone_codes WHERE zone_code = uza.zone_code LIMIT 1) AS zone_name,
@@ -24,7 +24,7 @@ export const findUserZones = async (userId) => {
                 (SELECT sub_division FROM zone_codes WHERE sd_code = uza.sd_code LIMIT 1) AS sub_division,
                 uza.so_code,
                 (SELECT section_office FROM zone_codes WHERE so_code = uza.so_code LIMIT 1) AS section_office
-            FROM UserZoneAccess uza
+            FROM userzoneaccess uza
             WHERE uza.User_Id = ?;
             `,
         [userId]
@@ -77,11 +77,11 @@ export const findUserByEmailWithZones = async (email) => {
 // Increment failed attempts and return updated count
 export const updateFailedLogin = async (userId) => {
     await pool.execute(
-        `UPDATE User SET AttemptCount = AttemptCount + 1 WHERE User_Id = ?`,
+        `UPDATE user SET AttemptCount = AttemptCount + 1 WHERE User_Id = ?`,
         [userId]
     );
     const [[user]] = await pool.execute(
-        `SELECT AttemptCount FROM User WHERE User_Id = ?`,
+        `SELECT AttemptCount FROM user WHERE User_Id = ?`,
         [userId]
     );
     return user.AttemptCount;
@@ -89,21 +89,21 @@ export const updateFailedLogin = async (userId) => {
 // Temporary block (3 failed attempts)
 export const setTempBlock = async (userId) => {
     await pool.execute(
-        `UPDATE User SET IsTempBlocked = 1, TempBlockedOn = NOW() WHERE User_Id = ?`,
+        `UPDATE user SET IsTempBlocked = 1, TempBlockedOn = NOW() WHERE User_Id = ?`,
         [userId]
     );
 };
 // Clear only temp block flags, keep AttemptCount
 export const clearTempBlock = async (userId) => {
     await pool.execute(
-        `UPDATE User SET IsTempBlocked = 0, TempBlockedOn = NULL WHERE User_Id = ?`,
+        `UPDATE user SET IsTempBlocked = 0, TempBlockedOn = NULL WHERE User_Id = ?`,
         [userId]
     );
 };
 // Reset all attempts (only on successful login)
 export const resetAttempts = async (userId) => {
     await pool.execute(
-        `UPDATE User 
+        `UPDATE user 
      SET AttemptCount = 0, IsTempBlocked = 0, TempBlockedOn = NULL 
      WHERE User_Id = ?`,
         [userId]
@@ -112,7 +112,7 @@ export const resetAttempts = async (userId) => {
 // Permanent block (after 5 failed attempts)
 export const setPermanentBlock = async (userId) => {
     await pool.execute(
-        `UPDATE User 
+        `UPDATE user 
      SET IsBlocked = 1, isDisabled = 1, BlockedOn = NOW()
      WHERE User_Id = ?`,
         [userId]
@@ -147,7 +147,7 @@ export const updateUserPassword = async (email, hashedPassword) => {
 //this is for the userCreation things ok 
 export const insertUser = async (userData) => {
     const query = `
-        INSERT INTO \`User\` 
+        INSERT INTO \`user\` 
         (FirstName, middleName, LastName, ProjectName, DateofBirth, PhoneNumber, 
          MaritalStatus_Id, Gender_Id, Email, Password, IsForcePasswordChange, 
          Role_Id, LoginName, Photo, isDisabled, CreatedOn, UpdatedOn)
@@ -318,19 +318,19 @@ export const getSections = async (sd_code) => {
 };
 export const getGender = async () => {
     const [result] = await pool.execute(
-        `SELECT genderId, genderName FROM Gender`
+        `SELECT genderId, genderName FROM gender`
     );
     return result;
 };
 export const getMaritalStatus = async () => {
     const [result] = await pool.execute(
-        `SELECT maritalStatusName, maritalStatusCode FROM Maritalstatus`
+        `SELECT maritalStatusName, maritalStatusCode FROM maritalstatus`
     );
     return result;
 }
 export const getRoles = async () => {
     const [result] = await pool.execute(
-        `SELECT Role_Id, RoleName FROM Roles`
+        `SELECT Role_Id, RoleName FROM roles WHERE status =1;`
     );
     return result;
 }

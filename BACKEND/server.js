@@ -1,13 +1,13 @@
 import express from "express";
 import bodyParser from "body-parser";
 import applyRoutes from "./helpers/appRoutes.js";
-import { api } from "./config.js";
+// import { api } from "./config.js";
 import { connectDB } from "./Config/db.js";
 import cors from "cors";
 
 
 const app = express();
-const PORT = api.PORT || 8000;
+// const PORT = api.PORT || 8000;
 
 app.use(bodyParser.json());
 
@@ -36,8 +36,13 @@ app.get("/", (req, res) => {
 applyRoutes(app);
 
 /** Start Server */
-app.listen(PORT, async () => {
-  await connectDB(); 
-  console.log(`The Port is Running on ${api.API_URL}`);
+// app.listen(PORT, async () => {
+//   await connectDB(); 
+//   console.log(`The Port is Running on ${api.API_URL}`);
+// });
+
+app.listen(9000, async () => {
+  await connectDB();
+  console.log("The server is running on http://192.168.23.80:9000");
 });
 
