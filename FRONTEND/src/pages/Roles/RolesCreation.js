@@ -376,9 +376,9 @@ const RolesCreation = () => {
             const filtered = databk.filter((item) => {
                 return (
                     (item.RoleName || '').toLowerCase().includes(term.toLowerCase()) ||
-                    (item.Role_Code || '').toLowerCase().includes(term.toLowerCase()) ||
-                    (item.Description || '').toLowerCase().includes(term.toLowerCase()) ||
-                    (item.RequestUserName || '').toLowerCase().includes(term.toLowerCase())
+                    (item.Role_Code || '').toLowerCase().includes(term.toLowerCase())
+                    // (item.Description || '').toLowerCase().includes(term.toLowerCase()) ||
+                    // (item.RequestUserName || '').toLowerCase().includes(term.toLowerCase())
                 );
             });
             setData(filtered);

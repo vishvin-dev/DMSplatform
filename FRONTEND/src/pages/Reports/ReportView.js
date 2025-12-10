@@ -1075,9 +1075,9 @@ const ReportView = () => {
         }
     };
 
-    const handleGoBack = () => {
-        navigate('/reports');
-    };
+    // const handleGoBack = () => {
+    //     navigate('/reports');
+    // };
 
     if (isLoading) {
         return (
@@ -1227,10 +1227,10 @@ const ReportView = () => {
                                             </DropdownItem>
                                         </DropdownMenu>
                                     </Dropdown>
-                                    <Button color="secondary" onClick={handleGoBack} className="d-flex align-items-center">
+                                    {/* <Button color="secondary" onClick={handleGoBack} className="d-flex align-items-center">
                                         <i className="ri-arrow-left-line me-2"></i>
                                         Back
-                                    </Button>
+                                    </Button> */}
                                 </div>
                             </Col>
                         </Row>

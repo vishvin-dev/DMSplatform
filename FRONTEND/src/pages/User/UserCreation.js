@@ -29,7 +29,7 @@ const UserCreation = () => {
     const [subDivision, setsubDivision] = useState([]);
     const [divisionName, setDivisionName] = useState([]);
     const [genders, setGenders] = useState([]);
-    const [maritalStatus, setMaritalStatus] = useState([]);
+    // const [maritalStatus, setMaritalStatus] = useState([]);
     const [response, setResponse] = useState('');
     const [successModal, setSuccessModal] = useState(false);
     const [errorModal, setErrorModal] = useState(false);
@@ -113,7 +113,7 @@ const UserCreation = () => {
 
         // Fetch initial dropdowns - only flagId and requestUserName needed
         flagIdFunction(4, setGenders, usernm);
-        flagIdFunction(5, setMaritalStatus, usernm);
+        // flagIdFunction(5, setMaritalStatus, usernm);
         flagIdFunction(6, setLroles, usernm);
         flagIdFunction(8, setZones, usernm); // Fetch zones
 
@@ -187,7 +187,7 @@ const UserCreation = () => {
                 .matches(/^[6-9][0-9]{9}$/, "Contact Number must start with 6, 7, 8, or 9 and be exactly 10 digits")
                 .test('not-all-zeros', 'Contact Number cannot be all zeros',
                     (value) => value !== '0000000000'),
-            maritalStatus: Yup.string().required("Marital Status is required"),
+            // maritalStatus: Yup.string().required("Marital Status is required"),
             dateOfBirth: Yup.string()
                 .required("Date of Birth is required")
                 .test('age', 'Must be at least 18 years old', function (value) {
@@ -1038,7 +1038,7 @@ const UserCreation = () => {
                                                             ) : null}
                                                         </FormGroup>
                                                     </Col>
-                                                    <Col md={4}>
+                                                    {/* <Col md={4}>
                                                         <FormGroup className="mb-3">
                                                             <Label>Marital Status<span className="text-danger">*</span></Label>
                                                             <Input
@@ -1066,7 +1066,7 @@ const UserCreation = () => {
                                                             ) : null}
                                                         </FormGroup>
 
-                                                    </Col>
+                                                    </Col> */}
                                                     <Col md={4}>
                                                         <FormGroup className="mb-3">
                                                             <Label>Contact No<span className="text-danger">*</span></Label>
@@ -1093,9 +1093,7 @@ const UserCreation = () => {
                                                             </div> */}
                                                         </FormGroup>
                                                     </Col>
-                                                </Row>
 
-                                                <Row>
                                                     <Col md={4}>
                                                         <FormGroup className="mb-3 date-of-birth-field">
                                                             <Label className="form-label">
@@ -1131,6 +1129,8 @@ const UserCreation = () => {
                                                         </FormGroup>
                                                     </Col>
                                                 </Row>
+
+                                            
 
                                                 <div className="d-flex align-items-start gap-3 mt-4">
                                                     <button

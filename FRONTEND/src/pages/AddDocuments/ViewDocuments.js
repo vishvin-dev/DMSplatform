@@ -13,7 +13,7 @@ import BreadCrumb from '../../Components/Common/BreadCrumb';
 
 
 // This needs to be the actual URL your 'view' helper was calling
-const VIEW_DOCUMENT_URL = "http://192.168.23.18:9000/backend-service/documentUpload/documentView";
+const VIEW_DOCUMENT_URL = "http://192.168.23.80:9000/backend-service/documentUpload/documentView";
 
 const ViewDocuments = () => {
     // State management
